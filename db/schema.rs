@@ -1,6 +1,6 @@
+use crate::DICT_ID;
 use datatype::DataType;
 use tablestg::*;
-use crate::DICT_ID;
 
 use serde::*;
 use std::collections::HashMap;
@@ -18,9 +18,9 @@ pub struct Dict {
 
 impl Dict {
     pub fn new() -> Self {
-        Self { 
+        Self {
             last_table_id: DICT_ID as i64,
-            ..Default::default() 
+            ..Default::default()
         }
     }
     pub fn new_schema_id(&mut self) -> i64 {
