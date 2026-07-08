@@ -19,6 +19,8 @@ pub enum DataType {
     ///  Todo
     Empty,
 
+    Bool,
+
     /// e.g. `int` ( todo : have different sizes )
     Int,
 
@@ -95,6 +97,13 @@ impl DataType {
     fn value_to_writer0<W: std::io::Write>(&self, val: &Value, w: &mut W) {
         match self {
             DataType::Empty => {}
+            DataType::Bool => {
+            /*
+                let v : u8 = if val.bool() {1} else {0};
+                let _ = w.write(&v.to_le_bytes());
+            */
+                self.write_bool(val.bool(), w);
+            } 
             DataType::Int => {
                 let v = val.int();
                 let _ = w.write(&v.to_le_bytes());
@@ -234,6 +243,7 @@ impl DataType {
     pub fn compute_size(&self, val: &Value, size: &mut usize) {
         match self {
             DataType::Empty => {}
+            DataType::Bool => *size += 1,
             DataType::Int => *size += 8,
             DataType::Float => *size += 8,
             DataType::Tuple(types) => {
@@ -381,6 +391,7 @@ impl DataType {
     fn skip_value(&self, buf: &[u8], ix: &mut usize) {
         match self {
             DataType::Empty => {}
+            DataType::Bool => *ix += 1,
             DataType::Int => *ix += 8,
             DataType::Float => *ix += 8,
             DataType::String(_) => {
@@ -439,7 +450,7 @@ impl DataType {
     fn to_value0(&self, buf: &[u8], ix: &mut usize) -> Value {
         match self {
             DataType::Empty => Value::Empty,
-
+            DataType::Bool => Value::Bool(self.read_bool(buf, ix)),
             DataType::Int => Value::Int(self.read_int(buf, ix)),
             DataType::Float => Value::Float(self.read_float(buf, ix)),
 
@@ -591,6 +602,7 @@ impl DataType {
     pub fn default_value(&self) -> Value {
         match self {
             DataType::Empty => Value::Empty,
+            DataType::Bool => Value::Bool(false),
             DataType::Int => Value::Int(0),
             DataType::Float => Value::Float(F64(0.0)),
             DataType::Tuple(types) => {
@@ -785,6 +797,17 @@ impl DataType {
         let (x, sz) = DataType::decode_usize(&buf[*ix..]);
         *ix += sz;
         x
+    }
+
+    fn write_bool<W: std::io::Write>(&self, val: bool, w: &mut W) {
+        let b : u8 = if val {1} else {0};
+        let _ = w.write(&b.to_le_bytes());
+    }
+
+    fn read_bool(&self, buf: &[u8], ix: &mut usize) -> bool {
+        let x = buf[*ix];
+        *ix += 1;
+        x != 0 // Maybe should panic if not 0 or 1.
     }
 
     fn write_int<W: std::io::Write>(&self, val: i64, w: &mut W) {

@@ -16,6 +16,7 @@ use crate::*;
 pub enum Value {
     #[default]
     Empty,
+    Bool(bool),
     Int(i64),
     Float(F64),
     String(LRc<LString>),
@@ -27,6 +28,14 @@ pub enum Value {
 }
 
 impl Value {
+    /// Get bool ( Value must be Bool ).
+    pub fn bool(&self) -> bool {
+        match self {
+            Value::Bool(x) => *x,
+            _ => panic!("bool expected"),
+        }
+    }
+    
     /// Get int ( Value must be Int ).
     pub fn int(&self) -> i64 {
         match self {
