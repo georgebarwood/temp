@@ -1,16 +1,25 @@
+/* What next plan...
+
+   Operator expressions ( +, *, | etc )
+   Where
+   Order By
+
+   Test with large number of rows.
+*/
+
 use page_store::*;
 use std::sync::Mutex;
 use tablestg::*;
 
-/// SQL(-like) parsing.
+/// SQL(-like) parsing. [Parser]
 pub mod parser;
 use parser::*;
 
-/// Reads tokens from byte string.
+/// Reads [Token]s from byte string. [TokenReader]
 pub mod token;
 use token::*;
 
-/// Representation of Tables, Statements, Expressions etc.
+/// Representation of Tables, [Statement]s, [Exp]ressions etc.
 pub mod schema;
 use schema::*;
 
@@ -23,7 +32,7 @@ pub mod exec;
 use exec::*;
 
 fn main() {
-    let (is_new, spd) = init_spd();
+    let (is_new, spd) = get_spd();
 
     let global = Arc::new(Mutex::new(GSS::new(spd)));
 
@@ -51,10 +60,10 @@ fn main() {
     let sql: [&[u8]; 6] = [
         b"CREATE SCHEMA dbo",
         b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
-        b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 68, 'george@gmail.com')",
-        b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', 66)",
+        b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 60+8, 'george@gmail.com')",
+        b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', '66')",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
-        b"SELECT Id, Name, Age FROM dbo.cust",
+        b"SELECT Id, Name, Age+10 FROM dbo.cust",
         // b"DROP TABLE dbo.cust",
     ];
 

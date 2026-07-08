@@ -1,9 +1,9 @@
 use crate::*;
 
 /// Executes a batch of statements. Result is whether dict was updated.
-pub fn go(batch: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
+pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     let dc = dict.clone();
-    let mut parser = Parser::new(batch, &dc);
+    let mut parser = Parser::new(source, &dc);
 
     let mut dict_updated = false;
 
@@ -12,7 +12,8 @@ pub fn go(batch: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
         Err(e) => {
             let pos = parser.position();
             println!("Error {} at input position {}", e._message, pos);
-            println!("Source: {}", tos(&parser.tr.input[0..pos]));
+            println!("Source: {}", tos(&source[0..pos]));
+            println!();
         }
         Ok(slist) => {
             if parser.schema_updates {
@@ -21,10 +22,7 @@ pub fn go(batch: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                 execute_schema_updates(&slist, md, ps);
                 dict_updated = true;
             } else {
-                if let Err(e) = execute(&slist, ps) {
-                    println!("Error {:?}", e);
-                    // Shoould return error here.
-                };
+                execute(&slist, source, ps);
             }
         }
     }
@@ -62,7 +60,7 @@ fn execute_schema_updates(slist: &[(usize, Statement)], dict: &mut Dict, ps: &mu
     }
 }
 
-fn execute(slist: &[(usize, Statement)], ps: &mut PageSet) -> Result<(), E> {
+fn execute(slist: &[(usize, Statement)], source: &[u8], ps: &mut PageSet) {
     for (pos, s) in slist {
         // println!("executing {:?} position={}", s, pos);
         let result = match s {
@@ -72,10 +70,11 @@ fn execute(slist: &[(usize, Statement)], ps: &mut PageSet) -> Result<(), E> {
         };
 
         if let Err(e) = &result {
-            println!("Error {:?} at {}", e, pos);
+            println!("Error {} at {}", e._message, pos);
+            println!("Source: {}", tos(&source[0..*pos]));
+            println!();
         }
     }
-    Ok(())
 }
 
 fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(), E> {

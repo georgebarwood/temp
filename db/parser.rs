@@ -5,11 +5,11 @@ pub fn tos(s: &[u8]) -> &str {
 }
 
 pub struct Parser<'a> {
-    pub token: Token,
-    pub tr: TokenReader<'a>,
-    pub dict: &'a Dict,
+    token: Token,
+    tr: TokenReader<'a>,
+    dict: &'a Dict,
     pub schema_updates: bool,
-    pub non_schema_statements: bool,
+    non_schema_statements: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -41,13 +41,13 @@ impl<'a> Parser<'a> {
         self.next_token()?;
         let mut result = LVec::new();
         loop {
-            let start = self.position();
             match &self.token {
                 Token::Ident(x, y) => {
                     let ident = &self.tr.input[*x..*y];
                     self.next_token()?;
                     let s = self.statement(ident)?;
-                    result.push((start, s));
+                    let end = self.position();
+                    result.push((end, s));
                 }
                 Token::Eof => break,
                 _ => return Err(self.err("Statement keyword expected")),
@@ -88,7 +88,17 @@ impl<'a> Parser<'a> {
             return Err(self.err("Number of values not equal to number of insert columns"));
         }
 
-        // Should check vals have correct types.
+        // Check vals have correct types. Maybe this should be done as they are parsed.
+        for (i,v) in vals.iter().enumerate()
+        {
+           let vt = self.typ(v)?;
+           let et = table.dt.dt_struct( cols[i] );
+           if !et.similar(vt) {
+               return Err( self.err( 
+                  &format!("Type mismatch expected {:?} got {:?}", et, vt)
+               ));
+           }
+        }
 
         let result = Statement::Insert(Insert { table, cols, vals });
         self.non_schema_statements = true;
@@ -117,16 +127,54 @@ impl<'a> Parser<'a> {
 
     fn resolve_col_names(&self, vals: &mut [Exp<'a>], table: &STable) -> Result<(), E> {
         for val in vals {
-            if let Exp::Name(name) = val {
-                if let Some(num) = table.name_to_col(name) {
-                    *val = Exp::Col(num);
-                } else {
-                    let e = &format!("Column name not found : {:?}", name);
-                    return Err(self.err(e));
-                }
-            }
+            let _dt = self.resolve(val, table)?;
         }
         Ok(())
+    }
+
+    fn typ<'b>(&self, val: &Exp<'a>) -> Result<&'b DataType, E> {
+           let dt = match val {
+                Exp::Binary(_op,lhs,rhs) => {
+                   let t1 = self.typ(lhs)?;
+                   let t2 = self.typ(rhs)?;
+                   if t1 != &DataType::Int || t2 != &DataType::Int
+                   {
+                      return Err( self.err("Can only add ints!") );
+                   }
+                   t1
+                }
+                Exp::Int(_) => &DataType::Int,
+                Exp::String(_) => &DataType::String(0),
+                _ => panic!()
+            };
+            Ok(dt)
+    }
+    
+    fn resolve<'b>(&self, val: &mut Exp<'a>, table: &'b STable) -> Result<&'b DataType, E> {
+           let dt = match val {
+                Exp::Name(name) => {
+                    if let Some((num,dt)) = table.name_to_col(name) {
+                       *val = Exp::Col(num);
+                       dt
+                    } else {
+                        let e = &format!("Column name not found : {:?}", name);
+                        return Err(self.err(e));
+                    }
+                }
+                Exp::Binary(_op,lhs,rhs) => {
+                   let t1 = self.resolve(lhs, table)?;
+                   let t2 = self.resolve(rhs, table)?;
+                   if t1 != &DataType::Int || t2 != &DataType::Int
+                   {
+                      return Err( self.err("Can only add ints!") );
+                   }
+                   t1
+                }
+                Exp::Int(_) => &DataType::Int,
+                Exp::String(_) => &DataType::String(0),
+                _ => todo!()
+            };
+            Ok(dt)
     }
 
     fn bra_exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
@@ -150,6 +198,19 @@ impl<'a> Parser<'a> {
     }
 
     fn exp(&mut self) -> Result<Exp<'a>, E> {
+       let mut e = self.exp_primary()?;
+       match self.token {
+          Token::Plus => {
+              self.next_token()?;
+              let rhs = self.exp()?;
+              e = Exp::Binary( Operator::Plus, LBox::new(e), LBox::new(rhs) );
+          }
+          _ => {}
+       }
+       Ok(e)
+    }
+
+    fn exp_primary(&mut self) -> Result<Exp<'a>, E> {
         let result = match self.token {
             Token::Int(x) => {
                 self.next_token()?;
@@ -167,7 +228,6 @@ impl<'a> Parser<'a> {
             }
             _ => panic!(),
         };
-        // ToDo .. more complex expressions.
         result
     }
 

@@ -87,7 +87,7 @@ pub struct STable {
 }
 
 impl STable {
-    pub fn name_to_col(&self, s: &str) -> Option<usize> {
+    pub fn name_to_col(&self, s: &str) -> Option<(usize,&DataType)> {
         self.dt.name_to_col(s)
     }
 }
@@ -95,10 +95,25 @@ impl STable {
 /// Expression.
 #[derive(Debug)]
 pub enum Exp<'a> {
-    String(&'a str), // String literal
-    Name(&'a str),   // Unresolved name
-    Int(i64),        // Integer constant
+    /// Integer constant
+    Int(i64),
+    /// String literal
+    String(&'a str), 
+    /// Unresolved name
+    Name(&'a str),
+    /// Column number
     Col(usize),
+    /// Binary expression, e.g. Age + 10
+    Binary(Operator,LBox<Exp<'a>>,LBox<Exp<'a>>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Operator {
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    Concat
 }
 
 impl<'a> Exp<'a> {
@@ -106,6 +121,11 @@ impl<'a> Exp<'a> {
         match self {
             Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
             Exp::Int(i) => Value::Int(*i),
+            Exp::Binary(_op, lhs, rhs) => {
+               let x = lhs.eval().int();
+               let y = rhs.eval().int();
+               Value::Int( x + y )
+            }
             _ => todo!(),
         }
     }
@@ -114,7 +134,15 @@ impl<'a> Exp<'a> {
             Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
             Exp::Int(i) => Value::Int(*i),
             Exp::Col(i) => row.item(*i, ps),
-            _ => todo!(),
+            Exp::Binary(_op, lhs, rhs) => {
+               let x = lhs.eval_from_row(row,ps).int();
+               let y = rhs.eval_from_row(row,ps).int();
+               Value::Int( x + y )
+            }
+            _ => {
+                println!("todo: {:?}", self);
+                panic!();
+            }
         }
     }
 }

@@ -81,7 +81,7 @@ pub fn load_sys_store(ps: &mut PageSet) {
 }
 
 /// Constructs page storage. Bool result indicates whether database file is newly created.
-pub fn init_spd() -> (bool, Arc<SharedPagedData>) {
+pub fn get_spd() -> (bool, Arc<SharedPagedData>) {
     use page_store::*;
     let limits = Limits::default();
 

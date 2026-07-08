@@ -14,6 +14,8 @@ pub enum Token {
     RBra,
     Comma,
     Eof,
+    Plus, Minus, Star, FSlash, VBar,
+    Err
 }
 
 /// Reads tokens from byte string.
@@ -37,29 +39,36 @@ impl<'a> TokenReader<'a> {
             b'0'..=b'9' => self.num(),
             b'a'..=b'z' | b'A'..=b'Z' => self.ident(),
             b'\'' => self.string(),
-            b'.' => {
-                self.getc();
-                Ok(Token::Dot)
-            }
-            b'(' => {
-                self.getc();
-                Ok(Token::LBra)
-            }
-            b')' => {
-                self.getc();
-                Ok(Token::RBra)
-            }
-            b',' => {
-                self.getc();
-                Ok(Token::Comma)
-            }
             0 => Ok(Token::Eof),
-            _ => {
-                self.getc();
-                self.err("Unexpected char in input")
-            }
+            _ => self.other(),
         }
     }
+
+    fn other(&mut self) -> Result<Token, E>
+    {
+        let c = self.cc();
+        self.getc();
+        let t = match c {
+            b'.' =>  Token::Dot,
+            b'+' => Token::Plus,
+            b'-' => Token::Minus,
+            b'*' => Token::Star,
+            b'/' => Token::FSlash,
+            b'|' => Token::VBar,
+            b'(' => Token::LBra,
+            b')' => Token::RBra,
+            b',' => Token::Comma,
+            _ => Token::Err,
+        };
+        if t == Token::Err { 
+            self.err("Unexpected char in input")
+        }
+        else
+        { 
+           Ok(t)
+        }
+    }
+    
     fn cc(&self) -> u8 {
         if self.pos >= self.input.len() {
             0
