@@ -24,20 +24,30 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn position(&self) -> usize {
-        self.tr.pos
+    fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
+        let s = match ident {
+            b"INSERT" => self.insert(),
+            b"CREATE" => self.create(),
+            b"DROP" => self.drop(),
+            b"SELECT" => self.select(),
+            _ => {
+                return Err(self.err("Unknown keyword"));
+            }
+        }?;
+        Ok(s)
     }
 
-    pub fn statements(&mut self) -> Result<LVec<Statement<'a>>, E> {
+    pub fn statements(&mut self) -> Result<LVec<(usize,Statement<'a>)>, E> {
         self.next_token()?;
         let mut result = LVec::new();
         loop {
+            let start = self.position();
             match &self.token {
                 Token::Ident(x, y) => {
                     let ident = &self.tr.input[*x..*y];
                     self.next_token()?;
                     let s = self.statement(ident)?;
-                    result.push( s );
+                    result.push( (start,s) );
                 }
                 Token::Eof => break,
                 _ => return Err(self.err("Statement keyword expected")),
@@ -47,33 +57,32 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
-        let s = match ident {
-            b"INSERT" => self.insert(),
-            b"CREATE" => self.create(),
-            _ => {
-                return Err(self.err("Unknown keyword"));
-            }
-        }?;
-        Ok(s)
-    }
-
     fn create(&mut self) -> Result<Statement<'a>, E> {
         let ident = self.read_ident()?;
         match ident {
             "TABLE" => self.create_table(),
             "SCHEMA" => self.create_schema(),
-            _ => Err(self.err("Expected TABLE....")),
+            _ => Err(self.err("Expected TABLE, SCHEMA....")),
+        }
+    }
+
+    fn drop(&mut self) -> Result<Statement<'a>, E> {
+        let ident = self.read_ident()?;
+        match ident {
+            "TABLE" => self.drop_table(),
+            // "SCHEMA" => self.drop_schema(),
+            _ => Err(self.err("Expected TABLE, SCHEMA....")),
         }
     }
 
     fn insert(&mut self) -> Result<Statement<'a>, E> {
         self.expect_ident(b"INTO")?;
-        let table = self.table()?;
+        let (table,_,_) = self.table()?;
         let cols = self.name_list(&table)?;
 
         self.expect_ident(b"VALUES")?;
-        let vals = self.exp_list()?;
+        let vals = self.bra_exp_list()?;
+        // ToDo : allow comma here, multiple lists of values.
 
         if cols.len() != vals.len() {
             return Err(self.err("Number of values not equal to number of insert columns"));
@@ -86,8 +95,49 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
+    fn select(&mut self) -> Result<Statement<'a>, E> {
+        let mut vals = self.exp_list()?;
+        self.expect_ident(b"FROM")?;
+        let (from,_,_) = self.table()?;
+        let wher = None; // ToDo
+        let order_by = None; // ToDo
+
+        // Translate column names to col numbers.
+        self.resolve_col_names( &mut vals, &from )?;
+        
+        let result = Statement::Select(Select { vals, from, wher, order_by });
+        self.non_schema_statements = true;
+        Ok(result)
+    }
+
+    fn resolve_col_names( &self, vals: &mut[Exp<'a>], table: &STable ) -> Result<(),E>
+    {
+        for val in vals
+        {
+           match val {
+              Exp::Name(name) => {
+                  if let Some(num) = table.name_to_col( name )
+                  {
+                      *val = Exp::Col( num );
+                  } else {
+                     let e = &format!( "Column name not found : {:?}", name );
+                     return Err( self.err( &e ) );
+                  }   
+              }
+              _ => {}
+           }
+        }
+        Ok(())
+    }
+
+    fn bra_exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
         self.expect_token(Token::LBra)?;
+        let result = self.exp_list()?;
+        self.expect_token(Token::RBra)?;
+        Ok(result)
+    }
+
+    fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
         let mut result = LVec::new();
         while self.token != Token::RBra {
             let exp = self.exp()?;
@@ -97,23 +147,29 @@ impl<'a> Parser<'a> {
             }
             self.next_token()?;
         }
-        self.expect_token(Token::RBra)?;
         Ok(result)
     }
 
     fn exp(&mut self) -> Result<Exp<'a>, E> {
-        match self.token {
+        let result = match self.token {
             Token::Int(x) => {
                 self.next_token()?;
                 Ok(Exp::Int(x))
             }
-            Token::String(x, y) => {
+            Token::String(x,y) => {
                 let lit = &self.tr.input[x..y];
                 self.next_token()?;
                 Ok(Exp::String(tos(lit)))
             }
+            Token::Ident(x,y) => {
+                let name = &self.tr.input[x..y];
+                self.next_token()?;
+                Ok(Exp::Name(tos(name)))
+            }
             _ => panic!(),
-        }
+        };
+        // ToDo .. more complex expressions.
+        result
     }
 
     fn name_list(&mut self, table: &STable) -> Result<LVec<usize>, E> {
@@ -134,13 +190,13 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn table(&mut self) -> Result<Arc<STable>, E> {
+    fn table(&mut self) -> Result<(Arc<STable>,i64,i64), E> {
         let schema = self.read_ident()?;
         let sid = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let table = self.check_table(sid, tname)?;
-        Ok(table)
+        let (table,nid) = self.check_table(sid, tname)?;
+        Ok((table,sid,nid))
     }
 
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
@@ -170,6 +226,18 @@ impl<'a> Parser<'a> {
             col_defs,
         };
         let result = Statement::CreateTable(result);
+        self.schema_updates = true;
+        Ok(result)
+    }
+
+    fn drop_table(&mut self) -> Result<Statement<'a>, E> {
+        let (table,schema_id,name_id) = self.table()?;
+        let result = DropTable {
+            table,
+            schema_id,
+            name_id,
+        };
+        let result = Statement::DropTable(result);
         self.schema_updates = true;
         Ok(result)
     }
@@ -230,10 +298,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &str) -> Result<Arc<STable>, E> {
+    fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>,i64), E> {
         let nid = self.check_tname(tname)?;
         if let Some(table) = self.dict.tables.get(&(schema, nid)) {
-            Ok(table.clone())
+            Ok((table.clone(),nid))
         } else {
             Err(self.err(&format!("Table [{}] not found", tname)))
         }
@@ -286,6 +354,10 @@ impl<'a> Parser<'a> {
         self.token = self.tr.next_token()?;
         // println!("token = {:?}", &self.token);
         Ok(())
+    }
+
+    pub fn position(&self) -> usize {
+        self.tr.pos
     }
 
     fn err(&self, message: &str) -> E {

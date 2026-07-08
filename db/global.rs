@@ -7,35 +7,65 @@ pub struct GSS {
 }
 
 impl GSS {
-   pub fn get_ps_and_dict(&self) -> ( PageSet, Arc<Dict> ) {
+   pub fn new(spd: Arc<SharedPagedData>) -> Self
+   {
+       let cur_dict = Arc::new( Dict::new() );
+       Self{ spd, cur_dict }
+   }
+
+   /// Gets PageSet and Dict for writer.
+   pub fn get_ps_and_dict_write(&self) -> ( PageSet, Arc<Dict> ) {
       let apd = self.spd.new_writer();
       let ps = PageSet::new(apd);
       let dict = self.cur_dict.clone();
       ( ps, dict )
    }
+
+   /// Gets PageSet and Dict for reader.
+   pub fn get_ps_and_dict_read(&self) -> ( PageSet, Arc<Dict> ) {
+      let apd = self.spd.new_reader();
+      let ps = PageSet::new(apd);
+      let dict = self.cur_dict.clone();
+      ( ps, dict )
+   }
+
+   /// Called during initialisation to set up Dict.
    pub fn update_dict(&mut self, dict: Arc<Dict>) {
       self.cur_dict = dict;
    }
+   
+   pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool ) {
+      if new_dict 
+      { 
+         dict.save_to_sys_store(ps);
+         self.cur_dict = dict; 
+      }
+      save_sys_store(ps);
+      ps.save();
+   }
+   
    pub fn shutdown(&self)
    {
       self.spd.shutdown();
    }
 }
 
-/// Page where info re ps.sys_store is persisted.
+/// Page number of page where info for sys_store is saved.
 pub const SYS_STORE_PAGE : u64 = 1;
+/// Id of record in sys_store that stores [Dict].
 pub const DICT_ID : u64 = 1;
 
 /// Save ps.sys_store to data page SYS_STORE_PAGE.
 pub fn save_sys_store(ps: &mut PageSet)
 {
-    // println!("save sys store, store={:?}", ps.sys_store.borrow() );
-
-    let bytes = ps.sys_store.borrow().save_to_bytes();
-    let pdata = ps.load(SYS_STORE_PAGE);
-    let data = Arc::new(bytes);
-    pageset::set_data( &pdata, data );
-    pageset::set_changed( &pdata );
+    let bytes = ps.sys_store.borrow_mut().save_to_bytes();
+    if let Some(bytes) = bytes
+    {
+        let pdata = ps.load(SYS_STORE_PAGE);
+        let data = Arc::new(bytes);
+        pageset::set_data( &pdata, data );
+        pageset::set_changed( &pdata );
+    }
 }   
 
 /// Loads ps.sys_store from data page SYS_STORE_PAGE.
@@ -50,4 +80,20 @@ pub fn load_sys_store(ps: &mut PageSet)
     let ssc = ps.sys_store.clone();
     let mut sys_store = ssc.borrow_mut();
     *sys_store = store;
+}
+
+/// Constructs page storage. Bool in result indicates whether database file is newly created.
+pub fn init() -> (bool, Arc<SharedPagedData>)
+{
+    use page_store::*;
+    let limits = Limits::default();
+
+    // Construct BlockPageStg.
+    let file = atom_file::MultiFileStorage::new("test.db");
+    let upd = atom_file::FastFileStorage::new("test.upd");
+    let af = atom_file::AtomicFile::new_with_limits(file, upd, &limits.af_lim);
+    let bps = BlockPageStg::new(af, &limits);
+    let is_new = bps.is_new();
+    let spd = SharedPagedData::new_from_ps(bps);
+    (is_new, spd)
 }

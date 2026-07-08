@@ -14,84 +14,58 @@ use token::*;
 pub mod schema;
 use schema::*;
 
-/// Global state.
+/// Global state, initialisation.
 pub mod global;
 use global::*;
 
-/// Execution.
+/// Execution of statements.
 pub mod exec;
 use exec::*;
 
 fn main() {
-    let (is_new,spd) =
-    {
-        use page_store::*;
-        let limits = Limits::default();
+    let (is_new,spd) = init();
+    
+    let global = Arc::new( Mutex::new( GSS::new(spd) ) );
 
-        // Construct BlockPageStg.
-        let file = atom_file::MultiFileStorage::new("test.db");
-        let upd = atom_file::FastFileStorage::new("test.upd");
-        let af = atom_file::AtomicFile::new_with_limits(file, upd, &limits.af_lim);
-        let bps = BlockPageStg::new(af, &limits);
-        let is_new = bps.is_new();
-        println!("is_new={}", is_new);
-        let spd = SharedPagedData::new_from_ps(bps);
-        (is_new, spd)
-    };
-
-    let dict = Dict::new();
-
-    let gss = GSS{spd, cur_dict: Arc::new(dict) };
-    let global = Arc::new( Mutex::new( gss ) );
-
-    let (mut psx, mut dictx) = global.lock().unwrap().get_ps_and_dict();
+    let (mut psx, mut dictx) = global.lock().unwrap().get_ps_and_dict_write();
 
     let ps = &mut psx;
 
-    if is_new {
-       assert!( ps.new_page() == SYS_STORE_PAGE );
-       println!("New Database!");
-    }
-
-    // Set up ps.sys_store.
     if is_new
     {
+        assert!( ps.new_page() == SYS_STORE_PAGE );
         let ssc = ps.sys_store.clone();
         let mut sys_store = ssc.borrow_mut();
         *sys_store = Store::new(ps);
     } else {
         load_sys_store(ps);
-    }
-
-    if !is_new {
         dictx = Dict::load_from_sys_store(ps);
         global.lock().unwrap().update_dict( dictx.clone() );
     }
 
     let dict = &mut dictx;
 
-    go(b"CREATE SCHEMA dbo", dict, ps);
+    // At this point everything is initialised and tasks can be started and given a clone of global.
 
-    go(b"CREATE TABLE dbo.cust(Name string,Age int,Height float)", dict, ps);
+    // But for now, for testing purposes we just execute some SQL statements.
 
-    go(
-        b"INSERT INTO dbo.cust(Name,Age) VALUES('George', 68)",
-        dict,
-        ps,
-    );
-
-    go(
+    let sql : [&[u8];6] = [
+        b"CREATE SCHEMA dbo",
+        b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
+        b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 68, 'george@gmail.com')",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', 66)",
-        dict,
-        ps,
-    );
+        b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
+        b"SELECT Id, Name FROM dbo.cust",
+        // b"DROP TABLE dbo.cust",
+    ];
 
-    global.lock().unwrap().update_dict( dictx.clone() );
+    let mut dict_changed : bool = false;
+    for s in sql
+    {
+        if go(s, dict, ps) { dict_changed = true; }
+    }
+
+    global.lock().unwrap().commit( ps, dictx, dict_changed );
     
-    dictx.save_to_sys_store( ps ); // Should be only if changed.
-
-    save_sys_store(ps);
-
-    ps.save();
     global.lock().unwrap().shutdown();
 }   

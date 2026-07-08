@@ -10,31 +10,31 @@ pub struct Dict {
     pub schemas: HashMap<GString, i64>,
     pub names: HashMap<GString, i64>,
     pub tables: HashMap<(i64, i64), Arc<STable>>,
-    next_schema_id: i64,
-    next_name_id: i64,
-    next_table_id: i64,
+    last_schema_id: i64,
+    last_name_id: i64,
+    last_table_id: i64,
 }
 
 impl Dict {
     pub fn new() -> Self {
         let mut dict = Self::default();
-        dict.next_table_id = 2; // Start at 1, reserve 1 for storing (DICT_ID).
+        dict.last_table_id = 1; // 1 is reserved for DICT_ID.
         dict
     }
-    pub fn alloc_schema_id(&mut self) -> i64 {
-        self.next_schema_id += 1;
-        self.next_schema_id
+    pub fn new_schema_id(&mut self) -> i64 {
+        self.last_schema_id += 1;
+        self.last_schema_id
     }
-    pub fn alloc_table_id(&mut self) -> i64 {
-        self.next_table_id += 1;
-        self.next_table_id
+    pub fn new_table_id(&mut self) -> i64 {
+        self.last_table_id += 1;
+        self.last_table_id
     }
-    pub fn get_name_id(&mut self, s: &str) -> i64 {
+    pub fn new_name_id(&mut self, s: &str) -> i64 {
         if let Some(id) = self.names.get(s) {
             return *id;
         }
-        self.next_name_id += 1;
-        let id = self.next_name_id;
+        self.last_name_id += 1;
+        let id = self.last_name_id;
         self.names.insert(GString::from(s), id);
         id
     }
@@ -84,19 +84,29 @@ impl Dict {
     }
 }
 
-/// Schema Table.
+/// Schema Table - id and DataType.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct STable {
     pub id: i64,
     pub dt: Arc<DataType>,
 }
 
+impl STable
+{
+    pub fn name_to_col(&self, s: &str) -> Option<usize>
+    {
+        self.dt.name_to_col(s)
+        
+    }
+}
+
 /// Expression.
 #[derive(Debug)]
 pub enum Exp<'a> {
-    String(&'a str),
-    Name(&'a str),
-    Int(i64),
+    String(&'a str), // String literal
+    Name(&'a str), // Unresolved name
+    Int(i64), // Integer constant
+    Col(usize),
 }
 
 impl <'a>Exp<'a>
@@ -109,6 +119,15 @@ impl <'a>Exp<'a>
            _ => todo!()
         }
     }
+    pub fn eval_from_row(&self, row: &mut LazyRow, ps: &mut PageSet) -> Value
+    {
+        match self {
+           Exp::String(s) => Value::String( LRc::new(LString::from(*s))),
+           Exp::Int(i) => Value::Int(*i),
+           Exp::Col(i) => row.item(*i, ps),
+           _ => todo!()
+        }
+    }
 }
 
 /// Statement.
@@ -116,7 +135,9 @@ impl <'a>Exp<'a>
 pub enum Statement<'a> {
     CreateSchema(CreateSchema<'a>),
     CreateTable(CreateTable<'a>),
+    DropTable(DropTable),
     Insert(Insert<'a>),
+    Select(Select<'a>),
 }
 
 /// CREATE SCHEMA statement.
@@ -133,6 +154,14 @@ pub struct CreateTable<'a> {
     pub col_defs: Arc<DataType>,
 }
 
+/// DROP TABLE statement.
+#[derive(Debug)]
+pub struct DropTable {
+    pub schema_id: i64,
+    pub name_id: i64,
+    pub table: Arc<STable>,
+}
+
 /// INSERT statement.
 #[derive(Debug)]
 pub struct Insert<'a> {
@@ -141,3 +170,11 @@ pub struct Insert<'a> {
     pub vals: LVec<Exp<'a>>,
 }
 
+/// SELECT statement.
+#[derive(Debug)]
+pub struct Select<'a> {
+    pub vals: LVec<Exp<'a>>,
+    pub from: Arc<STable>,
+    pub wher: Option<Exp<'a>>,
+    pub order_by: Option<LVec<Exp<'a>>>,
+}

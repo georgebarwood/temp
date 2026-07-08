@@ -1,46 +1,59 @@
 use crate::*;
 
-/// Executes a batch of statements, returning a possibly-updated Dict.
-pub fn go(batch: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) {
+/// Executes a batch of statements. Result is whether dict was updated.
+pub fn go(batch: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     let dc = dict.clone();
     let mut parser = Parser::new(batch, &dc);
 
+    let mut dict_updated = false;
+
+    // Should be a loop here - parser.statements can return without exhausting input ("GO").    
     match  parser.statements() {
         Err(e) => {
             let pos = parser.position();
             println!("Error {} at input position {}", e._message, pos);
             println!("Source: {}", tos(&parser.tr.input[0..pos]));
         }
-        Ok(slist) => {
+        Ok(slist) => { 
             if parser.schema_updates 
             {
                 // println!("statements={:#?}", &slist);
                 let md = Arc::make_mut(dict);
-                execute_schema_updates(&slist, md);
+                execute_schema_updates(&slist, md, ps);
+                dict_updated = true;
             } else {
                 if let Err(e) = execute(&slist, ps) {
-                    println!( "Error {:?} - continuing", e );
+                    println!( "Error {:?}", e );
+                    // Shoould return error here.
                 };
             }
         }
     }
+    dict_updated
 }
 
-fn execute_schema_updates(slist: &[Statement], dict: &mut Dict) {
-    for s in slist {
+fn execute_schema_updates(slist: &[(usize,Statement)], dict: &mut Dict, ps: &mut PageSet) {
+    for (_pos,s) in slist {
         println!("executing {:?}", s);
         match s {
             Statement::CreateTable(ct) => {
-                let id = dict.alloc_table_id();
+                let id = dict.new_table_id();
                 let table = STable {
                     id,
                     dt: ct.col_defs.clone(),
                 };
-                let nid = dict.get_name_id(ct.tname);
+                let nid = dict.new_name_id(ct.tname);
                 dict.tables.insert((ct.schema_id, nid), Arc::new(table));
             }
+
+            Statement::DropTable(dt) => {
+                dict.tables.remove(&(dt.schema_id, dt.name_id));
+                // Remove record from sys_schema using dt.table_id and ps.
+                Table::drop(dt.table.id, dt.table.dt.clone(), ps);
+            }
+            
             Statement::CreateSchema(cs) => {
-                let schema_id = dict.alloc_schema_id();
+                let schema_id = dict.new_schema_id();
                 let s = GString::from(cs.sname);
                 dict.schemas.insert(s, schema_id);
                 println!("Schema {} created", cs.sname);
@@ -50,14 +63,22 @@ fn execute_schema_updates(slist: &[Statement], dict: &mut Dict) {
     }
 }
 
-fn execute(slist: &[Statement], ps: &mut PageSet) -> Result<(),E> {
-    for s in slist {
-        println!("executing {:?}", s);
-        match s {
+fn execute(slist: &[(usize,Statement)], ps: &mut PageSet) -> Result<(),E> {
+    for (pos,s) in slist {
+        // println!("executing {:?} position={}", s, pos);
+        let result = match s {
             Statement::Insert(ins) => {
-               exec_insert(ins,ps)?;
+               exec_insert(ins,ps)
+            }
+            Statement::Select(sel) => {
+               exec_select(sel,ps)
             }
             _ => todo!(),
+        };
+
+        if let Err(e) = &result
+        {
+            println!("Error {:?} at {}", e, pos);
         }
     }
     Ok(())
@@ -101,8 +122,6 @@ fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(),E> {
         row_id
     };
 
-    println!("ins row={:?}", row);
-
     // if not auto_id, need to check record doesn't already exist.
     if !auto_id && table.fetch(row_id, ps).is_some()
     {
@@ -112,7 +131,29 @@ fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(),E> {
     
     table.insert(&row, ps);
 
-    println!("ins table={:?}", table);
+    println!("ins table record count={} row={:?}", table.record_count(), row );
 
+    Ok(())
+}
+
+fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(),E> {
+    println!("todo... sel={:?}", sel);
+
+    let f = &sel.from;
+    let t = ps.load_table(f.id, &f.dt );
+    let table = t.borrow();
+
+    let mut iter = table.iter(ps);
+    while let Some(b) = iter.next_ref(ps)
+    {
+        println!("got a row");
+        let mut lr = table.lazy_row(b);
+        for e in &sel.vals
+        {
+           let v = e.eval_from_row(&mut lr, ps);
+           println!("v={:?}", v);
+        }
+    }
+    
     Ok(())
 }
