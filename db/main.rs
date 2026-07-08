@@ -23,7 +23,7 @@ pub mod exec;
 use exec::*;
 
 fn main() {
-    let (is_new, spd) = init();
+    let (is_new, spd) = init_spd();
 
     let global = Arc::new(Mutex::new(GSS::new(spd)));
 
@@ -39,7 +39,7 @@ fn main() {
     } else {
         load_sys_store(ps);
         dictx = Dict::load_from_sys_store(ps);
-        global.lock().unwrap().update_dict(dictx.clone());
+        global.lock().unwrap().init_dict(dictx.clone());
     }
 
     let dict = &mut dictx;
@@ -54,7 +54,7 @@ fn main() {
         b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 68, 'george@gmail.com')",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', 66)",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
-        b"SELECT Id, Name FROM dbo.cust",
+        b"SELECT Id, Name, Age FROM dbo.cust",
         // b"DROP TABLE dbo.cust",
     ];
 

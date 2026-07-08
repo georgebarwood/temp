@@ -61,8 +61,7 @@ impl Dict {
         let ssc = ps.sys_store.clone();
         let mut sys_store = ssc.borrow_mut();
         let key = IdVKey::new(id);
-        sys_store.remove(&key, ps);
-        sys_store.insert(&key, &bytes, ps);
+        sys_store.replace(&key, &bytes, ps);
     }
 
     /// Load dict from sys store.

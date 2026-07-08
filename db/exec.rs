@@ -132,7 +132,7 @@ fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(), E> {
 }
 
 fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
-    println!("todo... sel={:?}", sel);
+    println!("exec_sel sel={:?}", sel);
 
     let f = &sel.from;
     let t = ps.load_table(f.id, &f.dt);
@@ -140,12 +140,13 @@ fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
 
     let mut iter = table.iter(ps);
     while let Some(b) = iter.next_ref(ps) {
-        println!("got a row");
+        print!("got a row :");
         let mut lr = table.lazy_row(b);
         for e in &sel.vals {
             let v = e.eval_from_row(&mut lr, ps);
-            println!("v={:?}", v);
+            print!(" {:?} ", v);
         }
+        println!();
     }
 
     Ok(())
