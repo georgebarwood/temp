@@ -37,7 +37,7 @@ impl<'a> Parser<'a> {
         Ok(s)
     }
 
-    pub fn statements(&mut self) -> Result<LVec<(usize,Statement<'a>)>, E> {
+    pub fn statements(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
         self.next_token()?;
         let mut result = LVec::new();
         loop {
@@ -47,7 +47,7 @@ impl<'a> Parser<'a> {
                     let ident = &self.tr.input[*x..*y];
                     self.next_token()?;
                     let s = self.statement(ident)?;
-                    result.push( (start,s) );
+                    result.push((start, s));
                 }
                 Token::Eof => break,
                 _ => return Err(self.err("Statement keyword expected")),
@@ -77,7 +77,7 @@ impl<'a> Parser<'a> {
 
     fn insert(&mut self) -> Result<Statement<'a>, E> {
         self.expect_ident(b"INTO")?;
-        let (table,_,_) = self.table()?;
+        let (table, _, _) = self.table()?;
         let cols = self.name_list(&table)?;
 
         self.expect_ident(b"VALUES")?;
@@ -98,34 +98,33 @@ impl<'a> Parser<'a> {
     fn select(&mut self) -> Result<Statement<'a>, E> {
         let mut vals = self.exp_list()?;
         self.expect_ident(b"FROM")?;
-        let (from,_,_) = self.table()?;
+        let (from, _, _) = self.table()?;
         let wher = None; // ToDo
         let order_by = None; // ToDo
 
         // Translate column names to col numbers.
-        self.resolve_col_names( &mut vals, &from )?;
-        
-        let result = Statement::Select(Select { vals, from, wher, order_by });
+        self.resolve_col_names(&mut vals, &from)?;
+
+        let result = Statement::Select(Select {
+            vals,
+            from,
+            wher,
+            order_by,
+        });
         self.non_schema_statements = true;
         Ok(result)
     }
 
-    fn resolve_col_names( &self, vals: &mut[Exp<'a>], table: &STable ) -> Result<(),E>
-    {
-        for val in vals
-        {
-           match val {
-              Exp::Name(name) => {
-                  if let Some(num) = table.name_to_col( name )
-                  {
-                      *val = Exp::Col( num );
-                  } else {
-                     let e = &format!( "Column name not found : {:?}", name );
-                     return Err( self.err( &e ) );
-                  }   
-              }
-              _ => {}
-           }
+    fn resolve_col_names(&self, vals: &mut [Exp<'a>], table: &STable) -> Result<(), E> {
+        for val in vals {
+            if let Exp::Name(name) = val {
+                if let Some(num) = table.name_to_col(name) {
+                    *val = Exp::Col(num);
+                } else {
+                    let e = &format!("Column name not found : {:?}", name);
+                    return Err(self.err(e));
+                }
+            }
         }
         Ok(())
     }
@@ -156,12 +155,12 @@ impl<'a> Parser<'a> {
                 self.next_token()?;
                 Ok(Exp::Int(x))
             }
-            Token::String(x,y) => {
+            Token::String(x, y) => {
                 let lit = &self.tr.input[x..y];
                 self.next_token()?;
                 Ok(Exp::String(tos(lit)))
             }
-            Token::Ident(x,y) => {
+            Token::Ident(x, y) => {
                 let name = &self.tr.input[x..y];
                 self.next_token()?;
                 Ok(Exp::Name(tos(name)))
@@ -190,17 +189,17 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn table(&mut self) -> Result<(Arc<STable>,i64,i64), E> {
+    fn table(&mut self) -> Result<(Arc<STable>, i64, i64), E> {
         let schema = self.read_ident()?;
         let sid = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table,nid) = self.check_table(sid, tname)?;
-        Ok((table,sid,nid))
+        let (table, nid) = self.check_table(sid, tname)?;
+        Ok((table, sid, nid))
     }
 
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
-       let sname = self.read_ident()?;
+        let sname = self.read_ident()?;
         if self.check_schema(sname).is_ok() {
             return Err(self.err("Schema already exists"));
         }
@@ -208,7 +207,7 @@ impl<'a> Parser<'a> {
         let result = Statement::CreateSchema(result);
         self.schema_updates = true;
         Ok(result)
-    }  
+    }
 
     fn create_table(&mut self) -> Result<Statement<'a>, E> {
         let schema = self.read_ident()?;
@@ -231,7 +230,7 @@ impl<'a> Parser<'a> {
     }
 
     fn drop_table(&mut self) -> Result<Statement<'a>, E> {
-        let (table,schema_id,name_id) = self.table()?;
+        let (table, schema_id, name_id) = self.table()?;
         let result = DropTable {
             table,
             schema_id,
@@ -298,10 +297,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>,i64), E> {
+    fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>, i64), E> {
         let nid = self.check_tname(tname)?;
         if let Some(table) = self.dict.tables.get(&(schema, nid)) {
-            Ok((table.clone(),nid))
+            Ok((table.clone(), nid))
         } else {
             Err(self.err(&format!("Table [{}] not found", tname)))
         }
@@ -340,12 +339,12 @@ impl<'a> Parser<'a> {
     }
 
     fn expect_ident(&mut self, ident1: &[u8]) -> Result<(), E> {
-         if let Token::Ident(x, y) = &self.token {
-             let ident2 = &self.tr.input[*x..*y];
-             if ident1 == ident2 {
-                 self.next_token()?;
-                 return Ok(());
-             }
+        if let Token::Ident(x, y) = &self.token {
+            let ident2 = &self.tr.input[*x..*y];
+            if ident1 == ident2 {
+                self.next_token()?;
+                return Ok(());
+            }
         }
         Err(self.err(&format!("Expected {} got {}", tos(ident1), self.show_ct())))
     }

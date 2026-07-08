@@ -54,7 +54,10 @@ impl<'a> TokenReader<'a> {
                 Ok(Token::Comma)
             }
             0 => Ok(Token::Eof),
-            _ => { self.getc(); self.err("Unexpected char in input") },
+            _ => {
+                self.getc();
+                self.err("Unexpected char in input")
+            }
         }
     }
     fn cc(&self) -> u8 {
@@ -75,7 +78,7 @@ impl<'a> TokenReader<'a> {
     fn num(&mut self) -> Result<Token, E> {
         let mut result = (self.cc() - b'0') as i64;
         let mut c = self.getc();
-        while let b'0'..=b'9' = c { 
+        while let b'0'..=b'9' = c {
             result = result * 10 + (c - b'0') as i64;
             c = self.getc();
         }

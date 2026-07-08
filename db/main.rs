@@ -1,7 +1,7 @@
-use tablestg::*;
-use std::sync::Mutex;
 use page_store::*;
- 
+use std::sync::Mutex;
+use tablestg::*;
+
 /// SQL(-like) parsing.
 pub mod parser;
 use parser::*;
@@ -23,24 +23,23 @@ pub mod exec;
 use exec::*;
 
 fn main() {
-    let (is_new,spd) = init();
-    
-    let global = Arc::new( Mutex::new( GSS::new(spd) ) );
+    let (is_new, spd) = init();
+
+    let global = Arc::new(Mutex::new(GSS::new(spd)));
 
     let (mut psx, mut dictx) = global.lock().unwrap().get_ps_and_dict_write();
 
     let ps = &mut psx;
 
-    if is_new
-    {
-        assert!( ps.new_page() == SYS_STORE_PAGE );
+    if is_new {
+        assert!(ps.new_page() == SYS_STORE_PAGE);
         let ssc = ps.sys_store.clone();
         let mut sys_store = ssc.borrow_mut();
         *sys_store = Store::new(ps);
     } else {
         load_sys_store(ps);
         dictx = Dict::load_from_sys_store(ps);
-        global.lock().unwrap().update_dict( dictx.clone() );
+        global.lock().unwrap().update_dict(dictx.clone());
     }
 
     let dict = &mut dictx;
@@ -49,7 +48,7 @@ fn main() {
 
     // But for now, for testing purposes we just execute some SQL statements.
 
-    let sql : [&[u8];6] = [
+    let sql: [&[u8]; 6] = [
         b"CREATE SCHEMA dbo",
         b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
         b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 68, 'george@gmail.com')",
@@ -59,13 +58,14 @@ fn main() {
         // b"DROP TABLE dbo.cust",
     ];
 
-    let mut dict_changed : bool = false;
-    for s in sql
-    {
-        if go(s, dict, ps) { dict_changed = true; }
+    let mut dict_changed: bool = false;
+    for s in sql {
+        if go(s, dict, ps) {
+            dict_changed = true;
+        }
     }
 
-    global.lock().unwrap().commit( ps, dictx, dict_changed );
-    
+    global.lock().unwrap().commit(ps, dictx, dict_changed);
+
     global.lock().unwrap().shutdown();
-}   
+}

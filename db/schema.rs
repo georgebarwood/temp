@@ -1,5 +1,6 @@
 use datatype::DataType;
 use tablestg::*;
+use crate::DICT_ID;
 
 use serde::*;
 use std::collections::HashMap;
@@ -17,9 +18,10 @@ pub struct Dict {
 
 impl Dict {
     pub fn new() -> Self {
-        let mut dict = Self::default();
-        dict.last_table_id = 1; // 1 is reserved for DICT_ID.
-        dict
+        Self { 
+            last_table_id: DICT_ID as i64,
+            ..Default::default() 
+        }
     }
     pub fn new_schema_id(&mut self) -> i64 {
         self.last_schema_id += 1;
@@ -40,10 +42,9 @@ impl Dict {
     }
 
     /// Serialize as bytes, with pre-pended id.
-    fn to_bytes_id(&self, id:u64) -> LVec<u8>
-    {
+    fn to_bytes_id(&self, id: u64) -> LVec<u8> {
         let mut result = LVec::new();
-        result.extend_from_slice( &id.to_le_bytes() );
+        result.extend_from_slice(&id.to_le_bytes());
         postcard::to_io(self, &mut result).unwrap();
         result
     }
@@ -54,33 +55,28 @@ impl Dict {
     }
 
     /// Save dict to sys store.
-    pub fn save_to_sys_store( &self, ps: &mut PageSet )
-    {
-       let id = crate::DICT_ID;
-       let bytes = self.to_bytes_id(id);
-       let ssc = ps.sys_store.clone();
-       let mut sys_store = ssc.borrow_mut();
-       let key = IdVKey::new(id); 
-       sys_store.remove(&key, ps);
-       sys_store.insert(&key, &bytes, ps);
+    pub fn save_to_sys_store(&self, ps: &mut PageSet) {
+        let id = crate::DICT_ID;
+        let bytes = self.to_bytes_id(id);
+        let ssc = ps.sys_store.clone();
+        let mut sys_store = ssc.borrow_mut();
+        let key = IdVKey::new(id);
+        sys_store.remove(&key, ps);
+        sys_store.insert(&key, &bytes, ps);
     }
 
     /// Load dict from sys store.
-    pub fn load_from_sys_store( ps: &mut PageSet ) -> Arc<Dict>
-    { 
-       let ssc = ps.sys_store.clone();
-       let sys_store = ssc.borrow();
-       let key = IdVKey::new(crate::DICT_ID);
-       if let Some(mut sdata) = sys_store.get(&key,ps)
-       {
-           let bytes = sdata.bytes();
-           let dict = Dict::from_bytes_id( &bytes );
-          return Arc::new(dict);
-       }
-       else
-       {
-           panic!()
-       }
+    pub fn load_from_sys_store(ps: &mut PageSet) -> Arc<Dict> {
+        let ssc = ps.sys_store.clone();
+        let sys_store = ssc.borrow();
+        let key = IdVKey::new(crate::DICT_ID);
+        if let Some(mut sdata) = sys_store.get(&key, ps) {
+            let bytes = sdata.bytes();
+            let dict = Dict::from_bytes_id(&bytes);
+            Arc::new(dict)
+        } else {
+            panic!()
+        }
     }
 }
 
@@ -91,12 +87,9 @@ pub struct STable {
     pub dt: Arc<DataType>,
 }
 
-impl STable
-{
-    pub fn name_to_col(&self, s: &str) -> Option<usize>
-    {
+impl STable {
+    pub fn name_to_col(&self, s: &str) -> Option<usize> {
         self.dt.name_to_col(s)
-        
     }
 }
 
@@ -104,28 +97,25 @@ impl STable
 #[derive(Debug)]
 pub enum Exp<'a> {
     String(&'a str), // String literal
-    Name(&'a str), // Unresolved name
-    Int(i64), // Integer constant
+    Name(&'a str),   // Unresolved name
+    Int(i64),        // Integer constant
     Col(usize),
 }
 
-impl <'a>Exp<'a>
-{
-    pub fn eval(&self) -> Value
-    {
+impl<'a> Exp<'a> {
+    pub fn eval(&self) -> Value {
         match self {
-           Exp::String(s) => Value::String( LRc::new(LString::from(*s))),
-           Exp::Int(i) => Value::Int(*i),
-           _ => todo!()
+            Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
+            Exp::Int(i) => Value::Int(*i),
+            _ => todo!(),
         }
     }
-    pub fn eval_from_row(&self, row: &mut LazyRow, ps: &mut PageSet) -> Value
-    {
+    pub fn eval_from_row(&self, row: &mut LazyRow, ps: &mut PageSet) -> Value {
         match self {
-           Exp::String(s) => Value::String( LRc::new(LString::from(*s))),
-           Exp::Int(i) => Value::Int(*i),
-           Exp::Col(i) => row.item(*i, ps),
-           _ => todo!()
+            Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
+            Exp::Int(i) => Value::Int(*i),
+            Exp::Col(i) => row.item(*i, ps),
+            _ => todo!(),
         }
     }
 }

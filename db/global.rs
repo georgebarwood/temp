@@ -7,70 +7,64 @@ pub struct GSS {
 }
 
 impl GSS {
-   pub fn new(spd: Arc<SharedPagedData>) -> Self
-   {
-       let cur_dict = Arc::new( Dict::new() );
-       Self{ spd, cur_dict }
-   }
+    pub fn new(spd: Arc<SharedPagedData>) -> Self {
+        let cur_dict = Arc::new(Dict::new());
+        Self { spd, cur_dict }
+    }
 
-   /// Gets PageSet and Dict for writer.
-   pub fn get_ps_and_dict_write(&self) -> ( PageSet, Arc<Dict> ) {
-      let apd = self.spd.new_writer();
-      let ps = PageSet::new(apd);
-      let dict = self.cur_dict.clone();
-      ( ps, dict )
-   }
+    /// Gets PageSet and Dict for writer.
+    pub fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
+        let apd = self.spd.new_writer();
+        let ps = PageSet::new(apd);
+        let dict = self.cur_dict.clone();
+        (ps, dict)
+    }
 
-   /// Gets PageSet and Dict for reader.
-   pub fn get_ps_and_dict_read(&self) -> ( PageSet, Arc<Dict> ) {
-      let apd = self.spd.new_reader();
-      let ps = PageSet::new(apd);
-      let dict = self.cur_dict.clone();
-      ( ps, dict )
-   }
+    /// Gets PageSet and Dict for reader.
+    pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
+        let apd = self.spd.new_reader();
+        let ps = PageSet::new(apd);
+        let dict = self.cur_dict.clone();
+        (ps, dict)
+    }
 
-   /// Called during initialisation to set up Dict.
-   pub fn update_dict(&mut self, dict: Arc<Dict>) {
-      self.cur_dict = dict;
-   }
-   
-   pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool ) {
-      if new_dict 
-      { 
-         dict.save_to_sys_store(ps);
-         self.cur_dict = dict; 
-      }
-      save_sys_store(ps);
-      ps.save();
-   }
-   
-   pub fn shutdown(&self)
-   {
-      self.spd.shutdown();
-   }
+    /// Called during initialisation to set up Dict.
+    pub fn update_dict(&mut self, dict: Arc<Dict>) {
+        self.cur_dict = dict;
+    }
+
+    pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) {
+        if new_dict {
+            dict.save_to_sys_store(ps);
+            self.cur_dict = dict;
+        }
+        save_sys_store(ps);
+        ps.save();
+    }
+
+    pub fn shutdown(&self) {
+        self.spd.shutdown();
+    }
 }
 
 /// Page number of page where info for sys_store is saved.
-pub const SYS_STORE_PAGE : u64 = 1;
+pub const SYS_STORE_PAGE: u64 = 1;
 /// Id of record in sys_store that stores [Dict].
-pub const DICT_ID : u64 = 1;
+pub const DICT_ID: u64 = 1;
 
 /// Save ps.sys_store to data page SYS_STORE_PAGE.
-pub fn save_sys_store(ps: &mut PageSet)
-{
+pub fn save_sys_store(ps: &mut PageSet) {
     let bytes = ps.sys_store.borrow_mut().save_to_bytes();
-    if let Some(bytes) = bytes
-    {
+    if let Some(bytes) = bytes {
         let pdata = ps.load(SYS_STORE_PAGE);
         let data = Arc::new(bytes);
-        pageset::set_data( &pdata, data );
-        pageset::set_changed( &pdata );
+        pageset::set_data(&pdata, data);
+        pageset::set_changed(&pdata);
     }
-}   
+}
 
 /// Loads ps.sys_store from data page SYS_STORE_PAGE.
-pub fn load_sys_store(ps: &mut PageSet)
-{
+pub fn load_sys_store(ps: &mut PageSet) {
     let pdata = ps.load(SYS_STORE_PAGE);
     let pdata = pdata.borrow();
     let store = Store::load_from_bytes(&pdata.data);
@@ -83,8 +77,7 @@ pub fn load_sys_store(ps: &mut PageSet)
 }
 
 /// Constructs page storage. Bool in result indicates whether database file is newly created.
-pub fn init() -> (bool, Arc<SharedPagedData>)
-{
+pub fn init() -> (bool, Arc<SharedPagedData>) {
     use page_store::*;
     let limits = Limits::default();
 
