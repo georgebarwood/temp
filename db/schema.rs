@@ -87,7 +87,7 @@ pub struct STable {
 }
 
 impl STable {
-    pub fn name_to_col(&self, s: &str) -> Option<(usize,&DataType)> {
+    pub fn name_to_col(&self, s: &str) -> Option<(usize, &DataType)> {
         self.dt.name_to_col(s)
     }
 }
@@ -98,22 +98,29 @@ pub enum Exp<'a> {
     /// Integer constant
     Int(i64),
     /// String literal
-    String(&'a str), 
+    String(&'a str),
     /// Unresolved name
     Name(&'a str),
     /// Column number
     Col(usize),
     /// Binary expression, e.g. Age + 10
-    Binary(Operator,LBox<Exp<'a>>,LBox<Exp<'a>>),
+    Binary(Operator, LBox<Exp<'a>>, LBox<Exp<'a>>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operator {
+    None,
+    Equal,
+    NotEqual,
+    Greater,
+    Less,
+    GreaterEqual,
+    LessEqual,
     Plus,
     Minus,
     Multiply,
     Divide,
-    Concat
+    Concat,
 }
 
 impl<'a> Exp<'a> {
@@ -122,9 +129,9 @@ impl<'a> Exp<'a> {
             Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
             Exp::Int(i) => Value::Int(*i),
             Exp::Binary(_op, lhs, rhs) => {
-               let x = lhs.eval().int();
-               let y = rhs.eval().int();
-               Value::Int( x + y )
+                let x = lhs.eval().int();
+                let y = rhs.eval().int();
+                Value::Int(x + y)
             }
             _ => todo!(),
         }
@@ -134,10 +141,14 @@ impl<'a> Exp<'a> {
             Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
             Exp::Int(i) => Value::Int(*i),
             Exp::Col(i) => row.item(*i, ps),
-            Exp::Binary(_op, lhs, rhs) => {
-               let x = lhs.eval_from_row(row,ps).int();
-               let y = rhs.eval_from_row(row,ps).int();
-               Value::Int( x + y )
+            Exp::Binary(op, lhs, rhs) => {
+                let x = lhs.eval_from_row(row, ps).int();
+                let y = rhs.eval_from_row(row, ps).int();
+                match op {
+                   Operator::Plus => Value::Int(x + y),
+                   Operator::Equal => Value::Bool(x == y),
+                   _ => todo!()
+                }
             }
             _ => {
                 println!("todo: {:?}", self);

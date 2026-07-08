@@ -89,15 +89,12 @@ impl<'a> Parser<'a> {
         }
 
         // Check vals have correct types. Maybe this should be done as they are parsed.
-        for (i,v) in vals.iter().enumerate()
-        {
-           let vt = self.typ(v)?;
-           let et = table.dt.dt_struct( cols[i] );
-           if !et.similar(vt) {
-               return Err( self.err( 
-                  &format!("Type mismatch expected {:?} got {:?}", et, vt)
-               ));
-           }
+        for (i, v) in vals.iter().enumerate() {
+            let vt = self.typ(v)?;
+            let et = table.dt.dt_struct(cols[i]);
+            if !et.similar(vt) {
+                return Err(self.err(&format!("Type mismatch expected {:?} got {:?}", et, vt)));
+            }
         }
 
         let result = Statement::Insert(Insert { table, cols, vals });
@@ -109,10 +106,16 @@ impl<'a> Parser<'a> {
         let mut vals = self.exp_list()?;
         self.expect_ident(b"FROM")?;
         let (from, _, _) = self.table()?;
-        let wher = None; // ToDo
+        let wher = if self.test_ident(b"WHERE")?
+        {
+           let mut w = self.exp()?;
+           self.resolve(&mut w, &from)?;
+           Some(w)
+        } else {
+           None
+        };
         let order_by = None; // ToDo
 
-        // Translate column names to col numbers.
         self.resolve_col_names(&mut vals, &from)?;
 
         let result = Statement::Select(Select {
@@ -125,56 +128,56 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn resolve_col_names(&self, vals: &mut [Exp<'a>], table: &STable) -> Result<(), E> {
+    fn resolve_col_names(&self, vals: &mut [Exp<'a>], t: &STable) -> Result<(), E> {
         for val in vals {
-            let _dt = self.resolve(val, table)?;
+            let _dt = self.resolve(val, t)?;
         }
         Ok(())
     }
 
-    fn typ<'b>(&self, val: &Exp<'a>) -> Result<&'b DataType, E> {
-           let dt = match val {
-                Exp::Binary(_op,lhs,rhs) => {
-                   let t1 = self.typ(lhs)?;
-                   let t2 = self.typ(rhs)?;
-                   if t1 != &DataType::Int || t2 != &DataType::Int
-                   {
-                      return Err( self.err("Can only add ints!") );
-                   }
-                   t1
+    /// Resolve any names in expression, returns datatype.
+    fn resolve<'st>(&self, val: &mut Exp<'a>, t: &'st STable) -> Result<&'st DataType, E> {
+        let dt = match val {
+            Exp::Int(_) => &DataType::Int,
+            Exp::String(_) => &DataType::String(0),
+            Exp::Name(name) => {
+                if let Some((col, dt)) = t.name_to_col(name) {
+                    *val = Exp::Col(col);
+                    dt
+                } else {
+                    let e = &format!("Column name not found : {:?}", name);
+                    return Err(self.err(e));
                 }
-                Exp::Int(_) => &DataType::Int,
-                Exp::String(_) => &DataType::String(0),
-                _ => panic!()
-            };
-            Ok(dt)
+            }
+            Exp::Binary(_op, lhs, rhs) => {
+                let t1 = self.resolve(lhs, t)?;
+                let t2 = self.resolve(rhs, t)?;
+                if t1 != &DataType::Int || t2 != &DataType::Int {
+                    return Err(self.err("Can only add ints!"));
+                }
+                t1
+            }
+            _ => todo!(),
+        };
+        Ok(dt)
     }
-    
-    fn resolve<'b>(&self, val: &mut Exp<'a>, table: &'b STable) -> Result<&'b DataType, E> {
-           let dt = match val {
-                Exp::Name(name) => {
-                    if let Some((num,dt)) = table.name_to_col(name) {
-                       *val = Exp::Col(num);
-                       dt
-                    } else {
-                        let e = &format!("Column name not found : {:?}", name);
-                        return Err(self.err(e));
-                    }
+
+    /// Get expression datatype.
+    fn typ<'b>(&self, val: &Exp<'a>) -> Result<&'b DataType, E> {
+        let dt = match val {
+            Exp::Int(_) => &DataType::Int,
+            Exp::String(_) => &DataType::String(0),
+            Exp::Binary(_op, lhs, rhs) => {
+                let t1 = self.typ(lhs)?;
+                let t2 = self.typ(rhs)?;
+                if t1 != &DataType::Int || t2 != &DataType::Int {
+                    return Err(self.err("Can only add ints!"));
                 }
-                Exp::Binary(_op,lhs,rhs) => {
-                   let t1 = self.resolve(lhs, table)?;
-                   let t2 = self.resolve(rhs, table)?;
-                   if t1 != &DataType::Int || t2 != &DataType::Int
-                   {
-                      return Err( self.err("Can only add ints!") );
-                   }
-                   t1
-                }
-                Exp::Int(_) => &DataType::Int,
-                Exp::String(_) => &DataType::String(0),
-                _ => todo!()
-            };
-            Ok(dt)
+                t1
+            }
+            _ => panic!(),
+        };
+        Ok(dt)
     }
 
     fn bra_exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
@@ -198,20 +201,32 @@ impl<'a> Parser<'a> {
     }
 
     fn exp(&mut self) -> Result<Exp<'a>, E> {
-       let mut e = self.exp_primary()?;
-       match self.token {
-          Token::Plus => {
-              self.next_token()?;
-              let rhs = self.exp()?;
-              e = Exp::Binary( Operator::Plus, LBox::new(e), LBox::new(rhs) );
-          }
-          _ => {}
-       }
-       Ok(e)
+        let mut e = self.exp_primary()?;
+
+        let op = match self.token {
+            Token::Equal => Operator::Equal,
+            Token::NotEqual => Operator::NotEqual,
+            Token::Greater => Operator::Greater,
+            Token::Less => Operator::Less,
+            Token::Plus => Operator::Plus,
+            Token::Star => Operator::Multiply,
+            Token::FSlash => Operator::Divide,
+            Token::VBar => Operator::Concat,
+            _ => Operator::None,
+        };
+
+        if op != Operator::None
+        {
+            self.next_token()?;
+            let rhs = self.exp()?;
+            e = Exp::Binary(op, LBox::new(e), LBox::new(rhs));
+        }
+        
+        Ok(e)
     }
 
     fn exp_primary(&mut self) -> Result<Exp<'a>, E> {
-        let result = match self.token {
+        match self.token {
             Token::Int(x) => {
                 self.next_token()?;
                 Ok(Exp::Int(x))
@@ -227,8 +242,7 @@ impl<'a> Parser<'a> {
                 Ok(Exp::Name(tos(name)))
             }
             _ => panic!(),
-        };
-        result
+        }
     }
 
     fn name_list(&mut self, table: &STable) -> Result<LVec<usize>, E> {
@@ -407,6 +421,17 @@ impl<'a> Parser<'a> {
             }
         }
         Err(self.err(&format!("Expected {} got {}", tos(ident1), self.show_ct())))
+    }
+
+    fn test_ident(&mut self, ident1: &[u8]) -> Result<bool, E> {
+       if let Token::Ident(x, y) = &self.token {
+          let ident2 = &self.tr.input[*x..*y];
+          if ident1 == ident2 { 
+              self.next_token()?;
+              return Ok(true); 
+          }
+       }
+       Ok(false)
     }
 
     fn next_token(&mut self) -> Result<(), E> {

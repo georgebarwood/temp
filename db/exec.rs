@@ -141,11 +141,23 @@ fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
     while let Some(b) = iter.next_ref(ps) {
         print!("got a row :");
         let mut lr = table.lazy_row(b);
-        for e in &sel.vals {
-            let v = e.eval_from_row(&mut lr, ps);
-            print!(" {:?} ", v);
+
+        let ok = if let Some(wher) = &sel.wher {
+            wher.eval_from_row(&mut lr, ps).bool()
+        } else { 
+           true
+        };
+        
+        if ok 
+        {
+            for e in &sel.vals {
+                let v = e.eval_from_row(&mut lr, ps);
+                print!(" {:?} ", v);
+            }
+            println!();
+        } else {
+            println!(" row skipped due to where being false");
         }
-        println!();
     }
 
     Ok(())
