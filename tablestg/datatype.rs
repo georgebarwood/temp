@@ -98,10 +98,6 @@ impl DataType {
         match self {
             DataType::Empty => {}
             DataType::Bool => {
-            /*
-                let v : u8 = if val.bool() {1} else {0};
-                let _ = w.write(&v.to_le_bytes());
-            */
                 self.write_bool(val.bool(), w);
             } 
             DataType::Int => {

@@ -3,6 +3,9 @@ use crate::*;
 /// A Table stores [Value]s which have a specific [DataType].
 ///
 /// The first field (column) of the stored value must be a 64-bit id.
+///
+/// Table has methods to fetch only specific columns. This is perticularly 
+/// useful when a table many columns or large columns that are stored indirectly.
 #[derive(Debug)]
 pub struct Table {
     /// Part that needs to be serialised.

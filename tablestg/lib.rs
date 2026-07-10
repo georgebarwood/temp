@@ -16,7 +16,7 @@
    [2] [2] [6] [6] [3] [3] [4] [4]
     0   1   2   3   4   5   6   7
 
-   without creating any new pages. This is a relatively cheap operation.
+   without creating any new pages. This is a relatively cheap operation (maybe it can be done in a clever way).
    Now we split the records in [6] (now index 2 and 3) into two, the new page id being [7], as below:
 
    [2] [2] [6] [7] [3] [3] [4] [4]
