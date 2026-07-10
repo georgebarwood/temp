@@ -861,6 +861,7 @@ impl DataType {
 }
 
 /// Initially offset of serialised data, changes to value when accessed.
+#[derive(Debug)]
 pub enum LazyItem {
     /// Offset of serialised data.
     Offset(usize),

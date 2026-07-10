@@ -256,6 +256,7 @@ impl<'a> OwnedLazyRow<'a> {
 }
 
 /// LazyRow allows a subset of columns to be fetched, see [Table::lazy_row].
+#[derive(Debug)]
 pub struct LazyRow<'a> {
     table: &'a Table,
     buf: &'a [u8],

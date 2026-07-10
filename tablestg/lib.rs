@@ -1,7 +1,13 @@
 //! This crate is not yet reliable or stable!
 //!
-//! [Table] stores [Value]s which have a specific [DataType].
+//! [Table] stores [Value]s which have a specific [IataType].
 
+/* 
+   Idea for re-using indirect values.
+   On Store delete, allow deleted indirect values to be collected rather than deleted.
+   On next insert, use the garbage values if possible.
+   If not possible they are deleted.
+*/
 /*
    Idea for splitting hash buckets incrementally.
 
