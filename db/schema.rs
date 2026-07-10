@@ -1,6 +1,5 @@
-use crate::DICT_ID;
+use crate::*;
 use datatype::DataType;
-use tablestg::*;
 
 use serde::*;
 use std::collections::HashMap;
@@ -92,81 +91,14 @@ impl STable {
     }
 }
 
-/// Expression.
-#[derive(Debug)]
-pub enum Exp<'a> {
-    /// Integer constant
-    Int(i64),
-    /// String literal
-    String(&'a str),
-    /// Unresolved name
-    Name(&'a str),
-    /// Column number
-    Col(usize),
-    /// Binary expression, e.g. Age + 10
-    Binary(Operator, LBox<Exp<'a>>, LBox<Exp<'a>>),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Operator {
+/// Resolve Context ( for resolving names ).
+/// Note sure this is needed or a good idea, but leave it in for now...!
+pub enum RContext<'a> {
     None,
-    Equal,
-    NotEqual,
-    Greater,
-    Less,
-    GreaterEqual,
-    LessEqual,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Concat,
+    STable(&'a STable), // Will have parent context at some point.
 }
 
-impl<'a> Exp<'a> {
-    pub fn eval(&self) -> Value {
-        match self {
-            Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
-            Exp::Int(i) => Value::Int(*i),
-            Exp::Binary(_op, lhs, rhs) => {
-                let x = lhs.eval().int();
-                let y = rhs.eval().int();
-                Value::Int(x + y)
-            }
-            _ => todo!(),
-        }
-    }
-    pub fn eval_from_row(&self, row: &mut LazyRow, ps: &mut PageSet) -> Value {
-        match self {
-            Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
-            Exp::Int(i) => Value::Int(*i),
-            Exp::Col(i) => row.item(*i, ps),
-            Exp::Binary(op, lhs, rhs) => {
-                let x = lhs.eval_from_row(row, ps).int();
-                let y = rhs.eval_from_row(row, ps).int();
-                match op {
-                   Operator::Plus => Value::Int(x + y),
-                   Operator::Equal => Value::Bool(x == y),
-                   _ => todo!()
-                }
-            }
-            _ => {
-                println!("todo: {:?}", self);
-                panic!();
-            }
-        }
-    }
-}
-
-/// Statement.
-#[derive(Debug)]
-pub enum Statement<'a> {
-    CreateSchema(CreateSchema<'a>),
-    CreateTable(CreateTable<'a>),
-    DropTable(DropTable),
-    Insert(Insert<'a>),
-    Select(Select<'a>),
-}
+// Statements.
 
 /// CREATE SCHEMA statement.
 #[derive(Debug)]
@@ -202,7 +134,34 @@ pub struct Insert<'a> {
 #[derive(Debug)]
 pub struct Select<'a> {
     pub vals: LVec<Exp<'a>>,
-    pub from: Arc<STable>,
+    pub from: Option<Arc<STable>>,
     pub wher: Option<Exp<'a>>,
-    pub order_by: Option<LVec<Exp<'a>>>,
+    pub order_by: Option<LVec<(Exp<'a>, bool)>>,
+}
+
+/// UPDATE statement.
+#[derive(Debug)]
+pub struct Update<'a> {
+    pub assigns: LVec<(usize,Exp<'a>)>, // col num, Exp
+    pub table: Arc<STable>,
+    pub wher: Exp<'a>,
+}
+
+/// DELETE statement.
+#[derive(Debug)]
+pub struct Delete<'a> {
+    pub table: Arc<STable>,
+    pub wher: Exp<'a>,
+}
+
+/// Statement.
+#[derive(Debug)]
+pub enum Statement<'a> {
+    CreateSchema(CreateSchema<'a>),
+    CreateTable(CreateTable<'a>),
+    DropTable(DropTable),
+    Insert(Insert<'a>),
+    Select(Select<'a>),
+    Update(Update<'a>),
+    Delete(Delete<'a>),
 }

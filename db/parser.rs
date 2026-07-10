@@ -27,9 +27,11 @@ impl<'a> Parser<'a> {
     fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
         let s = match ident {
             b"INSERT" => self.insert(),
+            b"UPDATE" => self.update(),
             b"CREATE" => self.create(),
             b"DROP" => self.drop(),
             b"SELECT" => self.select(),
+            b"DELETE" => self.delete(),
             _ => {
                 return Err(self.err("Unknown keyword"));
             }
@@ -75,6 +77,52 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn update(&mut self) -> Result<Statement<'a>, E> {
+        let (table, _, _) = self.table()?;
+        self.expect_ident(b"SET")?;
+        let assigns = self.assigns(&table)?;
+        self.expect_ident(b"WHERE")?;
+        let mut wher = self.exp(0)?;
+        let rctx = RContext::STable(&table);
+        self.resolve(&mut wher, &rctx)?;
+        let result = Statement::Update(Update{ table, assigns, wher });
+        self.non_schema_statements = true;
+        Ok(result)
+    }
+
+    fn delete(&mut self) -> Result<Statement<'a>, E> {
+        self.expect_ident(b"FROM")?;
+        let (table, _, _) = self.table()?;
+        self.expect_ident(b"WHERE")?;
+        let mut wher = self.exp(0)?;
+        let rctx = RContext::STable(&table);
+        self.resolve(&mut wher, &rctx)?;
+        let result = Statement::Delete(Delete{ table, wher });
+        self.non_schema_statements = true;
+        Ok(result)
+    }
+
+    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize,Exp<'a>)>, E>
+    {
+        let rctx = RContext::STable(&table);
+        let mut result = LVec::new();
+        while let Some(ident) = self.check_ident()? {
+            if let Some(col_id) = table.dt.lookup_col(ident) {
+                self.expect_token( Token::Equal )?;
+                let mut exp = self.exp(0)?;
+                self.resolve( &mut exp, &rctx )?;
+                result.push((col_id, exp));
+            } else {
+                return Err(self.err("Col name not found"));
+            }
+            if self.token != Token::Comma {
+                break;
+            }
+            self.next_token()?;
+        }
+        Ok(result)
+    }
+        
     fn insert(&mut self) -> Result<Statement<'a>, E> {
         self.expect_ident(b"INTO")?;
         let (table, _, _) = self.table()?;
@@ -104,57 +152,72 @@ impl<'a> Parser<'a> {
 
     fn select(&mut self) -> Result<Statement<'a>, E> {
         let mut vals = self.exp_list()?;
-        self.expect_ident(b"FROM")?;
-        let (from, _, _) = self.table()?;
-        let wher = if self.test_ident(b"WHERE")?
-        {
-           let mut w = self.exp()?;
-           self.resolve(&mut w, &from)?;
-           Some(w)
+        let result = if self.test_ident(b"FROM")? {
+            let (from, _, _) = self.table()?;
+            let rctx = RContext::STable(&from);
+    
+            let wher = if self.test_ident(b"WHERE")? {
+                let mut w = self.exp(0)?;
+                self.resolve(&mut w, &rctx)?;
+                Some(w)
+            } else {
+                None
+            };
+            let order_by = None; // ToDo
+            self.resolve_col_names(&mut vals, &rctx)?;
+
+            Select {
+                vals,
+                from: Some(from),
+                wher,
+                order_by,
+            }
         } else {
-           None
+            Select { vals, from:None, wher:None, order_by:None }
         };
-        let order_by = None; // ToDo
-
-        self.resolve_col_names(&mut vals, &from)?;
-
-        let result = Statement::Select(Select {
-            vals,
-            from,
-            wher,
-            order_by,
-        });
         self.non_schema_statements = true;
-        Ok(result)
+        Ok(Statement::Select(result))
     }
 
-    fn resolve_col_names(&self, vals: &mut [Exp<'a>], t: &STable) -> Result<(), E> {
+    fn resolve_col_names(&self, vals: &mut [Exp<'a>], ctx: &RContext) -> Result<(), E> {
         for val in vals {
-            let _dt = self.resolve(val, t)?;
+            let _dt = self.resolve(val, ctx)?;
         }
         Ok(())
     }
 
     /// Resolve any names in expression, returns datatype.
-    fn resolve<'st>(&self, val: &mut Exp<'a>, t: &'st STable) -> Result<&'st DataType, E> {
-        let dt = match val {
+    fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E> {
+        let dt = match e {
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
             Exp::Name(name) => {
-                if let Some((col, dt)) = t.name_to_col(name) {
-                    *val = Exp::Col(col);
-                    dt
+                if let RContext::STable(t) = ctx {
+                    if let Some((col, dt)) = t.name_to_col(name) {
+                        *e = Exp::Col(col);
+                        dt
+                    } else {
+                        let e = &format!("Column name not found : {:?}", name);
+                        return Err(self.err(e));
+                    }
                 } else {
-                    let e = &format!("Column name not found : {:?}", name);
-                    return Err(self.err(e));
+                    panic!()
                 }
             }
             Exp::Binary(_op, lhs, rhs) => {
-                let t1 = self.resolve(lhs, t)?;
-                let t2 = self.resolve(rhs, t)?;
-                if t1 != &DataType::Int || t2 != &DataType::Int {
-                    return Err(self.err("Can only add ints!"));
+                let t1 = self.resolve(lhs, ctx)?;
+                let t2 = self.resolve(rhs, ctx)?;
+
+                if t1 == &DataType::Int && t2 == &DataType::Int
+                    || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
+                {
+                    // Ok
+                } else {
+                    return Err(self.err("Can only operate on ints or strings at the moment!"));
+                    // In future may want to assign operand type depending on type of operands.
+                    // *val.optype = ...
                 }
+
                 t1
             }
             _ => todo!(),
@@ -167,13 +230,17 @@ impl<'a> Parser<'a> {
         let dt = match val {
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
-            Exp::Binary(_op, lhs, rhs) => {
+            Exp::Binary(op, lhs, rhs) => {
                 let t1 = self.typ(lhs)?;
                 let t2 = self.typ(rhs)?;
-                if t1 != &DataType::Int || t2 != &DataType::Int {
-                    return Err(self.err("Can only add ints!"));
+                if t1 == &DataType::Int && t2 == &DataType::Int
+                    || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
+                {
+                    // Ok
+                } else {
+                    return Err(self.err("Expected integer operands"));
                 }
-                t1
+                if op.yields_bool() { &DataType::Bool } else { t1 }
             }
             _ => panic!(),
         };
@@ -190,7 +257,7 @@ impl<'a> Parser<'a> {
     fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
         let mut result = LVec::new();
         while self.token != Token::RBra {
-            let exp = self.exp()?;
+            let exp = self.exp(0)?;
             result.push(exp);
             if self.token != Token::Comma {
                 break;
@@ -200,28 +267,61 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn exp(&mut self) -> Result<Exp<'a>, E> {
-        let mut e = self.exp_primary()?;
-
+    /// Returns operator and precedence of current token.
+    fn op_and_prec(&self) -> (Operator, u8) {
         let op = match self.token {
             Token::Equal => Operator::Equal,
             Token::NotEqual => Operator::NotEqual,
             Token::Greater => Operator::Greater,
             Token::Less => Operator::Less,
+            Token::GreaterEqual => Operator::GreaterEqual,
+            Token::LessEqual => Operator::LessEqual,
+
             Token::Plus => Operator::Plus,
+            Token::Minus => Operator::Minus,
+
             Token::Star => Operator::Multiply,
             Token::FSlash => Operator::Divide,
+            Token::Percent => Operator::Remainder,
+
             Token::VBar => Operator::Concat,
+
+            Token::Ident(_,_) =>
+            {
+               if self.is_ident(b"AND") { Operator::And }
+               else if self.is_ident(b"OR") { Operator::Or }
+               else { Operator::None }
+            }
             _ => Operator::None,
         };
+        let prec: u8 = match op {
+            Operator::Concat => 1,
+            Operator::Or => 2,
+            Operator::And => 3,
+            Operator::Equal | Operator::NotEqual| Operator::Less 
+               | Operator::Greater | Operator::LessEqual | Operator::GreaterEqual => 4,
+            Operator::Plus | Operator::Minus => 5,
+            Operator::Multiply | Operator::Divide | Operator::Remainder => 6,
+            Operator::None => 0,
+        };
+        (op, prec)
+    }
 
-        if op != Operator::None
+    fn exp(&mut self, prec: u8) -> Result<Exp<'a>, E> {
+        let mut e = self.exp_primary()?;
+
+        loop
+        // Not sure if this is right, needs testing!
         {
+            let (op, op_prec) = self.op_and_prec();
+            if op == Operator::None || op_prec < prec {
+                break;
+            }
             self.next_token()?;
-            let rhs = self.exp()?;
+            let rhs = self.exp(op_prec)?;
             e = Exp::Binary(op, LBox::new(e), LBox::new(rhs));
         }
-        
+
         Ok(e)
     }
 
@@ -241,7 +341,13 @@ impl<'a> Parser<'a> {
                 self.next_token()?;
                 Ok(Exp::Name(tos(name)))
             }
-            _ => panic!(),
+            Token::LBra => {
+                self.next_token()?;
+                let e = self.exp(0)?;
+                self.expect_token(Token::RBra)?;
+                Ok(e)
+            }
+            _ => Err( self.err("Expression expected") )
         }
     }
 
@@ -423,15 +529,22 @@ impl<'a> Parser<'a> {
         Err(self.err(&format!("Expected {} got {}", tos(ident1), self.show_ct())))
     }
 
-    fn test_ident(&mut self, ident1: &[u8]) -> Result<bool, E> {
-       if let Token::Ident(x, y) = &self.token {
-          let ident2 = &self.tr.input[*x..*y];
-          if ident1 == ident2 { 
-              self.next_token()?;
-              return Ok(true); 
-          }
-       }
-       Ok(false)
+    fn is_ident(&self, ident1: &[u8]) -> bool {
+        if let Token::Ident(x, y) = &self.token {
+            let ident2 = &self.tr.input[*x..*y];
+            if ident1 == ident2 {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn test_ident(&mut self, ident: &[u8]) -> Result<bool, E> {
+        if self.is_ident( ident ) {
+            self.next_token()?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     fn next_token(&mut self) -> Result<(), E> {

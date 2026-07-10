@@ -25,9 +25,13 @@ pub enum Token {
     Plus,
     Minus,
     Star,
+    Percent,
     FSlash,
     Exclam,
     VBar,
+    VBarEqual,
+    PlusEqual,
+    MinusEqual,
     Err,
 }
 
@@ -65,14 +69,57 @@ impl<'a> TokenReader<'a> {
             b':' => Token::Colon,
             b';' => Token::SemiColon,
             b'=' => Token::Equal,
-            b'>' => if nc == b'=' { self.getc(); Token::GreaterEqual } else { Token::Greater },
-            b'<' => if nc == b'=' { self.getc(); Token::LessEqual } else { Token::Less },
-            b'!' => if nc == b'=' { self.getc(); Token::NotEqual } else { Token::Exclam },
-            b'+' => Token::Plus,
-            b'-' => Token::Minus,
+            b'>' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::GreaterEqual
+                } else {
+                    Token::Greater
+                }
+            }
+            b'<' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::LessEqual
+                } else {
+                    Token::Less
+                }
+            }
+            b'!' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::NotEqual
+                } else {
+                    Token::Exclam
+                }
+            }
+            b'+' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::PlusEqual
+                } else {
+                    Token::Plus
+                }
+            }
+            b'-' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::MinusEqual
+                } else {
+                    Token::Minus
+                }
+            }
             b'*' => Token::Star,
+            b'%' => Token::Percent,
             b'/' => Token::FSlash,
-            b'|' => Token::VBar,
+            b'|' => {
+                if nc == b'=' {
+                    self.getc();
+                    Token::VBarEqual
+                } else {
+                    Token::VBar
+                }
+            }
             b'(' => Token::LBra,
             b')' => Token::RBra,
             b',' => Token::Comma,
