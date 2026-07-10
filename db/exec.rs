@@ -82,19 +82,17 @@ fn execute(slist: &[(usize, Statement)], source: &[u8], ps: &mut PageSet) {
     }
 }
 
-fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, ps: &mut PageSet) -> LVec<i64>
-{
+fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, ps: &mut PageSet) -> LVec<i64> {
     let mut result = LVec::new();
     {
         let table = t.borrow();
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             let mut lr = table.lazy_row(b);
-            let id = lr.item(0,ps).int();
-            let ok =
-            {
-               let mut lrc = Context::LazyRow(&mut lr, &Context::None);
-               wher.eval(&mut lrc, ps).bool()
+            let id = lr.item(0, ps).int();
+            let ok = {
+                let mut lrc = Context::LazyRow(&mut lr, &Context::None);
+                wher.eval(&mut lrc, ps).bool()
             };
             if ok {
                 result.push(id);
@@ -158,29 +156,26 @@ fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(), E> {
 }
 
 fn exec_update(upd: &Update, ps: &mut PageSet) -> Result<(), E> {
-    println!("upd={:?}", upd);
+    // println!("upd={:?}", upd);
 
     let t = ps.load_table(upd.table.id, &upd.table.dt);
 
     let ids = ids(&t, &upd.wher, ps);
-    
+
     // println!("ids to be updated={:?}", ids);
     let mut table = t.borrow_mut();
-    for id in &ids
-    {
-        let mut row = table.fetch(*id,ps).unwrap();
+    for id in &ids {
+        let mut row = table.fetch(*id, ps).unwrap();
         let mut vals = LVec::new();
         {
             let mut ctx = Context::Values(row.list());
-            for (_col,e) in &upd.assigns
-            {
-               let v = e.eval(&mut ctx, ps);
-               vals.push( v );
+            for (_col, e) in &upd.assigns {
+                let v = e.eval(&mut ctx, ps);
+                vals.push(v);
             }
         }
         let mrow = LRc::make_mut(row.list_mut());
-        for (col,_e) in upd.assigns.iter().rev()
-        {
+        for (col, _e) in upd.assigns.iter().rev() {
             mrow[*col] = vals.pop().unwrap();
         }
         table.update(*id, &row, ps);
@@ -192,15 +187,14 @@ fn exec_delete(del: &Delete, ps: &mut PageSet) -> Result<(), E> {
     let t = ps.load_table(del.table.id, &del.table.dt);
     let ids = ids(&t, &del.wher, ps);
     let mut table = t.borrow_mut();
-    for id in &ids
-    {
+    for id in &ids {
         table.remove(*id, ps);
     }
     Ok(())
 }
 
 fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
-    println!("exec_sel sel={:?}", sel);
+    // println!("exec_sel sel={:?}", sel);
 
     if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);

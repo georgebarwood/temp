@@ -1,7 +1,10 @@
 /* What next plan...
 
+   Local variable declarations, BEGIN END blocks, IF ELSE END etc.
+
    Operator expressions ( +, *, | etc ) -- Done to some extent
-      -- AND, OR, NOT -- ToDo
+      -- AND, OR  -- Done
+      -- NOT -- ToDo
    Where -- Done to some extent
    Order By -- ToDo
       Store ids and order by values in an LVec, sort using values, then iterate.
@@ -30,6 +33,10 @@ use token::*;
 /// Representation of Tables, [Statement]s.
 pub mod schema;
 use schema::*;
+
+/// [Statement]s.
+pub mod statement;
+use statement::*;
 
 /// [Exp]ressions.
 pub mod exp;
@@ -72,8 +79,8 @@ fn main() {
         b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 60+8, 'george@gmail.com')",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', 66)",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
-        b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66",
-        b"DELETE FROM dbo.cust WHERE Age > 70",
+        b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66 AND true",
+        b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
         b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
         b"LET x : int = 0 SELECT ID, Name Age+@x FROM dbo.cust",
         // b"DROP TABLE dbo.cust",

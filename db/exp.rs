@@ -3,6 +3,8 @@ use tablestg::*;
 /// Parsed Expression.
 #[derive(Debug)]
 pub enum Exp<'a> {
+    /// Bool constant
+    Bool(bool),
     /// Integer constant
     Int(i64),
     /// String literal
@@ -34,7 +36,8 @@ pub enum Operator {
     Divide,
     Remainder,
     Concat,
-    And, Or,
+    And,
+    Or,
 }
 
 impl Operator {
@@ -57,18 +60,17 @@ pub enum Context<'a> {
 impl<'a> Exp<'a> {
     pub fn eval(&self, ctx: &mut Context, ps: &mut PageSet) -> Value {
         match self {
-            Exp::Int(i) => Value::Int(*i),
-            Exp::String(s) => Value::String(LRc::new(LString::from(*s))),
-            Exp::Col(i) => {
-                match ctx {
-                    Context::LazyRow(row, _) => row.item(*i, ps),
-                    Context::Values(vals) => vals[*i].clone(),
-                    Context::None => panic!(),
-                }
-            }
-            Exp::Binary(op, lhs, rhs) => {
-                let x: Value = lhs.eval(ctx, ps);
-                let y: Value = rhs.eval(ctx, ps);
+            Exp::Bool(x) => Value::Bool(*x),
+            Exp::Int(x) => Value::Int(*x),
+            Exp::String(x) => Value::String(LRc::new(LString::from(*x))),
+            Exp::Col(x) => match ctx {
+                Context::LazyRow(row, _) => row.item(*x, ps),
+                Context::Values(vals) => vals[*x].clone(),
+                Context::None => panic!(),
+            },
+            Exp::Binary(op, x, y) => {
+                let x: Value = x.eval(ctx, ps);
+                let y: Value = y.eval(ctx, ps);
                 if let Value::Int(x) = &x
                     && let Value::Int(y) = &y
                 {
@@ -87,13 +89,17 @@ impl<'a> Exp<'a> {
                         Operator::Remainder => Value::Int(x % y),
                         _ => todo!(),
                     }
-                } else if let Value::Bool(x) = &x && let Value::Bool(y) = &y {
+                } else if let Value::Bool(x) = &x
+                    && let Value::Bool(y) = &y
+                {
                     match op {
                         Operator::And => Value::Bool(*x && *y),
                         Operator::Or => Value::Bool(*x || *y),
                         _ => todo!(),
                     }
-                } else if let Value::String(x) = &x && let Value::String(y) = &y {
+                } else if let Value::String(x) = &x
+                    && let Value::String(y) = &y
+                {
                     match op {
                         Operator::Concat => concat(x, y),
                         _ => todo!(),

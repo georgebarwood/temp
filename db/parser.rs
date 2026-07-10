@@ -85,7 +85,11 @@ impl<'a> Parser<'a> {
         let mut wher = self.exp(0)?;
         let rctx = RContext::STable(&table);
         self.resolve(&mut wher, &rctx)?;
-        let result = Statement::Update(Update{ table, assigns, wher });
+        let result = Statement::Update(Update {
+            table,
+            assigns,
+            wher,
+        });
         self.non_schema_statements = true;
         Ok(result)
     }
@@ -97,20 +101,19 @@ impl<'a> Parser<'a> {
         let mut wher = self.exp(0)?;
         let rctx = RContext::STable(&table);
         self.resolve(&mut wher, &rctx)?;
-        let result = Statement::Delete(Delete{ table, wher });
+        let result = Statement::Delete(Delete { table, wher });
         self.non_schema_statements = true;
         Ok(result)
     }
 
-    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize,Exp<'a>)>, E>
-    {
-        let rctx = RContext::STable(&table);
+    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize, Exp<'a>)>, E> {
+        let rctx = RContext::STable(table);
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
             if let Some(col_id) = table.dt.lookup_col(ident) {
-                self.expect_token( Token::Equal )?;
+                self.expect_token(Token::Equal)?;
                 let mut exp = self.exp(0)?;
-                self.resolve( &mut exp, &rctx )?;
+                self.resolve(&mut exp, &rctx)?;
                 result.push((col_id, exp));
             } else {
                 return Err(self.err("Col name not found"));
@@ -122,7 +125,7 @@ impl<'a> Parser<'a> {
         }
         Ok(result)
     }
-        
+
     fn insert(&mut self) -> Result<Statement<'a>, E> {
         self.expect_ident(b"INTO")?;
         let (table, _, _) = self.table()?;
@@ -155,7 +158,7 @@ impl<'a> Parser<'a> {
         let result = if self.test_ident(b"FROM")? {
             let (from, _, _) = self.table()?;
             let rctx = RContext::STable(&from);
-    
+
             let wher = if self.test_ident(b"WHERE")? {
                 let mut w = self.exp(0)?;
                 self.resolve(&mut w, &rctx)?;
@@ -173,7 +176,12 @@ impl<'a> Parser<'a> {
                 order_by,
             }
         } else {
-            Select { vals, from:None, wher:None, order_by:None }
+            Select {
+                vals,
+                from: None,
+                wher: None,
+                order_by: None,
+            }
         };
         self.non_schema_statements = true;
         Ok(Statement::Select(result))
@@ -189,6 +197,7 @@ impl<'a> Parser<'a> {
     /// Resolve any names in expression, returns datatype.
     fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E> {
         let dt = match e {
+            Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
             Exp::Name(name) => {
@@ -204,21 +213,29 @@ impl<'a> Parser<'a> {
                     panic!()
                 }
             }
-            Exp::Binary(_op, lhs, rhs) => {
+            Exp::Binary(op, lhs, rhs) => {
                 let t1 = self.resolve(lhs, ctx)?;
                 let t2 = self.resolve(rhs, ctx)?;
 
                 if t1 == &DataType::Int && t2 == &DataType::Int
                     || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
+                    || t1 == &DataType::Bool && t2 == &DataType::Bool
                 {
                     // Ok
                 } else {
-                    return Err(self.err("Can only operate on ints or strings at the moment!"));
+                    return Err(self.err(
+                       &format!("Can only operate on bools, ints or strings at the moment lhs={:?} rhs={:?} t1={:?} t2={:?}",
+                         lhs,rhs,t1,t2)
+                    ));
                     // In future may want to assign operand type depending on type of operands.
                     // *val.optype = ...
                 }
 
-                t1
+                if op.yields_bool() {
+                    &DataType::Bool
+                } else {
+                    t1
+                }
             }
             _ => todo!(),
         };
@@ -228,6 +245,7 @@ impl<'a> Parser<'a> {
     /// Get expression datatype.
     fn typ<'b>(&self, val: &Exp<'a>) -> Result<&'b DataType, E> {
         let dt = match val {
+            Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
             Exp::Binary(op, lhs, rhs) => {
@@ -235,12 +253,19 @@ impl<'a> Parser<'a> {
                 let t2 = self.typ(rhs)?;
                 if t1 == &DataType::Int && t2 == &DataType::Int
                     || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
+                    || t1 == &DataType::Bool && t2 == &DataType::Bool
                 {
                     // Ok
                 } else {
-                    return Err(self.err("Expected integer operands"));
+                    return Err(self.err("Expected similar bool, int or string  operands"));
                 }
-                if op.yields_bool() { &DataType::Bool } else { t1 }
+                let result = if op.yields_bool() {
+                    &DataType::Bool
+                } else {
+                    t1
+                };
+                println!("type of val{:?} = {:?}", val, result);
+                result
             }
             _ => panic!(),
         };
@@ -286,11 +311,14 @@ impl<'a> Parser<'a> {
 
             Token::VBar => Operator::Concat,
 
-            Token::Ident(_,_) =>
-            {
-               if self.is_ident(b"AND") { Operator::And }
-               else if self.is_ident(b"OR") { Operator::Or }
-               else { Operator::None }
+            Token::Ident(_, _) => {
+                if self.is_ident(b"AND") {
+                    Operator::And
+                } else if self.is_ident(b"OR") {
+                    Operator::Or
+                } else {
+                    Operator::None
+                }
             }
             _ => Operator::None,
         };
@@ -298,8 +326,13 @@ impl<'a> Parser<'a> {
             Operator::Concat => 1,
             Operator::Or => 2,
             Operator::And => 3,
-            Operator::Equal | Operator::NotEqual| Operator::Less 
-               | Operator::Greater | Operator::LessEqual | Operator::GreaterEqual => 4,
+            
+            Operator::Equal
+            | Operator::NotEqual
+            | Operator::Less
+            | Operator::Greater
+            | Operator::LessEqual
+            | Operator::GreaterEqual => 4,
             Operator::Plus | Operator::Minus => 5,
             Operator::Multiply | Operator::Divide | Operator::Remainder => 6,
             Operator::None => 0,
@@ -339,7 +372,11 @@ impl<'a> Parser<'a> {
             Token::Ident(x, y) => {
                 let name = &self.tr.input[x..y];
                 self.next_token()?;
-                Ok(Exp::Name(tos(name)))
+                Ok( match name {
+                    b"true" => Exp::Bool(true),
+                    b"false" => Exp::Bool(false),
+                    _ => Exp::Name(tos(name)),
+                })
             }
             Token::LBra => {
                 self.next_token()?;
@@ -347,7 +384,7 @@ impl<'a> Parser<'a> {
                 self.expect_token(Token::RBra)?;
                 Ok(e)
             }
-            _ => Err( self.err("Expression expected") )
+            _ => Err(self.err("Expression expected"))
         }
     }
 
@@ -540,7 +577,7 @@ impl<'a> Parser<'a> {
     }
 
     fn test_ident(&mut self, ident: &[u8]) -> Result<bool, E> {
-        if self.is_ident( ident ) {
+        if self.is_ident(ident) {
             self.next_token()?;
             return Ok(true);
         }
