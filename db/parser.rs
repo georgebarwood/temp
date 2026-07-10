@@ -10,6 +10,7 @@ pub struct Parser<'a> {
     dict: &'a Dict,
     pub schema_updates: bool,
     non_schema_statements: bool,
+    lets: LVec<(&'a str, Arc<DataType>)>, // Local variable declarations.
 }
 
 impl<'a> Parser<'a> {
@@ -21,6 +22,7 @@ impl<'a> Parser<'a> {
             dict,
             schema_updates: false,
             non_schema_statements: false,
+            lets: LVec::new(),
         }
     }
 
@@ -32,6 +34,7 @@ impl<'a> Parser<'a> {
             b"DROP" => self.drop(),
             b"SELECT" => self.select(),
             b"DELETE" => self.delete(),
+            b"LET" => self.lett(),
             _ => {
                 return Err(self.err("Unknown keyword"));
             }
@@ -59,6 +62,26 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    fn lett(&mut self) -> Result<Statement<'a>, E> {
+        let name = self.read_ident()?;
+
+        self.expect_token(Token::Colon)?;
+        let datatype = Arc::new(self.datatype()?); // Maybe this could be optional.
+        self.expect_token(Token::Equal)?;
+        let mut exp = self.exp(0)?;
+
+        {
+            let rctx = RContext::Local(&self.lets);
+            let _edt = self.resolve(&mut exp, &rctx)?;
+        }
+
+        // ToDo : check edt and datatype are compatible.
+
+        self.lets.push((name, datatype.clone()));
+
+        Ok(Statement::Let(Let { exp }))
+    }
+
     fn create(&mut self) -> Result<Statement<'a>, E> {
         let ident = self.read_ident()?;
         match ident {
@@ -83,8 +106,11 @@ impl<'a> Parser<'a> {
         let assigns = self.assigns(&table)?;
         self.expect_ident(b"WHERE")?;
         let mut wher = self.exp(0)?;
-        let rctx = RContext::STable(&table);
-        self.resolve(&mut wher, &rctx)?;
+
+        let lctx = RContext::Local(&self.lets);
+        let tctx = RContext::STable(&table, &lctx);
+
+        self.resolve(&mut wher, &tctx)?;
         let result = Statement::Update(Update {
             table,
             assigns,
@@ -99,21 +125,29 @@ impl<'a> Parser<'a> {
         let (table, _, _) = self.table()?;
         self.expect_ident(b"WHERE")?;
         let mut wher = self.exp(0)?;
-        let rctx = RContext::STable(&table);
-        self.resolve(&mut wher, &rctx)?;
+
+        {
+            let lctx = RContext::Local(&self.lets);
+            let tctx = RContext::STable(&table, &lctx);
+            self.resolve(&mut wher, &tctx)?;
+        }
+
         let result = Statement::Delete(Delete { table, wher });
         self.non_schema_statements = true;
         Ok(result)
     }
 
     fn assigns(&mut self, table: &STable) -> Result<LVec<(usize, Exp<'a>)>, E> {
-        let rctx = RContext::STable(table);
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
             if let Some(col_id) = table.dt.lookup_col(ident) {
                 self.expect_token(Token::Equal)?;
                 let mut exp = self.exp(0)?;
-                self.resolve(&mut exp, &rctx)?;
+                {
+                    let lctx = RContext::Local(&self.lets);
+                    let tctx = RContext::STable(table, &lctx);
+                    self.resolve(&mut exp, &tctx)?;
+                }
                 result.push((col_id, exp));
             } else {
                 return Err(self.err("Col name not found"));
@@ -155,19 +189,28 @@ impl<'a> Parser<'a> {
 
     fn select(&mut self) -> Result<Statement<'a>, E> {
         let mut vals = self.exp_list()?;
+
         let result = if self.test_ident(b"FROM")? {
             let (from, _, _) = self.table()?;
-            let rctx = RContext::STable(&from);
 
             let wher = if self.test_ident(b"WHERE")? {
                 let mut w = self.exp(0)?;
-                self.resolve(&mut w, &rctx)?;
+                {
+                    let lctx = RContext::Local(&self.lets);
+                    let tctx = RContext::STable(&from, &lctx);
+                    self.resolve(&mut w, &tctx)?;
+                }
                 Some(w)
             } else {
                 None
             };
             let order_by = None; // ToDo
-            self.resolve_col_names(&mut vals, &rctx)?;
+
+            {
+                let lctx = RContext::Local(&self.lets);
+                let tctx = RContext::STable(&from, &lctx);
+                self.resolve_names(&mut vals, &tctx)?;
+            }
 
             Select {
                 vals,
@@ -176,6 +219,9 @@ impl<'a> Parser<'a> {
                 order_by,
             }
         } else {
+            let lctx = RContext::Local(&self.lets);
+            self.resolve_names(&mut vals, &lctx)?;
+
             Select {
                 vals,
                 from: None,
@@ -187,7 +233,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Select(result))
     }
 
-    fn resolve_col_names(&self, vals: &mut [Exp<'a>], ctx: &RContext) -> Result<(), E> {
+    fn resolve_names(&self, vals: &mut [Exp<'a>], ctx: &RContext) -> Result<(), E> {
         for val in vals {
             let _dt = self.resolve(val, ctx)?;
         }
@@ -201,18 +247,32 @@ impl<'a> Parser<'a> {
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
             Exp::Name(name) => {
-                if let RContext::STable(t) = ctx {
+                if let RContext::STable(t, nxt) = ctx {
                     if let Some((col, dt)) = t.name_to_col(name) {
                         *e = Exp::Col(col);
                         dt
                     } else {
+                        self.resolve(e, nxt)?
+                        /*
+                        // ToDo : try resolving using local context instead.
                         let e = &format!("Column name not found : {:?}", name);
                         return Err(self.err(e));
+                        */
                     }
+                } else if let RContext::Local(lets) = ctx {
+                    for (i, (n, typ)) in lets.iter().rev().enumerate() {
+                        if *n == *name {
+                            *e = Exp::Local(i);
+                            return Ok(typ);
+                        }
+                    }
+                    let e = &format!("Name not found : {:?}", name);
+                    return Err(self.err(e));
                 } else {
                     panic!()
                 }
             }
+
             Exp::Binary(op, lhs, rhs) => {
                 let t1 = self.resolve(lhs, ctx)?;
                 let t2 = self.resolve(rhs, ctx)?;
@@ -326,7 +386,7 @@ impl<'a> Parser<'a> {
             Operator::Concat => 1,
             Operator::Or => 2,
             Operator::And => 3,
-            
+
             Operator::Equal
             | Operator::NotEqual
             | Operator::Less
@@ -372,7 +432,7 @@ impl<'a> Parser<'a> {
             Token::Ident(x, y) => {
                 let name = &self.tr.input[x..y];
                 self.next_token()?;
-                Ok( match name {
+                Ok(match name {
                     b"true" => Exp::Bool(true),
                     b"false" => Exp::Bool(false),
                     _ => Exp::Name(tos(name)),
@@ -384,7 +444,7 @@ impl<'a> Parser<'a> {
                 self.expect_token(Token::RBra)?;
                 Ok(e)
             }
-            _ => Err(self.err("Expression expected"))
+            _ => Err(self.err("Expression expected")),
         }
     }
 

@@ -57,6 +57,12 @@ pub struct Delete<'a> {
     pub wher: Exp<'a>,
 }
 
+/// LET statement.
+#[derive(Debug)]
+pub struct Let<'a> {
+    pub exp: Exp<'a>,
+}
+
 /// Statement.
 #[derive(Debug)]
 pub enum Statement<'a> {
@@ -67,4 +73,5 @@ pub enum Statement<'a> {
     Select(Select<'a>),
     Update(Update<'a>),
     Delete(Delete<'a>),
+    Let(Let<'a>),
 }

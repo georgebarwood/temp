@@ -189,12 +189,12 @@ impl<'a> TokenReader<'a> {
 
 #[derive(Debug)]
 pub struct E {
-    pub _message: LString,
+    pub message: LString,
 }
 impl E {
     pub fn new(s: &str) -> Self {
         Self {
-            _message: LString::from(s),
+            message: LString::from(s),
         }
     }
 }

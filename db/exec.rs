@@ -1,6 +1,11 @@
 use crate::*;
 use std::cell::RefCell;
 
+struct Info<'a> {
+    source: &'a [u8],
+    _stack: LVec<Value>,
+}
+
 /// Executes a batch of statements. Result is whether dict was updated.
 pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     let dc = dict.clone();
@@ -14,7 +19,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     match parser.statements() {
         Err(e) => {
             let pos = parser.position();
-            println!("Error {} at input position {}", e._message, pos);
+            println!("Error {} at input position {}", e.message, pos);
             println!("Source: {}", tos(&source[0..pos]));
             println!();
         }
@@ -25,7 +30,11 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                 execute_schema_updates(&slist, md, ps);
                 dict_updated = true;
             } else {
-                execute(&slist, source, ps);
+                let mut info = Info {
+                    source,
+                    _stack: LVec::new(),
+                };
+                execute(&slist, &mut info, ps);
             }
         }
     }
@@ -63,46 +72,34 @@ fn execute_schema_updates(slist: &[(usize, Statement)], dict: &mut Dict, ps: &mu
     }
 }
 
-fn execute(slist: &[(usize, Statement)], source: &[u8], ps: &mut PageSet) {
+fn exec_let(x: &Let, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+    println!("exec let x={:?}", x);
+    let v = x.exp.eval(&mut Context::None, ps); // Context is todo...
+    info._stack.push(v);
+    Ok(())
+}
+
+fn execute(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet) {
     for (pos, s) in slist {
         // println!("executing {:?} position={}", s, pos);
         let result = match s {
-            Statement::Insert(x) => exec_insert(x, ps),
-            Statement::Update(x) => exec_update(x, ps),
-            Statement::Delete(x) => exec_delete(x, ps),
-            Statement::Select(x) => exec_select(x, ps),
+            Statement::Insert(x) => exec_insert(x, info, ps),
+            Statement::Update(x) => exec_update(x, info, ps),
+            Statement::Delete(x) => exec_delete(x, info, ps),
+            Statement::Select(x) => exec_select(x, info, ps),
+            Statement::Let(x) => exec_let(x, info, ps),
             _ => todo!(),
         };
 
         if let Err(e) = &result {
-            println!("Error {} at {}", e._message, pos);
-            println!("Source: {}", tos(&source[0..*pos]));
+            println!("Error {} at {}", e.message, pos);
+            println!("Source: {}", tos(&info.source[0..*pos]));
             println!();
         }
     }
 }
 
-fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, ps: &mut PageSet) -> LVec<i64> {
-    let mut result = LVec::new();
-    {
-        let table = t.borrow();
-        let mut iter = table.iter(ps);
-        while let Some(b) = iter.next_ref(ps) {
-            let mut lr = table.lazy_row(b);
-            let id = lr.item(0, ps).int();
-            let ok = {
-                let mut lrc = Context::LazyRow(&mut lr, &Context::None);
-                wher.eval(&mut lrc, ps).bool()
-            };
-            if ok {
-                result.push(id);
-            }
-        }
-    }
-    result
-}
-
-fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(), E> {
+fn exec_insert(ins: &Insert, _info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     // println!("ins={:?}", ins);
 
     // First evaluate the expressions.
@@ -155,7 +152,7 @@ fn exec_insert(ins: &Insert, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_update(upd: &Update, ps: &mut PageSet) -> Result<(), E> {
+fn exec_update(upd: &Update, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     // println!("upd={:?}", upd);
 
     let t = ps.load_table(upd.table.id, &upd.table.dt);
@@ -168,7 +165,8 @@ fn exec_update(upd: &Update, ps: &mut PageSet) -> Result<(), E> {
         let mut row = table.fetch(*id, ps).unwrap();
         let mut vals = LVec::new();
         {
-            let mut ctx = Context::Values(row.list());
+            let mut lctx = Context::Locals(&info._stack);
+            let mut ctx = Context::Values(row.list(), &mut lctx);
             for (_col, e) in &upd.assigns {
                 let v = e.eval(&mut ctx, ps);
                 vals.push(v);
@@ -183,7 +181,7 @@ fn exec_update(upd: &Update, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_delete(del: &Delete, ps: &mut PageSet) -> Result<(), E> {
+fn exec_delete(del: &Delete, _info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     let t = ps.load_table(del.table.id, &del.table.dt);
     let ids = ids(&t, &del.wher, ps);
     let mut table = t.borrow_mut();
@@ -193,8 +191,8 @@ fn exec_delete(del: &Delete, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
-    // println!("exec_sel sel={:?}", sel);
+fn exec_select(sel: &Select, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+    println!("exec_sel sel={:?}", sel);
 
     if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);
@@ -204,7 +202,8 @@ fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
-            let mut lrc = Context::LazyRow(&mut lr, &Context::None);
+            let mut lc = Context::Locals(&info._stack);
+            let mut lrc = Context::LazyRow(&mut lr, &mut lc);
 
             let ok = if let Some(wher) = &sel.wher {
                 wher.eval(&mut lrc, ps).bool()
@@ -234,4 +233,25 @@ fn exec_select(sel: &Select, ps: &mut PageSet) -> Result<(), E> {
     }
 
     Ok(())
+}
+
+/// Get a list of ids for records from table that satisfy where condition.
+fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, ps: &mut PageSet) -> LVec<i64> {
+    let mut result = LVec::new();
+    {
+        let table = t.borrow();
+        let mut iter = table.iter(ps);
+        while let Some(b) = iter.next_ref(ps) {
+            let mut lr = table.lazy_row(b);
+            let id = lr.item(0, ps).int();
+            let ok = {
+                let mut lrc = Context::LazyRow(&mut lr, &mut Context::None); // ToDo : pass _stack
+                wher.eval(&mut lrc, ps).bool()
+            };
+            if ok {
+                result.push(id);
+            }
+        }
+    }
+    result
 }

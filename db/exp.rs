@@ -51,9 +51,11 @@ impl Operator {
 }
 
 /// Context in which expression is evaluated. May evolve a bit!
+#[derive(Debug)]
 pub enum Context<'a> {
-    LazyRow(&'a mut LazyRow<'a>, &'a Context<'a>),
-    Values(&'a [Value]),
+    LazyRow(&'a mut LazyRow<'a>, &'a mut Context<'a>),
+    Values(&'a [Value], &'a mut Context<'a>),
+    Locals(&'a [Value]),
     None,
 }
 
@@ -65,8 +67,17 @@ impl<'a> Exp<'a> {
             Exp::String(x) => Value::String(LRc::new(LString::from(*x))),
             Exp::Col(x) => match ctx {
                 Context::LazyRow(row, _) => row.item(*x, ps),
-                Context::Values(vals) => vals[*x].clone(),
-                Context::None => panic!(),
+                Context::Values(vals, _) => vals[*x].clone(),
+                _ => panic!(),
+            },
+            Exp::Local(x) => match ctx {
+                Context::LazyRow(_, nxt) => self.eval(nxt, ps),
+                Context::Values(_, nxt) => self.eval(nxt, ps),
+                Context::Locals(stk) => {
+                    let ix = stk.len() - (x + 1);
+                    stk[ix].clone()
+                }
+                _ => panic!(),
             },
             Exp::Binary(op, x, y) => {
                 let x: Value = x.eval(ctx, ps);
@@ -105,10 +116,14 @@ impl<'a> Exp<'a> {
                         _ => todo!(),
                     }
                 } else {
+                    println!("self={:?}", self);
                     todo!()
                 }
             }
-            _ => todo!(),
+            _ => {
+                println!("self={:?}", self);
+                todo!()
+            }
         }
     }
 }

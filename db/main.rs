@@ -30,7 +30,7 @@ use parser::*;
 pub mod token;
 use token::*;
 
-/// Representation of Tables, [Statement]s.
+/// [Dict]ionary of schemas, tables, [STable], [RContext].
 pub mod schema;
 use schema::*;
 
@@ -82,7 +82,7 @@ fn main() {
         b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66 AND true",
         b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
         b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
-        b"LET x : int = 0 SELECT ID, Name Age+@x FROM dbo.cust",
+        b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < 6",
         // b"DROP TABLE dbo.cust",
     ];
 

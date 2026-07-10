@@ -92,9 +92,49 @@ impl STable {
 }
 
 /// Resolve Context ( for resolving names ).
-/// Note sure this is needed or a good idea, but leave it in for now...!
 pub enum RContext<'a> {
     None,
-    STable(&'a STable), // Will have parent context at some point.
+    STable(&'a STable, &'a RContext<'a>),
+    Local(&'a [(&'a str, Arc<DataType>)]),
 }
 
+/*
+impl <'a> RContext<'a>
+{
+    pub fn lookup<'b>( &self, e: &mut Exp<'a> ) -> Result<&'b DataType, E>
+    {
+        match self {
+            RContext::STable(t) => {
+               match e {
+                   Exp::Name(name) => {
+                       if let Some((col, dt)) = t.name_to_col(name)
+                       {
+                            *e = Exp::Col(col);
+                            return Ok(dt);
+                       } else {
+                           todo!()
+                       }
+                    }
+                    _ => todo!()
+               }
+            }
+            RContext::Local(lets) => {
+                match e {
+                    Exp::Name(name) => {
+                        for (i,(n,typ)) in lets.iter().rev().enumerate()
+                        {
+                            if *n == *name {
+                                *e = Exp::Local(i);
+                                return Ok(typ);
+                            }
+                        }
+                        panic!() // Should return Err.
+                    }
+                    _ => todo!()
+                }
+            }
+            RContext::None => panic!()
+        }
+    }
+}
+*/
