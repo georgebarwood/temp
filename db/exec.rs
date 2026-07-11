@@ -88,8 +88,9 @@ fn execute_block(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet
             Statement::Select(x) => exec_select(x, info, ps),
             Statement::Let(x) => exec_let(x, info, ps),
             Statement::Set(x) => exec_set(x, info, ps),
-            Statement::Whil(x) => exec_whil(x, info, ps),
-            Statement::Iff(x) => exec_iff(x, info, ps),
+            Statement::While(x) => exec_while(x, info, ps),
+            Statement::If(x) => exec_if(x, info, ps),
+            Statement::For(x) => exec_for(x, info, ps),
             _ => todo!(),
         };
         if result.is_err() { break; }
@@ -99,24 +100,51 @@ fn execute_block(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet
 }
 
 fn exec_let(x: &Let, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
-    let mut lctx = Context::Locals(&info.stack);
-    let v = x.exp.eval(&mut lctx, ps);
+    let v = x.exp.eval(&info.stack, ps);
     info.stack.push(v);
     Ok(())
 }
 
+fn exec_for(x: &For, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+    // Iterate through table. For each row with valid where condition, 
+    // push evaluated exps on the stack and execute block.
+
+    let t = ps.load_table(x.from.id, &x.from.dt);
+    let table = t.borrow();
+    let mut iter = table.iter(ps);
+    while let Some(b) = iter.next_ref(ps) {
+        let mut lr = table.lazy_row(b);
+
+        let ok = if let Some(wher) = &x.wher {
+            let v = wher.eval_lr(&info.stack, &mut lr, ps);
+            v.bool()
+        } else {
+            true
+        };
+
+        if ok {
+            let len = info.stack.len();
+            for e in &x.vals {
+                let v = e.eval_lr(&info.stack, &mut lr, ps);
+                info.stack.push(v);
+            }
+            execute_block(&x.block, info, ps)?;
+            info.stack.truncate(len);
+        }
+    }
+    Ok(())
+}
+
 fn exec_set(x: &Set, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
-    let mut lctx = Context::Locals(&info.stack);
-    let v = x.exp.eval(&mut lctx, ps);
+    let v = x.exp.eval(&info.stack, ps);
     let ix = info.stack.len() - 1 - x.i;
     info.stack[ix] = v;
     Ok(())
 }
 
-fn exec_iff(x: &Iff, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+fn exec_if(x: &If, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     let ok = {
-        let mut lctx = Context::Locals(&info.stack);
-        let v = x.exp.eval(&mut lctx, ps);
+        let v = x.exp.eval(&info.stack, ps);
         v.bool()
     };
     if ok {
@@ -128,11 +156,10 @@ fn exec_iff(x: &Iff, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
 }
     
 
-fn exec_whil(x: &Whil, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+fn exec_while(x: &While, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     loop {
         {
-            let mut lctx = Context::Locals(&info.stack);
-            let v = x.exp.eval(&mut lctx, ps);
+            let v = x.exp.eval(&info.stack, ps);
             if !v.bool() {
                 break;
             };
@@ -148,8 +175,7 @@ fn exec_insert(ins: &Insert, info: &mut Info, ps: &mut PageSet) -> Result<(), E>
     // First evaluate the expressions.
     let mut ee = LVec::with_capacity(ins.vals.len());
     for e in &ins.vals {
-        let mut lctx = Context::Locals(&info.stack);
-        ee.push(e.eval(&mut lctx, ps));
+        ee.push(e.eval(&info.stack, ps));
     }
     // println!("ins ee={:?}", &ee );
 
@@ -209,10 +235,8 @@ fn exec_update(upd: &Update, info: &mut Info, ps: &mut PageSet) -> Result<(), E>
         let mut row = table.fetch(*id, ps).unwrap();
         let mut vals = LVec::new();
         {
-            let mut lctx = Context::Locals(&info.stack);
-            let mut ctx = Context::Values(row.list(), &mut lctx);
             for (_col, e) in &upd.assigns {
-                let v = e.eval(&mut ctx, ps);
+                let v = e.eval_vals(&info.stack, &row.list(), ps);
                 vals.push(v);
             }
         }
@@ -246,11 +270,8 @@ fn exec_select(sel: &Select, info: &mut Info, ps: &mut PageSet) -> Result<(), E>
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
-            let mut lc = Context::Locals(&info.stack);
-            let mut lrc = Context::LazyRow(&mut lr, &mut lc);
-
             let ok = if let Some(wher) = &sel.wher {
-                wher.eval(&mut lrc, ps).bool()
+                wher.eval_lr(&info.stack, &mut lr, ps).bool()
             } else {
                 true
             };
@@ -258,7 +279,7 @@ fn exec_select(sel: &Select, info: &mut Info, ps: &mut PageSet) -> Result<(), E>
             if ok {
                 print!("Selected vals=");
                 for e in &sel.vals {
-                    let v = e.eval(&mut lrc, ps);
+                    let v = e.eval_lr(&info.stack, &mut lr, ps);
                     print!(" {:?} ", v);
                 }
                 println!();
@@ -268,9 +289,8 @@ fn exec_select(sel: &Select, info: &mut Info, ps: &mut PageSet) -> Result<(), E>
         }
     } else {
         // SELECT with no FROM
-        let mut lctx = Context::Locals(&info.stack);
         for e in &sel.vals {
-            let v = e.eval(&mut lctx, ps);
+            let v = e.eval(&info.stack, ps);
             print!(" {:?} ", v);
         }
         println!();
@@ -289,9 +309,7 @@ fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, info: &mut Info, ps: &mut PageSet) -
             let mut lr = table.lazy_row(b);
             let id = lr.item(0, ps).int();
             let ok = {
-                let mut lctx = Context::Locals(&info.stack);
-                let mut lrc = Context::LazyRow(&mut lr, &mut lctx);
-                wher.eval(&mut lrc, ps).bool()
+                wher.eval_lr(&info.stack, &mut lr, ps).bool()
             };
             if ok {
                 result.push(id);
