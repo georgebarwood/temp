@@ -63,6 +63,20 @@ pub struct Let<'a> {
     pub exp: Exp<'a>,
 }
 
+/// Set statement.
+#[derive(Debug)]
+pub struct Set<'a> {
+    pub i: usize,
+    pub exp: Exp<'a>,
+}
+
+/// WHILE statement.
+#[derive(Debug)]
+pub struct Whil<'a> {
+    pub exp: Exp<'a>,
+    pub block: LVec<(usize, Statement<'a>)>,
+}
+
 /// Statement.
 #[derive(Debug)]
 pub enum Statement<'a> {
@@ -74,4 +88,6 @@ pub enum Statement<'a> {
     Update(Update<'a>),
     Delete(Delete<'a>),
     Let(Let<'a>),
+    Set(Set<'a>),
+    Whil(Whil<'a>),
 }

@@ -73,16 +73,17 @@ fn main() {
 
     // But for now, for testing purposes we just execute some SQL statements.
 
-    let sql: [&[u8]; 9] = [
+    let sql: [&[u8]; 10] = [
         b"CREATE SCHEMA dbo",
         b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
         b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 60+8, 'george@gmail.com')",
-        b"INSERT INTO dbo.cust(Name,Age) VALUES('Marilyn', 66)",
+        b"LET name :string = 'Marilyn' INSERT INTO dbo.cust(Name,Age) VALUES(name, 66)",
         b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
         b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66 AND true",
         b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
         b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
-        b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < 6",
+        b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < x",
+        b"LET x : int = 10 WHILE x > 0 BEGIN SET x = x - 1 END",
         // b"DROP TABLE dbo.cust",
     ];
 

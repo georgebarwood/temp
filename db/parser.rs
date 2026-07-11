@@ -10,7 +10,7 @@ pub struct Parser<'a> {
     dict: &'a Dict,
     pub schema_updates: bool,
     non_schema_statements: bool,
-    lets: LVec<(&'a str, Arc<DataType>)>, // Local variable declarations.
+    locs: LVec<Loc<'a>>, // Local variable declarations.
 }
 
 impl<'a> Parser<'a> {
@@ -22,7 +22,7 @@ impl<'a> Parser<'a> {
             dict,
             schema_updates: false,
             non_schema_statements: false,
-            lets: LVec::new(),
+            locs: LVec::new(),
         }
     }
 
@@ -35,11 +35,23 @@ impl<'a> Parser<'a> {
             b"SELECT" => self.select(),
             b"DELETE" => self.delete(),
             b"LET" => self.lett(),
+            b"WHILE" => self.whil(),
+            b"SET" => self.set(),
             _ => {
                 return Err(self.err("Unknown keyword"));
             }
         }?;
         Ok(s)
+    }
+
+    fn stat(&mut self) -> Result<Statement<'a>, E> {
+        if let Token::Ident(x, y) = &self.token {
+            let ident = &self.tr.input[*x..*y];
+            self.next_token()?;
+            self.statement(ident)
+        } else {
+            Err(self.err("Ident to start statment expected"))
+        }
     }
 
     pub fn statements(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
@@ -62,6 +74,57 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    fn whil(&mut self) -> Result<Statement<'a>, E> {
+        let mut exp = self.exp(0)?;
+        {
+            let rctx = RContext::Local(&self.locs);
+            let edt = self.resolve(&mut exp, &rctx)?;
+            if edt != &DataType::Bool {
+                return Err(self.err("Boolean expression expected"));
+            }
+        }
+        let block = self.block()?;
+        Ok(Statement::Whil(Whil { exp, block }))
+    }
+
+    fn block(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
+        let mut result = LVec::new();
+        self.expect_ident(b"BEGIN")?;
+
+        while !self.is_ident(b"END") {
+            let stat = self.stat()?;
+            let pos = self.position();
+            result.push((pos, stat));
+        }
+        self.next_token()?;
+        Ok(result)
+    }
+
+    fn set(&mut self) -> Result<Statement<'a>, E> {
+        let name = self.read_ident()?;
+        self.expect_token(Token::Equal)?;
+        let mut exp = self.exp(0)?;
+        if let Some((i, vdt)) = local(&self.locs, name) {
+            {
+                let rctx = RContext::Local(&self.locs);
+                let edt = self.resolve(&mut exp, &rctx)?;
+                self.check_types(vdt, edt)?;
+            }
+            Ok(Statement::Set(Set { i, exp }))
+        } else {
+            Err(self.err("Local variable name not found"))
+        }
+    }
+
+    fn check_types(&self, x: &DataType, y: &DataType) -> Result<(), E> {
+        if x.similar(y) {
+            Ok(())
+        } else {
+            let msg = format!("Type mismatch expected {:?} got {:?}", x, y);
+            Err(self.err(&msg))
+        }
+    }
+
     fn lett(&mut self) -> Result<Statement<'a>, E> {
         let name = self.read_ident()?;
 
@@ -69,15 +132,18 @@ impl<'a> Parser<'a> {
         let datatype = Arc::new(self.datatype()?); // Maybe this could be optional.
         self.expect_token(Token::Equal)?;
         let mut exp = self.exp(0)?;
-
         {
-            let rctx = RContext::Local(&self.lets);
-            let _edt = self.resolve(&mut exp, &rctx)?;
+            let rctx = RContext::Local(&self.locs);
+            let edt = self.resolve(&mut exp, &rctx)?;
+            self.check_types(&datatype, edt)?;
         }
 
         // ToDo : check edt and datatype are compatible.
 
-        self.lets.push((name, datatype.clone()));
+        self.locs.push(Loc {
+            name,
+            datatype: datatype.clone(),
+        });
 
         Ok(Statement::Let(Let { exp }))
     }
@@ -107,7 +173,7 @@ impl<'a> Parser<'a> {
         self.expect_ident(b"WHERE")?;
         let mut wher = self.exp(0)?;
 
-        let lctx = RContext::Local(&self.lets);
+        let lctx = RContext::Local(&self.locs);
         let tctx = RContext::STable(&table, &lctx);
 
         self.resolve(&mut wher, &tctx)?;
@@ -127,7 +193,7 @@ impl<'a> Parser<'a> {
         let mut wher = self.exp(0)?;
 
         {
-            let lctx = RContext::Local(&self.lets);
+            let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(&table, &lctx);
             self.resolve(&mut wher, &tctx)?;
         }
@@ -144,7 +210,7 @@ impl<'a> Parser<'a> {
                 self.expect_token(Token::Equal)?;
                 let mut exp = self.exp(0)?;
                 {
-                    let lctx = RContext::Local(&self.lets);
+                    let lctx = RContext::Local(&self.locs);
                     let tctx = RContext::STable(table, &lctx);
                     self.resolve(&mut exp, &tctx)?;
                 }
@@ -166,20 +232,32 @@ impl<'a> Parser<'a> {
         let cols = self.name_list(&table)?;
 
         self.expect_ident(b"VALUES")?;
-        let vals = self.bra_exp_list()?;
-        // ToDo : allow comma here, multiple lists of values.
+
+        let mut vals = LVec::new();
+        {
+            self.expect_token(Token::LBra)?;
+            let mut i = 0;
+            while self.token != Token::RBra {
+                let mut val = self.exp(0)?;
+                {
+                    // Resolve variables and check expression has correct type.
+                    let lctx = RContext::Local(&self.locs);
+                    let vt = self.resolve(&mut val, &lctx)?;
+                    let et = table.dt.dt_struct(cols[i]);
+                    self.check_types(vt, et)?;
+                }
+                vals.push(val);
+                if self.token != Token::Comma {
+                    break;
+                }
+                self.next_token()?;
+                i += 1;
+            }
+            self.expect_token(Token::RBra)?;
+        }
 
         if cols.len() != vals.len() {
             return Err(self.err("Number of values not equal to number of insert columns"));
-        }
-
-        // Check vals have correct types. Maybe this should be done as they are parsed.
-        for (i, v) in vals.iter().enumerate() {
-            let vt = self.typ(v)?;
-            let et = table.dt.dt_struct(cols[i]);
-            if !et.similar(vt) {
-                return Err(self.err(&format!("Type mismatch expected {:?} got {:?}", et, vt)));
-            }
         }
 
         let result = Statement::Insert(Insert { table, cols, vals });
@@ -196,7 +274,7 @@ impl<'a> Parser<'a> {
             let wher = if self.test_ident(b"WHERE")? {
                 let mut w = self.exp(0)?;
                 {
-                    let lctx = RContext::Local(&self.lets);
+                    let lctx = RContext::Local(&self.locs);
                     let tctx = RContext::STable(&from, &lctx);
                     self.resolve(&mut w, &tctx)?;
                 }
@@ -207,7 +285,7 @@ impl<'a> Parser<'a> {
             let order_by = None; // ToDo
 
             {
-                let lctx = RContext::Local(&self.lets);
+                let lctx = RContext::Local(&self.locs);
                 let tctx = RContext::STable(&from, &lctx);
                 self.resolve_names(&mut vals, &tctx)?;
             }
@@ -219,7 +297,7 @@ impl<'a> Parser<'a> {
                 order_by,
             }
         } else {
-            let lctx = RContext::Local(&self.lets);
+            let lctx = RContext::Local(&self.locs);
             self.resolve_names(&mut vals, &lctx)?;
 
             Select {
@@ -240,7 +318,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    /// Resolve any names in expression, returns datatype.
+    /// Resolve any variable or column names in expression, returns datatype.
     fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E> {
         let dt = match e {
             Exp::Bool(_) => &DataType::Bool,
@@ -253,18 +331,11 @@ impl<'a> Parser<'a> {
                         dt
                     } else {
                         self.resolve(e, nxt)?
-                        /*
-                        // ToDo : try resolving using local context instead.
-                        let e = &format!("Column name not found : {:?}", name);
-                        return Err(self.err(e));
-                        */
                     }
-                } else if let RContext::Local(lets) = ctx {
-                    for (i, (n, typ)) in lets.iter().rev().enumerate() {
-                        if *n == *name {
-                            *e = Exp::Local(i);
-                            return Ok(typ);
-                        }
+                } else if let RContext::Local(locs) = ctx {
+                    if let Some((i, typ)) = local(locs, name) {
+                        *e = Exp::Local(i);
+                        return Ok(typ);
                     }
                     let e = &format!("Name not found : {:?}", name);
                     return Err(self.err(e));
@@ -300,43 +371,6 @@ impl<'a> Parser<'a> {
             _ => todo!(),
         };
         Ok(dt)
-    }
-
-    /// Get expression datatype.
-    fn typ<'b>(&self, val: &Exp<'a>) -> Result<&'b DataType, E> {
-        let dt = match val {
-            Exp::Bool(_) => &DataType::Bool,
-            Exp::Int(_) => &DataType::Int,
-            Exp::String(_) => &DataType::String(0),
-            Exp::Binary(op, lhs, rhs) => {
-                let t1 = self.typ(lhs)?;
-                let t2 = self.typ(rhs)?;
-                if t1 == &DataType::Int && t2 == &DataType::Int
-                    || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
-                    || t1 == &DataType::Bool && t2 == &DataType::Bool
-                {
-                    // Ok
-                } else {
-                    return Err(self.err("Expected similar bool, int or string  operands"));
-                }
-                let result = if op.yields_bool() {
-                    &DataType::Bool
-                } else {
-                    t1
-                };
-                println!("type of val{:?} = {:?}", val, result);
-                result
-            }
-            _ => panic!(),
-        };
-        Ok(dt)
-    }
-
-    fn bra_exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
-        self.expect_token(Token::LBra)?;
-        let result = self.exp_list()?;
-        self.expect_token(Token::RBra)?;
-        Ok(result)
     }
 
     fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
@@ -402,10 +436,7 @@ impl<'a> Parser<'a> {
 
     fn exp(&mut self, prec: u8) -> Result<Exp<'a>, E> {
         let mut e = self.exp_primary()?;
-
-        loop
-        // Not sure if this is right, needs testing!
-        {
+        loop {
             let (op, op_prec) = self.op_and_prec();
             if op == Operator::None || op_prec < prec {
                 break;
@@ -672,4 +703,13 @@ impl<'a> Parser<'a> {
             Ok(())
         }
     }
+}
+
+fn local<'a>(locs: &'a [Loc], name: &str) -> Option<(usize, &'a DataType)> {
+    for (i, b) in locs.iter().rev().enumerate() {
+        if b.name == name {
+            return Some((i, &b.datatype));
+        }
+    }
+    None
 }

@@ -91,11 +91,17 @@ impl STable {
     }
 }
 
+/// Local variable declaration.
+pub struct Loc<'a> {
+    pub name: &'a str,
+    pub datatype: Arc<DataType>, // Maybe could be &'a DataType instead?
+}
+
 /// Resolve Context ( for resolving names ).
 pub enum RContext<'a> {
     None,
     STable(&'a STable, &'a RContext<'a>),
-    Local(&'a [(&'a str, Arc<DataType>)]),
+    Local(&'a [Loc<'a>]),
 }
 
 /*
