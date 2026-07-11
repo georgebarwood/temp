@@ -42,6 +42,16 @@ pub struct Select<'a> {
     pub order_by: Option<LVec<(Exp<'a>, bool)>>,
 }
 
+/// FOR statement.
+#[derive(Debug)]
+pub struct For<'a> {
+    pub vals: LVec<Exp<'a>>,
+    pub from: Arc<STable>,
+    pub wher: Option<Exp<'a>>,
+    pub order_by: Option<LVec<(Exp<'a>, bool)>>,
+    pub block: LVec<(usize, Statement<'a>)>,
+}
+
 /// UPDATE statement.
 #[derive(Debug)]
 pub struct Update<'a> {
@@ -63,7 +73,7 @@ pub struct Let<'a> {
     pub exp: Exp<'a>,
 }
 
-/// Set statement.
+/// SET statement.
 #[derive(Debug)]
 pub struct Set<'a> {
     pub i: usize,
@@ -72,14 +82,14 @@ pub struct Set<'a> {
 
 /// WHILE statement.
 #[derive(Debug)]
-pub struct Whil<'a> {
+pub struct While<'a> {
     pub exp: Exp<'a>,
     pub block: LVec<(usize, Statement<'a>)>,
 }
 
 /// IF statement.
 #[derive(Debug)]
-pub struct Iff<'a> {
+pub struct If<'a> {
     pub exp: Exp<'a>,
     pub block: LVec<(usize, Statement<'a>)>,
     pub els: Option<LVec<(usize, Statement<'a>)>>,
@@ -93,10 +103,11 @@ pub enum Statement<'a> {
     DropTable(DropTable),
     Insert(Insert<'a>),
     Select(Select<'a>),
+    For(For<'a>),
     Update(Update<'a>),
     Delete(Delete<'a>),
     Let(Let<'a>),
     Set(Set<'a>),
-    Whil(Whil<'a>),
-    Iff(Iff<'a>),
+    While(While<'a>),
+    If(If<'a>),
 }

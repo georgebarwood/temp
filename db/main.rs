@@ -1,14 +1,16 @@
 /* What next plan...
 
+   Stored functions.
+
    Local variable declarations, BEGIN END blocks (done)
        IF ELSE etc. Done
 
-   FOR var = name ... FROM table WHERE ... ORDER BY ... <statement>
+   FOR var = name ... FROM table WHERE ... ORDER BY ... <statement> -- Done (except order by)
 
    Local var decl, make type optional.(done)
       == Allow multiple lets  let x=0, y=2, z=3
    SET - is keyword needed?
-   
+
 
    Operator expressions ( +, *, | etc ) -- Done to some extent
       -- AND, OR  -- Done
@@ -26,6 +28,12 @@
    process to be stored permanently.
 */
 
+/*
+   Idea for preserving sharing of datatypes/functions/etc.
+   Just before save, modify nodes changing "DataType" references to integers, building table of datatypes.
+   Just after restore, modify nodes from integers to Arcs.
+*/
+
 use page_store::*;
 use std::sync::Mutex;
 use tablestg::*;
@@ -34,11 +42,11 @@ use tablestg::*;
 pub mod parser;
 use parser::*;
 
-/// Reads [Token]s from byte string. [TokenReader]
+/// [TokenReader] reads [Token]s from a byte string.
 pub mod token;
 use token::*;
 
-/// [Dict]ionary of schemas, tables, [STable], [RContext].
+/// [Dict]ionary of schemas, tables, [STable], [RContext], [Loc]al variable.
 pub mod schema;
 use schema::*;
 
@@ -46,7 +54,7 @@ use schema::*;
 pub mod statement;
 use statement::*;
 
-/// [Exp]ressions.
+/// [Exp]ressions, [Operator]s.
 pub mod exp;
 use exp::*;
 
@@ -90,9 +98,10 @@ fn main() {
         b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66 AND true",
         b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
         b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
-        b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < x",
+        // b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < x",
         b"LET x = 6 LET f = 1 WHILE x > 0 BEGIN SET f = f * x SET x = x - 1 END SELECT 'f=', f",
         // b"DROP TABLE dbo.cust",
+        b"LET total = 0 FOR x = Age FROM dbo.cust WHERE Age < 20 SET total = total + x SELECT total",
     ];
 
     let mut dict_changed: bool = false;

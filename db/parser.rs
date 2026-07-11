@@ -35,9 +35,10 @@ impl<'a> Parser<'a> {
             b"SELECT" => self.select(),
             b"DELETE" => self.delete(),
             b"LET" => self.lett(),
-            b"WHILE" => self.whil(),
-            b"IF" => self.iff(),
+            b"WHILE" => self.p_while(),
+            b"IF" => self.p_if(),
             b"SET" => self.set(),
+            b"FOR" => self.p_for(),
             _ => {
                 return Err(self.err("Unknown keyword"));
             }
@@ -75,28 +76,28 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn whil(&mut self) -> Result<Statement<'a>, E> {
+    fn p_while(&mut self) -> Result<Statement<'a>, E> {
         let exp = self.bool_exp()?;
         let block = self.block()?;
-        Ok(Statement::Whil(Whil { exp, block }))
+        Ok(Statement::While(While { exp, block }))
     }
 
-    fn iff(&mut self) -> Result<Statement<'a>, E> {
-        let exp = self.bool_exp()?; 
+    fn p_if(&mut self) -> Result<Statement<'a>, E> {
+        let exp = self.bool_exp()?;
         let block = self.block()?;
         let els = if self.is_ident(b"ELSE") {
-           self.next_token()?;
-           Some( self.block()? )
+            self.next_token()?;
+            Some(self.block()?)
         } else {
-           None
+            None
         };
-        Ok(Statement::Iff(Iff { exp, block, els }))
+        Ok(Statement::If(If { exp, block, els }))
     }
 
     fn block(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
+        let len = self.locs.len();
         let mut result = LVec::new();
-        if self.is_ident(b"BEGIN")
-        {
+        if self.is_ident(b"BEGIN") {
             self.next_token()?;
             while !self.test_ident(b"END")? {
                 let stat = self.stat()?;
@@ -106,8 +107,9 @@ impl<'a> Parser<'a> {
         } else {
             let stat = self.stat()?;
             let pos = self.position();
-            result.push((pos, stat)); 
+            result.push((pos, stat));
         }
+        self.locs.truncate(len);
         Ok(result)
     }
 
@@ -136,26 +138,75 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn p_for(&mut self) -> Result<Statement<'a>, E> {
+        let mut vals = LVec::new();
+        let mut idents = LVec::new();
+        loop {
+            let ident = self.read_ident()?;
+            self.expect_token(Token::Equal)?;
+            let exp = self.exp(0)?;
+            vals.push(exp);
+            idents.push(ident);
+            if self.token != Token::Comma {
+                break;
+            }
+            self.next_token()?;
+        }
+        self.expect_ident(b"FROM")?;
+        let (from, _, _) = self.table()?;
+
+        let len = self.locs.len();
+
+        // ToDo resolve names, push idents and typs onto local bindings.
+        for (i, name) in idents.into_iter().enumerate() {
+            let val = &mut vals[i];
+            let lctx = RContext::Local(&self.locs);
+            let tctx = RContext::STable(&from, &lctx);
+            let dt = self.resolve(val, &tctx)?;
+            let dt = Arc::new(dt.clone());
+            self.locs.push(Loc { name, datatype: dt });
+        }
+
+        let wher = if self.test_ident(b"WHERE")? {
+            let wher = self.bool_exp_table(&from)?;
+            Some(wher)
+        } else {
+            None
+        };
+
+        let block = self.block()?;
+
+        self.locs.truncate(len);
+
+        Ok(Statement::For(For {
+            vals,
+            from,
+            wher,
+            order_by: None,
+            block,
+        }))
+    }
+
     fn lett(&mut self) -> Result<Statement<'a>, E> {
         let name = self.read_ident()?;
 
-        let mut dt = if self.token == Token::Colon
-        {
+        let mut dt = if self.token == Token::Colon {
             self.next_token()?;
-            Some( Arc::new(self.datatype()?) )
-        } else { None };
-        
+            Some(Arc::new(self.datatype()?))
+        } else {
+            None
+        };
+
         self.expect_token(Token::Equal)?;
         let mut exp = self.exp(0)?;
         {
             let rctx = RContext::Local(&self.locs);
             let edt = self.resolve(&mut exp, &rctx)?;
 
-            if let Some(dt) = &dt
-            {
-               self.check_types(dt, edt)?;
+            if let Some(dt) = &dt {
+                self.check_types(dt, edt)?;
             } else {
-               dt = Some( Arc::new(edt.clone()) );
+                dt = Some(Arc::new(edt.clone()));
             }
         }
 
@@ -190,9 +241,9 @@ impl<'a> Parser<'a> {
         self.expect_ident(b"SET")?;
         let assigns = self.assigns(&table)?;
         self.expect_ident(b"WHERE")?;
-        
+
         let wher = self.bool_exp_table(&table)?;
-        
+
         let result = Statement::Update(Update {
             table,
             assigns,
@@ -342,10 +393,11 @@ impl<'a> Parser<'a> {
                 } else if let RContext::Local(locs) = ctx {
                     if let Some((i, typ)) = local(locs, name) {
                         *e = Exp::Local(i);
-                        return Ok(typ);
+                        typ
+                    } else {
+                        let e = &format!("Name not found : {:?}", name);
+                        return Err(self.err(e));
                     }
-                    let e = &format!("Name not found : {:?}", name);
-                    return Err(self.err(e));
                 } else {
                     panic!()
                 }
@@ -355,13 +407,12 @@ impl<'a> Parser<'a> {
                 let t1 = self.resolve(lhs, ctx)?;
                 let t2 = self.resolve(rhs, ctx)?;
 
-                if !t1.similar(t2)
-                {
+                if !t1.similar(t2) {
                     // May want to do some conversion on rhs in future, e.g. int -> string.
-                    return Err(self.err(
-                       &format!("Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
-                         lhs,rhs,t1,t2)
-                    ));
+                    return Err(self.err(&format!(
+                        "Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
+                        lhs, rhs, t1, t2
+                    )));
                 }
 
                 if op.yields_bool() {
@@ -370,8 +421,12 @@ impl<'a> Parser<'a> {
                     t1
                 }
             }
-            Exp::Local(_) => { panic!() } // Should not occur, Local is output of resolve.
-            Exp::Col(_) => { panic!() } // Should not occur, Col is output of resolve.
+            Exp::Local(_) => {
+                panic!()
+            } // Should not occur, Local is output of resolve.
+            Exp::Col(_) => {
+                panic!()
+            } // Should not occur, Col is output of resolve.
         };
         Ok(dt)
     }
@@ -733,10 +788,11 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// Get index (reverse order) and datatype of latest local with specified name.
 fn local<'a>(locs: &'a [Loc], name: &str) -> Option<(usize, &'a DataType)> {
-    for (i, b) in locs.iter().rev().enumerate() {
-        if b.name == name {
-            return Some((i, &b.datatype));
+    for (i, loc) in locs.iter().rev().enumerate() {
+        if loc.name == name {
+            return Some((i, &loc.datatype));
         }
     }
     None

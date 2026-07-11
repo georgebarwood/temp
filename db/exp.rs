@@ -50,38 +50,136 @@ impl Operator {
     }
 }
 
-/// Context in which expression is evaluated. May evolve a bit!
-#[derive(Debug)]
-pub enum Context<'a> {
-    LazyRow(&'a mut LazyRow<'a>, &'a mut Context<'a>),
-    Values(&'a [Value], &'a mut Context<'a>),
-    Locals(&'a [Value]),
-    None,
-}
-
 impl<'a> Exp<'a> {
-    pub fn eval(&self, ctx: &mut Context, ps: &mut PageSet) -> Value {
+    pub fn eval(&self, locals: &'a [Value]) -> Value {
         match self {
             Exp::Bool(x) => Value::Bool(*x),
             Exp::Int(x) => Value::Int(*x),
             Exp::String(x) => Value::String(LRc::new(LString::from(*x))),
-            Exp::Col(x) => match ctx {
-                Context::LazyRow(row, _) => row.item(*x, ps),
-                Context::Values(vals, _) => vals[*x].clone(),
-                _ => panic!(),
-            },
-            Exp::Local(x) => match ctx {
-                Context::LazyRow(_, nxt) => self.eval(nxt, ps),
-                Context::Values(_, nxt) => self.eval(nxt, ps),
-                Context::Locals(stk) => {
-                    let ix = stk.len() - (x + 1);
-                    stk[ix].clone()
-                }
-                _ => panic!(),
-            },
+            Exp::Col(_) => panic!(),
+            Exp::Local(x) => {
+                let ix = locals.len() - (x + 1);
+                locals[ix].clone()
+            }
             Exp::Binary(op, x, y) => {
-                let x: Value = x.eval(ctx, ps);
-                let y: Value = y.eval(ctx, ps);
+                let x: Value = x.eval(locals);
+                let y: Value = y.eval(locals);
+                if let Value::Int(x) = &x
+                    && let Value::Int(y) = &y
+                {
+                    match op {
+                        Operator::Equal => Value::Bool(x == y),
+                        Operator::NotEqual => Value::Bool(x != y),
+                        Operator::Less => Value::Bool(x < y),
+                        Operator::Greater => Value::Bool(x > y),
+                        Operator::LessEqual => Value::Bool(x <= y),
+                        Operator::GreaterEqual => Value::Bool(x >= y),
+
+                        Operator::Plus => Value::Int(x + y),
+                        Operator::Minus => Value::Int(x - y),
+                        Operator::Multiply => Value::Int(x * y),
+                        Operator::Divide => Value::Int(x / y),
+                        Operator::Remainder => Value::Int(x % y),
+                        _ => todo!(),
+                    }
+                } else if let Value::Bool(x) = &x
+                    && let Value::Bool(y) = &y
+                {
+                    match op {
+                        Operator::And => Value::Bool(*x && *y),
+                        Operator::Or => Value::Bool(*x || *y),
+                        _ => todo!(),
+                    }
+                } else if let Value::String(x) = &x
+                    && let Value::String(y) = &y
+                {
+                    match op {
+                        Operator::Concat => concat(x, y),
+                        _ => todo!(),
+                    }
+                } else {
+                    println!("self={:?}", self);
+                    todo!()
+                }
+            }
+            _ => {
+                println!("self={:?}", self);
+                todo!()
+            }
+        }
+    }
+
+    pub fn eval_lr(&self, locals: &'a [Value], lr: &mut LazyRow, ps: &mut PageSet) -> Value {
+        match self {
+            Exp::Bool(x) => Value::Bool(*x),
+            Exp::Int(x) => Value::Int(*x),
+            Exp::String(x) => Value::String(LRc::new(LString::from(*x))),
+            Exp::Col(x) => lr.item(*x, ps),
+            Exp::Local(x) => {
+                let ix = locals.len() - (x + 1);
+                locals[ix].clone()
+            }
+            Exp::Binary(op, x, y) => {
+                let x: Value = x.eval_lr(locals, lr, ps);
+                let y: Value = y.eval_lr(locals, lr, ps);
+                if let Value::Int(x) = &x
+                    && let Value::Int(y) = &y
+                {
+                    match op {
+                        Operator::Equal => Value::Bool(x == y),
+                        Operator::NotEqual => Value::Bool(x != y),
+                        Operator::Less => Value::Bool(x < y),
+                        Operator::Greater => Value::Bool(x > y),
+                        Operator::LessEqual => Value::Bool(x <= y),
+                        Operator::GreaterEqual => Value::Bool(x >= y),
+
+                        Operator::Plus => Value::Int(x + y),
+                        Operator::Minus => Value::Int(x - y),
+                        Operator::Multiply => Value::Int(x * y),
+                        Operator::Divide => Value::Int(x / y),
+                        Operator::Remainder => Value::Int(x % y),
+                        _ => todo!(),
+                    }
+                } else if let Value::Bool(x) = &x
+                    && let Value::Bool(y) = &y
+                {
+                    match op {
+                        Operator::And => Value::Bool(*x && *y),
+                        Operator::Or => Value::Bool(*x || *y),
+                        _ => todo!(),
+                    }
+                } else if let Value::String(x) = &x
+                    && let Value::String(y) = &y
+                {
+                    match op {
+                        Operator::Concat => concat(x, y),
+                        _ => todo!(),
+                    }
+                } else {
+                    println!("self={:?}", self);
+                    todo!()
+                }
+            }
+            _ => {
+                println!("self={:?}", self);
+                todo!()
+            }
+        }
+    }
+
+    pub fn eval_vals(&self, locals: &[Value], vals: &[Value]) -> Value {
+        match self {
+            Exp::Bool(x) => Value::Bool(*x),
+            Exp::Int(x) => Value::Int(*x),
+            Exp::String(x) => Value::String(LRc::new(LString::from(*x))),
+            Exp::Col(x) => vals[*x].clone(),
+            Exp::Local(x) => {
+                let ix = locals.len() - (x + 1);
+                locals[ix].clone()
+            }
+            Exp::Binary(op, x, y) => {
+                let x: Value = x.eval_vals(locals, vals);
+                let y: Value = y.eval_vals(locals, vals);
                 if let Value::Int(x) = &x
                     && let Value::Int(y) = &y
                 {
