@@ -77,6 +77,14 @@ pub struct Whil<'a> {
     pub block: LVec<(usize, Statement<'a>)>,
 }
 
+/// IF statement.
+#[derive(Debug)]
+pub struct Iff<'a> {
+    pub exp: Exp<'a>,
+    pub block: LVec<(usize, Statement<'a>)>,
+    pub els: Option<LVec<(usize, Statement<'a>)>>,
+}
+
 /// Statement.
 #[derive(Debug)]
 pub enum Statement<'a> {
@@ -90,4 +98,5 @@ pub enum Statement<'a> {
     Let(Let<'a>),
     Set(Set<'a>),
     Whil(Whil<'a>),
+    Iff(Iff<'a>),
 }

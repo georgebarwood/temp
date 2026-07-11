@@ -2,7 +2,7 @@ use crate::*;
 use std::cell::RefCell;
 
 struct Info<'a> {
-    source: &'a [u8],
+    _source: &'a [u8],
     stack: LVec<Value>,
 }
 
@@ -31,10 +31,14 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                 dict_updated = true;
             } else {
                 let mut info = Info {
-                    source,
+                    _source: source,
                     stack: LVec::new(),
                 };
-                execute_block(&slist, &mut info, ps);
+                let result = execute_block(&slist, &mut info, ps);
+                if let Err(e) = &result {
+                    println!("Error {}", e.message);
+                    println!();
+                }
             }
         }
     }
@@ -72,10 +76,12 @@ fn execute_schema_updates(slist: &[(usize, Statement)], dict: &mut Dict, ps: &mu
     }
 }
 
-fn execute_block(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet) {
-    for (pos, s) in slist {
+fn execute_block(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet)  -> Result<(), E> {
+    let slen = info.stack.len(); // At end restore stack to this length.
+    let mut result = Ok(());
+    for (_pos, s) in slist { // Need to incorporate pos in any error somehow. Maybe have it in info.
         // println!("executing {:?} position={}", s, pos);
-        let result = match s {
+        result = match s {
             Statement::Insert(x) => exec_insert(x, info, ps),
             Statement::Update(x) => exec_update(x, info, ps),
             Statement::Delete(x) => exec_delete(x, info, ps),
@@ -83,15 +89,13 @@ fn execute_block(slist: &[(usize, Statement)], info: &mut Info, ps: &mut PageSet
             Statement::Let(x) => exec_let(x, info, ps),
             Statement::Set(x) => exec_set(x, info, ps),
             Statement::Whil(x) => exec_whil(x, info, ps),
+            Statement::Iff(x) => exec_iff(x, info, ps),
             _ => todo!(),
         };
-
-        if let Err(e) = &result {
-            println!("Error {} at {}", e.message, pos);
-            println!("Source: {}", tos(&info.source[0..*pos]));
-            println!();
-        }
+        if result.is_err() { break; }
     }
+    info.stack.truncate(slen); // pop local variables from stack.
+    result
 }
 
 fn exec_let(x: &Let, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
@@ -109,6 +113,21 @@ fn exec_set(x: &Set, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
+fn exec_iff(x: &Iff, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
+    let ok = {
+        let mut lctx = Context::Locals(&info.stack);
+        let v = x.exp.eval(&mut lctx, ps);
+        v.bool()
+    };
+    if ok {
+        execute_block(&x.block, info, ps)?;
+    } else if let Some(els) = &x.els {
+        execute_block(els, info, ps)?;
+    }
+    Ok(())
+}
+    
+
 fn exec_whil(x: &Whil, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
     loop {
         {
@@ -118,9 +137,7 @@ fn exec_whil(x: &Whil, info: &mut Info, ps: &mut PageSet) -> Result<(), E> {
                 break;
             };
         }
-        let slen = info.stack.len();
-        execute_block(&x.block, info, ps);
-        info.stack.truncate(slen);
+        execute_block(&x.block, info, ps)?;
     }
     Ok(())
 }

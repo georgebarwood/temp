@@ -36,6 +36,7 @@ impl<'a> Parser<'a> {
             b"DELETE" => self.delete(),
             b"LET" => self.lett(),
             b"WHILE" => self.whil(),
+            b"IF" => self.iff(),
             b"SET" => self.set(),
             _ => {
                 return Err(self.err("Unknown keyword"));
@@ -75,28 +76,38 @@ impl<'a> Parser<'a> {
     }
 
     fn whil(&mut self) -> Result<Statement<'a>, E> {
-        let mut exp = self.exp(0)?;
-        {
-            let rctx = RContext::Local(&self.locs);
-            let edt = self.resolve(&mut exp, &rctx)?;
-            if edt != &DataType::Bool {
-                return Err(self.err("Boolean expression expected"));
-            }
-        }
+        let exp = self.bool_exp()?;
         let block = self.block()?;
         Ok(Statement::Whil(Whil { exp, block }))
     }
 
+    fn iff(&mut self) -> Result<Statement<'a>, E> {
+        let exp = self.bool_exp()?; 
+        let block = self.block()?;
+        let els = if self.is_ident(b"ELSE") {
+           self.next_token()?;
+           Some( self.block()? )
+        } else {
+           None
+        };
+        Ok(Statement::Iff(Iff { exp, block, els }))
+    }
+
     fn block(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
         let mut result = LVec::new();
-        self.expect_ident(b"BEGIN")?;
-
-        while !self.is_ident(b"END") {
+        if self.is_ident(b"BEGIN")
+        {
+            self.next_token()?;
+            while !self.test_ident(b"END")? {
+                let stat = self.stat()?;
+                let pos = self.position();
+                result.push((pos, stat));
+            }
+        } else {
             let stat = self.stat()?;
             let pos = self.position();
-            result.push((pos, stat));
+            result.push((pos, stat)); 
         }
-        self.next_token()?;
         Ok(result)
     }
 
@@ -179,12 +190,9 @@ impl<'a> Parser<'a> {
         self.expect_ident(b"SET")?;
         let assigns = self.assigns(&table)?;
         self.expect_ident(b"WHERE")?;
-        let mut wher = self.exp(0)?;
-
-        let lctx = RContext::Local(&self.locs);
-        let tctx = RContext::STable(&table, &lctx);
-
-        self.resolve(&mut wher, &tctx)?;
+        
+        let wher = self.bool_exp_table(&table)?;
+        
         let result = Statement::Update(Update {
             table,
             assigns,
@@ -198,13 +206,8 @@ impl<'a> Parser<'a> {
         self.expect_ident(b"FROM")?;
         let (table, _, _) = self.table()?;
         self.expect_ident(b"WHERE")?;
-        let mut wher = self.exp(0)?;
 
-        {
-            let lctx = RContext::Local(&self.locs);
-            let tctx = RContext::STable(&table, &lctx);
-            self.resolve(&mut wher, &tctx)?;
-        }
+        let wher = self.bool_exp_table(&table)?;
 
         let result = Statement::Delete(Delete { table, wher });
         self.non_schema_statements = true;
@@ -280,13 +283,8 @@ impl<'a> Parser<'a> {
             let (from, _, _) = self.table()?;
 
             let wher = if self.test_ident(b"WHERE")? {
-                let mut w = self.exp(0)?;
-                {
-                    let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::STable(&from, &lctx);
-                    self.resolve(&mut w, &tctx)?;
-                }
-                Some(w)
+                let wher = self.bool_exp_table(&from)?;
+                Some(wher)
             } else {
                 None
             };
@@ -327,6 +325,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Resolve any variable or column names in expression, returns datatype.
+    /// Exp::Name expressions are changed to Exp::Col or Exp::Local nodes.
     fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E> {
         let dt = match e {
             Exp::Bool(_) => &DataType::Bool,
@@ -356,18 +355,13 @@ impl<'a> Parser<'a> {
                 let t1 = self.resolve(lhs, ctx)?;
                 let t2 = self.resolve(rhs, ctx)?;
 
-                if t1 == &DataType::Int && t2 == &DataType::Int
-                    || t1.similar(&DataType::String(0)) && t2.similar(&DataType::String(0))
-                    || t1 == &DataType::Bool && t2 == &DataType::Bool
+                if !t1.similar(t2)
                 {
-                    // Ok
-                } else {
+                    // May want to do some conversion on rhs in future, e.g. int -> string.
                     return Err(self.err(
-                       &format!("Can only operate on bools, ints or strings at the moment lhs={:?} rhs={:?} t1={:?} t2={:?}",
+                       &format!("Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
                          lhs,rhs,t1,t2)
                     ));
-                    // In future may want to assign operand type depending on type of operands.
-                    // *val.optype = ...
                 }
 
                 if op.yields_bool() {
@@ -376,9 +370,35 @@ impl<'a> Parser<'a> {
                     t1
                 }
             }
-            _ => todo!(),
+            Exp::Local(_) => { panic!() } // Should not occur, Local is output of resolve.
+            Exp::Col(_) => { panic!() } // Should not occur, Col is output of resolve.
         };
         Ok(dt)
+    }
+
+    fn bool_exp(&mut self) -> Result<Exp<'a>, E> {
+        let mut exp = self.exp(0)?;
+        {
+            let rctx = RContext::Local(&self.locs);
+            let edt = self.resolve(&mut exp, &rctx)?;
+            if edt != &DataType::Bool {
+                return Err(self.err("Boolean expression expected"));
+            }
+        }
+        Ok(exp)
+    }
+
+    fn bool_exp_table(&mut self, t: &STable) -> Result<Exp<'a>, E> {
+        let mut exp = self.exp(0)?;
+        {
+            let lctx = RContext::Local(&self.locs);
+            let tctx = RContext::STable(t, &lctx);
+            let edt = self.resolve(&mut exp, &tctx)?;
+            if edt != &DataType::Bool {
+                return Err(self.err("Boolean expression expected"));
+            }
+        }
+        Ok(exp)
     }
 
     fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
