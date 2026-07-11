@@ -128,21 +128,29 @@ impl<'a> Parser<'a> {
     fn lett(&mut self) -> Result<Statement<'a>, E> {
         let name = self.read_ident()?;
 
-        self.expect_token(Token::Colon)?;
-        let datatype = Arc::new(self.datatype()?); // Maybe this could be optional.
+        let mut dt = if self.token == Token::Colon
+        {
+            self.next_token()?;
+            Some( Arc::new(self.datatype()?) )
+        } else { None };
+        
         self.expect_token(Token::Equal)?;
         let mut exp = self.exp(0)?;
         {
             let rctx = RContext::Local(&self.locs);
             let edt = self.resolve(&mut exp, &rctx)?;
-            self.check_types(&datatype, edt)?;
-        }
 
-        // ToDo : check edt and datatype are compatible.
+            if let Some(dt) = &dt
+            {
+               self.check_types(dt, edt)?;
+            } else {
+               dt = Some( Arc::new(edt.clone()) );
+            }
+        }
 
         self.locs.push(Loc {
             name,
-            datatype: datatype.clone(),
+            datatype: dt.unwrap(),
         });
 
         Ok(Statement::Let(Let { exp }))

@@ -1,6 +1,7 @@
 /* What next plan...
 
    Local variable declarations, BEGIN END blocks, IF ELSE END etc.
+   Local var decl, make type optional.
 
    Operator expressions ( +, *, | etc ) -- Done to some extent
       -- AND, OR  -- Done
@@ -83,7 +84,7 @@ fn main() {
         b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
         b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
         b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < x",
-        b"LET x : int = 10 WHILE x > 0 BEGIN SET x = x - 1 END",
+        b"LET x = 10 WHILE x > 0 BEGIN SET x = x - 1 END",
         // b"DROP TABLE dbo.cust",
     ];
 
