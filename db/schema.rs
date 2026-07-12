@@ -10,6 +10,7 @@ pub struct Dict {
     pub schemas: HashMap<GString, i64>,
     pub names: HashMap<GString, i64>,
     pub tables: HashMap<(i64, i64), Arc<STable>>,
+    pub funcs: HashMap<(i64, i64), Arc<SFunc>>,
     last_schema_id: i64,
     last_name_id: i64,
     last_table_id: i64,
@@ -91,6 +92,15 @@ impl STable {
     }
 }
 
+/// Schema Function - result DataType, Params and Statements.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SFunc {
+    /// result datatype
+    pub dt: Arc<DataType>,
+    // pub parms: todo
+    // pub stats: todo
+}
+
 /// Local variable declaration.
 pub struct Loc<'a> {
     pub name: &'a str,
@@ -103,44 +113,3 @@ pub enum RContext<'a> {
     STable(&'a STable, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }
-
-/*
-impl <'a> RContext<'a>
-{
-    pub fn lookup<'b>( &self, e: &mut Exp<'a> ) -> Result<&'b DataType, E>
-    {
-        match self {
-            RContext::STable(t) => {
-               match e {
-                   Exp::Name(name) => {
-                       if let Some((col, dt)) = t.name_to_col(name)
-                       {
-                            *e = Exp::Col(col);
-                            return Ok(dt);
-                       } else {
-                           todo!()
-                       }
-                    }
-                    _ => todo!()
-               }
-            }
-            RContext::Local(lets) => {
-                match e {
-                    Exp::Name(name) => {
-                        for (i,(n,typ)) in lets.iter().rev().enumerate()
-                        {
-                            if *n == *name {
-                                *e = Exp::Local(i);
-                                return Ok(typ);
-                            }
-                        }
-                        panic!() // Should return Err.
-                    }
-                    _ => todo!()
-                }
-            }
-            RContext::None => panic!()
-        }
-    }
-}
-*/

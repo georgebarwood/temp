@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
             b"SET" => self.set(),
             b"FOR" => self.p_for(),
             _ => {
-                return Err(self.err("Unknown keyword"));
+                return Err(E::new("Unknown keyword"));
             }
         }?;
         Ok(s)
@@ -52,7 +52,7 @@ impl<'a> Parser<'a> {
             self.next_token()?;
             self.statement(ident)
         } else {
-            Err(self.err("Ident to start statment expected"))
+            Err(E::new("Ident to start statment expected"))
         }
     }
 
@@ -69,7 +69,7 @@ impl<'a> Parser<'a> {
                     result.push((end, s));
                 }
                 Token::Eof => break,
-                _ => return Err(self.err("Statement keyword expected")),
+                _ => return Err(E::new("Statement keyword expected")),
             }
             self.check_schema_updates()?;
         }
@@ -125,7 +125,7 @@ impl<'a> Parser<'a> {
             }
             Ok(Statement::Set(Set { i, exp }))
         } else {
-            Err(self.err("Local variable name not found"))
+            Err(E::new("Local variable name not found"))
         }
     }
 
@@ -134,7 +134,7 @@ impl<'a> Parser<'a> {
             Ok(())
         } else {
             let msg = format!("Type mismatch expected {:?} got {:?}", x, y);
-            Err(self.err(&msg))
+            Err(E::new(&msg))
         }
     }
 
@@ -157,7 +157,7 @@ impl<'a> Parser<'a> {
 
         let len = self.locs.len();
 
-        // ToDo resolve names, push idents and typs onto local bindings.
+        // Resolve names, push idents and typs onto local bindings.
         for (i, name) in idents.into_iter().enumerate() {
             let val = &mut vals[i];
             let lctx = RContext::Local(&self.locs);
@@ -218,21 +218,12 @@ impl<'a> Parser<'a> {
         Ok(Statement::Let(Let { exp }))
     }
 
-    fn create(&mut self) -> Result<Statement<'a>, E> {
-        let ident = self.read_ident()?;
-        match ident {
-            "TABLE" => self.create_table(),
-            "SCHEMA" => self.create_schema(),
-            _ => Err(self.err("Expected TABLE, SCHEMA....")),
-        }
-    }
-
     fn drop(&mut self) -> Result<Statement<'a>, E> {
         let ident = self.read_ident()?;
         match ident {
             "TABLE" => self.drop_table(),
             // "SCHEMA" => self.drop_schema(),
-            _ => Err(self.err("Expected TABLE, SCHEMA....")),
+            _ => Err(E::new("Expected TABLE, SCHEMA....")),
         }
     }
 
@@ -278,7 +269,7 @@ impl<'a> Parser<'a> {
                 }
                 result.push((col_id, exp));
             } else {
-                return Err(self.err("Col name not found"));
+                return Err(E::new("Col name not found"));
             }
             if self.token != Token::Comma {
                 break;
@@ -319,7 +310,9 @@ impl<'a> Parser<'a> {
         }
 
         if cols.len() != vals.len() {
-            return Err(self.err("Number of values not equal to number of insert columns"));
+            return Err(E::new(
+                "Number of values not equal to number of insert columns",
+            ));
         }
 
         let result = Statement::Insert(Insert { table, cols, vals });
@@ -382,26 +375,26 @@ impl<'a> Parser<'a> {
             Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
             Exp::String(_) => &DataType::String(0),
-            Exp::Name(name) => {
-                if let RContext::STable(t, nxt) = ctx {
+            Exp::Name(name) => match ctx {
+                RContext::STable(t, nxt) => {
                     if let Some((col, dt)) = t.name_to_col(name) {
                         *e = Exp::Col(col);
                         dt
                     } else {
                         self.resolve(e, nxt)?
                     }
-                } else if let RContext::Local(locs) = ctx {
+                }
+                RContext::Local(locs) => {
                     if let Some((i, typ)) = local(locs, name) {
                         *e = Exp::Local(i);
                         typ
                     } else {
                         let e = &format!("Name not found : {:?}", name);
-                        return Err(self.err(e));
+                        return Err(E::new(e));
                     }
-                } else {
-                    panic!()
                 }
-            }
+                RContext::None => panic!(),
+            },
 
             Exp::Binary(op, lhs, rhs) => {
                 let t1 = self.resolve(lhs, ctx)?;
@@ -409,7 +402,7 @@ impl<'a> Parser<'a> {
 
                 if !t1.similar(t2) {
                     // May want to do some conversion on rhs in future, e.g. int -> string.
-                    return Err(self.err(&format!(
+                    return Err(E::new(&format!(
                         "Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
                         lhs, rhs, t1, t2
                     )));
@@ -437,7 +430,7 @@ impl<'a> Parser<'a> {
             let rctx = RContext::Local(&self.locs);
             let edt = self.resolve(&mut exp, &rctx)?;
             if edt != &DataType::Bool {
-                return Err(self.err("Boolean expression expected"));
+                return Err(E::new("Boolean expression expected"));
             }
         }
         Ok(exp)
@@ -450,7 +443,7 @@ impl<'a> Parser<'a> {
             let tctx = RContext::STable(t, &lctx);
             let edt = self.resolve(&mut exp, &tctx)?;
             if edt != &DataType::Bool {
-                return Err(self.err("Boolean expression expected"));
+                return Err(E::new("Boolean expression expected"));
             }
         }
         Ok(exp)
@@ -558,7 +551,7 @@ impl<'a> Parser<'a> {
                 self.expect_token(Token::RBra)?;
                 Ok(e)
             }
-            _ => Err(self.err("Expression expected")),
+            _ => Err(E::new("Expression expected")),
         }
     }
 
@@ -569,7 +562,7 @@ impl<'a> Parser<'a> {
             if let Some(col_id) = table.dt.lookup_col(ident) {
                 result.push(col_id);
             } else {
-                return Err(self.err("Col name not found"));
+                return Err(E::new("Col name not found"));
             }
             if self.token != Token::Comma {
                 break;
@@ -589,10 +582,43 @@ impl<'a> Parser<'a> {
         Ok((table, sid, nid))
     }
 
+    fn create(&mut self) -> Result<Statement<'a>, E> {
+        let ident = self.read_ident()?;
+        match ident {
+            "TABLE" => self.create_table(),
+            "SCHEMA" => self.create_schema(),
+            "FN" => self.create_function(),
+            _ => Err(E::new("Expected TABLE, SCHEMA, FUNCTION....")),
+        }
+    }
+
+    fn create_function(&mut self) -> Result<Statement<'a>, E> {
+        // CREATE FN schema.name ( param1 type1, param2 type2... ) AS BEGIN statements END
+        let schema = self.read_ident()?;
+        let schema_id = self.check_schema(schema)?;
+        self.expect_token(Token::Dot)?;
+        let fname = self.read_ident()?;
+        if self.check_function(schema_id, fname).is_ok() {
+            return Err(E::new("Function already exists"));
+        }
+        self.expect_token(Token::LBra)?;
+        let mut _args = LVec::new();
+        while self.token != Token::RBra {
+            let ident = self.read_ident()?;
+            let typ = self.datatype()?;
+            _args.push( (ident,typ) );
+        }
+        self.next_token()?;
+        self.expect_ident(b"AS")?;
+        let _block = self.block();
+
+        todo!();
+    }
+
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
         let sname = self.read_ident()?;
         if self.check_schema(sname).is_ok() {
-            return Err(self.err("Schema already exists"));
+            return Err(E::new("Schema already exists"));
         }
         let result = CreateSchema { sname };
         let result = Statement::CreateSchema(result);
@@ -606,7 +632,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
         if self.check_table(schema_id, tname).is_ok() {
-            return Err(self.err("Table already exists"));
+            return Err(E::new("Table already exists"));
         }
         let col_defs = Arc::new(self.col_defs()?);
 
@@ -643,7 +669,7 @@ impl<'a> Parser<'a> {
             let dt = self.datatype()?;
 
             if !dup_check.insert(ident) {
-                return Err(self.err("Duplicate column"));
+                return Err(E::new("Duplicate column"));
             }
 
             let ident = GString::from(ident);
@@ -676,24 +702,33 @@ impl<'a> Parser<'a> {
         if let Some(id) = self.dict.schemas.get(s) {
             Ok(*id)
         } else {
-            Err(self.err(&format!("Schema [{}] not found", s)))
+            Err(E::new(&format!("Schema [{}] not found", s)))
         }
     }
 
-    fn check_tname(&self, s: &str) -> Result<i64, E> {
+    fn check_tfname(&self, s: &str) -> Result<i64, E> {
         if let Some(id) = self.dict.names.get(s) {
             Ok(*id)
         } else {
-            Err(self.err(&format!("Table [{}] not found", s)))
+            Err(E::new(&format!("Table [{}] not found", s)))
         }
     }
 
     fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>, i64), E> {
-        let nid = self.check_tname(tname)?;
+        let nid = self.check_tfname(tname)?;
         if let Some(table) = self.dict.tables.get(&(schema, nid)) {
             Ok((table.clone(), nid))
         } else {
-            Err(self.err(&format!("Table [{}] not found", tname)))
+            Err(E::new("Table not found"))
+        }
+    }
+
+    fn check_function(&self, schema: i64, fname: &str) -> Result<(Arc<SFunc>, i64), E> {
+        let nid = self.check_tfname(fname)?;
+        if let Some(func) = self.dict.funcs.get(&(schema, nid)) {
+            Ok((func.clone(), nid))
+        } else {
+            Err(E::new("Function not found"))
         }
     }
 
@@ -717,7 +752,7 @@ impl<'a> Parser<'a> {
                 self.next_token()?;
                 Ok(tos(ident))
             }
-            _ => Err(self.err("Ident expected")),
+            _ => Err(E::new("Ident expected")),
         }
     }
 
@@ -726,7 +761,11 @@ impl<'a> Parser<'a> {
             self.next_token()?;
             return Ok(());
         }
-        Err(self.err(&format!("Expected {:?} got {}", token, self.show_ct())))
+        Err(E::new(&format!(
+            "Expected {:?} got {}",
+            token,
+            self.show_ct()
+        )))
     }
 
     fn expect_ident(&mut self, ident1: &[u8]) -> Result<(), E> {
@@ -737,7 +776,11 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
         }
-        Err(self.err(&format!("Expected {} got {}", tos(ident1), self.show_ct())))
+        Err(E::new(&format!(
+            "Expected {} got {}",
+            tos(ident1),
+            self.show_ct()
+        )))
     }
 
     fn is_ident(&self, ident1: &[u8]) -> bool {
@@ -768,10 +811,6 @@ impl<'a> Parser<'a> {
         self.tr.pos
     }
 
-    fn err(&self, message: &str) -> E {
-        E::new(message)
-    }
-
     fn show_ct(&self) -> &str {
         match &self.token {
             Token::Ident(x, y) => tos(&self.tr.input[*x..*y]),
@@ -781,7 +820,9 @@ impl<'a> Parser<'a> {
 
     fn check_schema_updates(&mut self) -> Result<(), E> {
         if self.non_schema_statements && self.schema_updates {
-            Err(self.err("cannot have both schema updates and other statements"))
+            Err(E::new(
+                "cannot have both schema updates and other statements",
+            ))
         } else {
             Ok(())
         }
