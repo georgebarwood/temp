@@ -18,6 +18,16 @@ pub struct CreateTable<'a> {
     pub col_defs: Arc<DataType>,
 }
 
+/// CREATE FN statement.
+#[derive(Debug)]
+pub struct CreateFn<'a> {
+    pub schema_id: i64,
+    pub fname: &'a str,
+    pub rtyp: Arc<DataType>,
+    pub args: LVec< (&'a str, Arc<DataType>) >,
+    pub block: LVec<(usize, Statement<'a>)>,
+}
+
 /// DROP TABLE statement.
 #[derive(Debug)]
 pub struct DropTable {
@@ -173,6 +183,7 @@ pub enum Statement<'a> {
 
     CreateSchema(CreateSchema<'a>),
     CreateTable(CreateTable<'a>),
+    CreateFn(CreateFn<'a>),
     DropTable(DropTable),
 }
 
@@ -268,7 +279,7 @@ impl GStatement {
 
 fn gvals(list: &[Exp]) -> GVec<GExp>
 {
-    let mut result = GVec::new();
+    let mut result = GVec::with_capacity(list.len());
     for e in list {
        result.push( GExp::from(e) );
     }
@@ -276,7 +287,7 @@ fn gvals(list: &[Exp]) -> GVec<GExp>
 }
 
 fn gblock(list: &[(usize, Statement)]) -> GVec<(usize, GStatement)> {
-    let mut block = GVec::new();
+    let mut block = GVec::with_capacity(list.len());
     for (i, s) in list {
         block.push((*i, GStatement::from(s)));
     }

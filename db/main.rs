@@ -89,7 +89,7 @@ fn main() {
 
     // But for now, for testing purposes we just execute some SQL statements.
 
-    let sql: [&[u8]; 10] = [
+    let sql: [&[u8]; 11] = [
         b"CREATE SCHEMA dbo",
         b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
         b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 60+8, 'george@gmail.com')",
@@ -102,6 +102,7 @@ fn main() {
         b"LET x = 6 LET f = 1 WHILE x > 0 BEGIN SET f = f * x SET x = x - 1 END SELECT 'f=', f",
         // b"DROP TABLE dbo.cust",
         b"LET total = 0 FOR x = Age FROM dbo.cust WHERE Age < 20 SET total = total + x SELECT total",
+        b"CREATE FN dbo.test(x int,y int) RETURNS int AS BEGIN SET result = x * 2 + y END",
     ];
 
     let mut dict_changed: bool = false;

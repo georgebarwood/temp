@@ -587,32 +587,9 @@ impl<'a> Parser<'a> {
         match ident {
             "TABLE" => self.create_table(),
             "SCHEMA" => self.create_schema(),
-            "FN" => self.create_function(),
+            "FN" => self.create_fn(),
             _ => Err(E::new("Expected TABLE, SCHEMA, FUNCTION....")),
         }
-    }
-
-    fn create_function(&mut self) -> Result<Statement<'a>, E> {
-        // CREATE FN schema.name ( param1 type1, param2 type2... ) AS BEGIN statements END
-        let schema = self.read_ident()?;
-        let schema_id = self.check_schema(schema)?;
-        self.expect_token(Token::Dot)?;
-        let fname = self.read_ident()?;
-        if self.check_function(schema_id, fname).is_ok() {
-            return Err(E::new("Function already exists"));
-        }
-        self.expect_token(Token::LBra)?;
-        let mut _args = LVec::new();
-        while self.token != Token::RBra {
-            let ident = self.read_ident()?;
-            let typ = self.datatype()?;
-            _args.push( (ident,typ) );
-        }
-        self.next_token()?;
-        self.expect_ident(b"AS")?;
-        let _block = self.block();
-
-        todo!();
     }
 
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
@@ -642,6 +619,55 @@ impl<'a> Parser<'a> {
             col_defs,
         };
         let result = Statement::CreateTable(result);
+        self.schema_updates = true;
+        Ok(result)
+    }
+
+    fn create_fn(&mut self) -> Result<Statement<'a>, E> {
+        // CREATE FN schema.name ( param1 type1, param2 type2... ) RETURNS rtyp AS BEGIN statements END
+        let schema = self.read_ident()?;
+        let schema_id = self.check_schema(schema)?;
+        self.expect_token(Token::Dot)?;
+        let fname = self.read_ident()?;
+        
+        if self.check_function(schema_id, fname).is_ok() {
+            return Err(E::new("Function already exists"));
+        }
+
+        self.expect_token(Token::LBra)?;
+        let mut args = LVec::new();
+        while self.token != Token::RBra {
+            let ident = self.read_ident()?;
+            let typ = self.datatype()?;
+            args.push((ident, Arc::new(typ)));
+            if self.token != Token::Comma { break; }
+            self.next_token()?;
+        }
+        self.expect_token(Token::RBra)?;
+
+        let rtyp = if self.test_ident(b"RETURNS")? {
+            self.datatype()?
+        } else { DataType::Empty };
+        let rtyp = Arc::new(rtyp);
+        
+        self.expect_ident(b"AS")?;
+
+        let save = self.locs.len();
+        self.locs.push( Loc{name: "result",datatype:rtyp.clone()} );
+        for (name,typ) in &args {
+           let datatype = typ.clone();
+           self.locs.push( Loc{name,datatype} );
+        }
+        
+        // Only resolve names and check types on 2nd pass.
+        // First pass just creates function stubs in dict, with declared type info.
+        
+        let block = self.block()?;
+        self.locs.truncate(save);
+
+        let result = CreateFn{ schema_id, fname, args, rtyp, block };
+
+        let result = Statement::CreateFn(result);
         self.schema_updates = true;
         Ok(result)
     }
