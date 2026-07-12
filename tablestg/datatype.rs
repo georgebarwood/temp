@@ -73,9 +73,12 @@ impl DataType {
     pub fn similar(&self, other: &DataType) -> bool
     {
         match (self,other) {
+           (DataType::Bool,DataType::Bool) => true,
            (DataType::Int,DataType::Int) => true,
+           (DataType::Float,DataType::Float) => true,
            (DataType::String(_), DataType::String(_)) => true,
-           _ => false
+           (DataType::Binary(_), DataType::Binary(_)) => true,
+           _ => false, // More ToDo
         }
     }
 
@@ -98,7 +101,7 @@ impl DataType {
         match self {
             DataType::Empty => {}
             DataType::Bool => {
-                self.write_bool(val.bool(), w);
+                write_bool(val.bool(), w);
             } 
             DataType::Int => {
                 let v = val.int();
@@ -122,31 +125,31 @@ impl DataType {
             }
             DataType::Enum(variants) => {
                 let (tag, val) = val.en();
-                self.write_usize(*tag, w);
+                write_usize(*tag, w);
                 variants[*tag].1.value_to_writer0(val, w);
             }
             DataType::String(_lim) => {
                 let s = val.string();
-                self.write_usize(1 + s.len(), w);
+                write_usize(1 + s.len(), w);
                 let _ = w.write(s.as_bytes());
             }
             DataType::Binary(_lim) => {
                 let b = val.binary();
-                self.write_usize(1 + b.len(), w);
+                write_usize(1 + b.len(), w);
                 let _ = w.write(b);
             }
             DataType::List(t, _lim) => {
                 let list = val.list();
-                self.write_usize(1 + list.len(), w);
+                write_usize(1 + list.len(), w);
                 for v in &**list {
                     t.value_to_writer0(v, w);
                 }
             }
             DataType::IList(_lim) => {
                 let list = val.ilist();
-                self.write_usize(1 + list.len(), w);
+                write_usize(1 + list.len(), w);
                 for i in &**list {
-                    self.write_int(*i, w);
+                    write_int(*i, w);
                 }
             }
         }
@@ -169,7 +172,7 @@ impl DataType {
             }
             DataType::Enum(variants) => {
                 let (tag, val) = val.en();
-                self.write_usize(*tag, w);
+                write_usize(*tag, w);
                 variants[*tag].1.value_to_writer(val, w, spx);
             }
             DataType::String(lim) => {
@@ -178,7 +181,7 @@ impl DataType {
                     // println!("string len = {} > lim = {}... encoding", s.len(), lim);
                     self.encode(s.as_bytes(), w, spx);
                 } else {
-                    self.write_usize(1 + s.len(), w);
+                    write_usize(1 + s.len(), w);
                     let _ = w.write(s.as_bytes());
                 }
             }
@@ -188,26 +191,26 @@ impl DataType {
                     // println!("binary len = {} > lim = {}... encoding", b.len(), lim);
                     self.encode(b, w, spx);
                 } else {
-                    self.write_usize(1 + b.len(), w);
+                    write_usize(1 + b.len(), w);
                     let _ = w.write(b);
                 }
             }
             DataType::List(t, lim) => {
                 let list = val.list();
-                let mut sz = Self::len_usize(list.len());
+                let mut sz = len_usize(list.len());
                 for v in &**list {
                     t.compute_size(v, &mut sz);
                 }
                 if sz > *lim {
                     // println!("List len = {} > lim = {}... encoding", sz, lim);
                     let mut b = GVec::new();
-                    self.write_usize(1 + list.len(), &mut b);
+                    write_usize(1 + list.len(), &mut b);
                     for v in &**list {
                         t.value_to_writer(v, &mut b, spx);
                     }
                     self.encode(&b, w, spx);
                 } else {
-                    self.write_usize(1 + list.len(), w);
+                    write_usize(1 + list.len(), w);
                     for v in &**list {
                         t.value_to_writer(v, w, spx);
                     }
@@ -215,19 +218,19 @@ impl DataType {
             }
             DataType::IList(lim) => {
                 let list = val.ilist();
-                let sz = Self::len_usize(1 + list.len()) + list.len() * 8;
+                let sz = len_usize(1 + list.len()) + list.len() * 8;
                 if sz > *lim {
                     println!("IList size = {} > lim = {}... encoding", sz, lim);
                     let mut b = GVec::new();
-                    self.write_usize(1 + list.len(), &mut b);
+                    write_usize(1 + list.len(), &mut b);
                     for i in &**list {
-                        self.write_int(*i, &mut b);
+                        write_int(*i, &mut b);
                     }
                     self.encode(&b, w, spx);
                 } else {
-                    self.write_usize(1 + list.len(), w);
+                    write_usize(1 + list.len(), w);
                     for i in &**list {
-                        self.write_int(*i, w);
+                        write_int(*i, w);
                     }
                 }
             }
@@ -256,42 +259,42 @@ impl DataType {
             }
             DataType::Enum(variants) => {
                 let (tag, val) = val.en();
-                *size += Self::len_usize(*tag);
+                *size += len_usize(*tag);
                 variants[*tag].1.compute_size(val, size);
             }
             DataType::String(lim) => {
                 let s = val.string();
                 if s.len() > *lim {
-                    *size += Self::len_usize(s.len()) + 9;
+                    *size += len_usize(s.len()) + 9;
                 } else {
-                    *size += Self::len_usize(1 + s.len()) + s.len();
+                    *size += len_usize(1 + s.len()) + s.len();
                 }
             }
             DataType::Binary(lim) => {
                 let b = val.binary();
                 if b.len() > *lim {
-                    *size += Self::len_usize(b.len()) + 9;
+                    *size += len_usize(b.len()) + 9;
                 } else {
-                    *size += Self::len_usize(1 + b.len()) + b.len();
+                    *size += len_usize(1 + b.len()) + b.len();
                 }
             }
             DataType::List(t, lim) => {
                 let list = val.list();
-                let mut sz = Self::len_usize(1 + list.len());
+                let mut sz = len_usize(1 + list.len());
                 for v in &**list {
                     t.compute_size(v, &mut sz);
                 }
                 if sz > *lim {
-                    *size += Self::len_usize(sz) + 9;
+                    *size += len_usize(sz) + 9;
                 } else {
                     *size += sz;
                 }
             }
             DataType::IList(lim) => {
                 let list = val.ilist();
-                let sz = Self::len_usize(1 + list.len()) + list.len() * 8;
+                let sz = len_usize(1 + list.len()) + list.len() * 8;
                 if sz > *lim {
-                    *size += Self::len_usize(sz) + 9;
+                    *size += len_usize(sz) + 9;
                 } else {
                     *size += sz;
                 }
@@ -391,7 +394,7 @@ impl DataType {
             DataType::Int => *ix += 8,
             DataType::Float => *ix += 8,
             DataType::String(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     self.advance(buf, ix);
                 } else {
@@ -400,7 +403,7 @@ impl DataType {
                 }
             }
             DataType::Binary(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     self.advance(buf, ix);
                 } else {
@@ -409,7 +412,7 @@ impl DataType {
                 }
             }
             DataType::List(t, _) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     self.advance(buf, ix);
                 } else {
@@ -420,7 +423,7 @@ impl DataType {
                 }
             }
             DataType::IList(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     self.advance(buf, ix);
                 } else {
@@ -446,9 +449,9 @@ impl DataType {
     fn to_value0(&self, buf: &[u8], ix: &mut usize) -> Value {
         match self {
             DataType::Empty => Value::Empty,
-            DataType::Bool => Value::Bool(self.read_bool(buf, ix)),
-            DataType::Int => Value::Int(self.read_int(buf, ix)),
-            DataType::Float => Value::Float(self.read_float(buf, ix)),
+            DataType::Bool => Value::Bool(read_bool(buf, ix)),
+            DataType::Int => Value::Int(read_int(buf, ix)),
+            DataType::Float => Value::Float(read_float(buf, ix)),
 
             DataType::Tuple(types) => {
                 let mut list = LVec::with_capacity(types.len());
@@ -467,12 +470,12 @@ impl DataType {
                 Value::List(LRc::new(list))
             }
             DataType::Enum(variants) => {
-                let tag = self.read_usize(buf, ix);
+                let tag = read_usize(buf, ix);
                 let val = variants[tag].1.to_value0(buf, ix);
                 Value::Enum(tag, LBox::new(val))
             }
             DataType::String(_) => {
-                let len = self.read_usize(buf, ix) - 1;
+                let len = read_usize(buf, ix) - 1;
                 let s = &buf[*ix..*ix + len];
                 *ix += len;
                 let s = str::from_utf8(s).unwrap();
@@ -480,14 +483,14 @@ impl DataType {
                 Value::String(LRc::new(s))
             }
             DataType::Binary(_) => {
-                let len = self.read_usize(buf, ix) - 1;
+                let len = read_usize(buf, ix) - 1;
                 let b = &buf[*ix..*ix + len];
                 *ix += len;
                 let b = LVec::<u8>::from(b);
                 Value::Binary(LRc::new(b))
             }
             DataType::List(t, _) => {
-                let len = self.read_usize(buf, ix) - 1;
+                let len = read_usize(buf, ix) - 1;
                 let mut list = LVec::with_capacity(len);
                 for _i in 0..len {
                     let v = t.to_value0(buf, ix);
@@ -496,10 +499,10 @@ impl DataType {
                 Value::List(LRc::new(list))
             }
             DataType::IList(_) => {
-                let len = self.read_usize(buf, ix) - 1;
+                let len = read_usize(buf, ix) - 1;
                 let mut list = LVec::with_capacity(len);
                 for _i in 0..len {
-                    let i = self.read_int(buf, ix);
+                    let i = read_int(buf, ix);
                     list.push(i);
                 }
                 Value::IList(LRc::new(list))
@@ -527,12 +530,12 @@ impl DataType {
                 Value::List(LRc::new(list))
             }
             DataType::Enum(variants) => {
-                let tag = self.read_usize(buf, ix);
+                let tag = read_usize(buf, ix);
                 let val = variants[tag].1.to_value(buf, ix, spx);
                 Value::Enum(tag, LBox::new(val))
             }
             DataType::String(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let s = self.decode(buf, ix, spx);
                     // This could be done more efficiently, convert GVec<u8> directly to LString (but needs unsafe).
@@ -548,7 +551,7 @@ impl DataType {
                 }
             }
             DataType::Binary(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode(buf, ix, spx);
                     Value::Binary(LRc::new(b))
@@ -561,7 +564,7 @@ impl DataType {
                 }
             }
             DataType::List(t, _) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode(buf, ix, spx);
                     self.bytes_to_value(&b, spx)
@@ -576,7 +579,7 @@ impl DataType {
                 }
             }
             DataType::IList(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode(buf, ix, spx);
                     self.bytes_to_value(&b, spx)
@@ -584,7 +587,7 @@ impl DataType {
                     let len = len - 1;
                     let mut list = LVec::with_capacity(len);
                     for _i in 0..len {
-                        let i = self.read_int(buf, ix);
+                        let i = read_int(buf, ix);
                         list.push(i);
                     }
                     Value::IList(LRc::new(list))
@@ -661,12 +664,12 @@ impl DataType {
                 Value::List(LRc::new(list))
             }
             DataType::Enum(variants) => {
-                let tag = self.read_usize(buf, ix);
+                let tag = read_usize(buf, ix);
                 let val = variants[tag].1.to_value_del(buf, ix, spx);
                 Value::Enum(tag, LBox::new(val))
             }
             DataType::String(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let s = self.decode_del(buf, ix, spx);
                     // This could be done more efficiently, convert GVec<u8> directly to LString (but needs unsafe).
@@ -682,7 +685,7 @@ impl DataType {
                 }
             }
             DataType::Binary(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode_del(buf, ix, spx);
                     Value::Binary(LRc::new(b))
@@ -695,7 +698,7 @@ impl DataType {
                 }
             }
             DataType::List(t, _) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode_del(buf, ix, spx);
                     self.bytes_to_value_del(&b, spx)
@@ -710,7 +713,7 @@ impl DataType {
                 }
             }
             DataType::IList(_) => {
-                let len = self.read_usize(buf, ix);
+                let len = read_usize(buf, ix);
                 if len == 0 {
                     let b = self.decode_del(buf, ix, spx);
                     self.bytes_to_value_del(&b, spx)
@@ -718,7 +721,7 @@ impl DataType {
                     let len = len - 1;
                     let mut list = LVec::with_capacity(len);
                     for _i in 0..len {
-                        let i = self.read_int(buf, ix);
+                        let i = read_int(buf, ix);
                         list.push(i);
                     }
                     Value::IList(LRc::new(list))
@@ -726,38 +729,6 @@ impl DataType {
             }
             _ => self.to_value0(buf, ix),
         }
-    }
-
-    fn write_usize<W: std::io::Write>(&self, mut val: usize, w: &mut W) {
-        let mut buf = [0u8; 10]; // 10 = 64 / 7 rounded up.
-        let mut ix = 0;
-        loop {
-            let b = (val % 128) as u8;
-            val /= 128;
-            if val == 0 {
-                buf[ix] = b;
-                ix += 1;
-                break;
-            } else {
-                buf[ix] = b + 128;
-                ix += 1;
-            }
-        }
-        let _ = w.write(&buf[0..ix]);
-    }
-
-    fn len_usize(mut val: usize) -> usize {
-        let mut ix = 0;
-        loop {
-            val /= 128;
-            if val == 0 {
-                ix += 1;
-                break;
-            } else {
-                ix += 1;
-            }
-        }
-        ix
     }
 
     /// Returns decoded size and count of bytes that were read.
@@ -789,61 +760,27 @@ impl DataType {
         }
     }
 
-    fn read_usize(&self, buf: &[u8], ix: &mut usize) -> usize {
-        let (x, sz) = DataType::decode_usize(&buf[*ix..]);
-        *ix += sz;
-        x
-    }
-
-    fn write_bool<W: std::io::Write>(&self, val: bool, w: &mut W) {
-        let b : u8 = if val {1} else {0};
-        let _ = w.write(&b.to_le_bytes());
-    }
-
-    fn read_bool(&self, buf: &[u8], ix: &mut usize) -> bool {
-        let x = buf[*ix];
-        *ix += 1;
-        x != 0 // Maybe should panic if not 0 or 1.
-    }
-
-    fn write_int<W: std::io::Write>(&self, val: i64, w: &mut W) {
-        // Could use a variable length encoding to be efficient for small ints.
-        let _ = w.write(&val.to_le_bytes());
-    }
-
-    fn read_int(&self, buf: &[u8], ix: &mut usize) -> i64 {
-        let x = i64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
-        *ix += 8;
-        x
-    }
-
-    fn read_float(&self, buf: &[u8], ix: &mut usize) -> F64 {
-        let x = f64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
-        *ix += 8;
-        F64(x)
-    }
-
     fn encode<W: std::io::Write>(&self, b: &[u8], w: &mut W, (m, ps): &mut MSPX) {
-        self.write_usize(0, w);
-        self.write_usize(b.len(), w);
+        write_usize(0, w);
+        write_usize(b.len(), w);
         let id = m.store(b, ps);
-        self.write_int(id as i64, w);
+        write_int(id as i64, w);
     }
 
     fn decode(&self, buf: &[u8], ix: &mut usize, (m, ps): &mut SPX) -> LVec<u8> {
-        let len = self.read_usize(buf, ix);
-        let id = self.read_int(buf, ix) as u64;
+        let len = read_usize(buf, ix);
+        let id = read_int(buf, ix) as u64;
         m.fetch(id, len, ps)
     }
 
     fn advance(&self, buf: &[u8], ix: &mut usize) {
-        let _len = self.read_usize(buf, ix);
+        let _len = read_usize(buf, ix);
         *ix += 8;
     }
 
     fn decode_del(&self, buf: &[u8], ix: &mut usize, (m, ps): &mut MSPX) -> LVec<u8> {
-        let len = self.read_usize(buf, ix);
-        let id = self.read_int(buf, ix) as u64;
+        let len = read_usize(buf, ix);
+        let id = read_int(buf, ix) as u64;
         let result = m.fetch(id, len, ps);
         m.delete(id, len, ps);
         result
@@ -874,3 +811,95 @@ pub type MSPX<'a> = (&'a mut Store, &'a mut PageSet);
 
 /// Store, PageSet.
 pub type SPX<'a> = (&'a Store, &'a mut PageSet);
+
+pub fn write_usize<W: std::io::Write>(mut val: usize, w: &mut W) {
+        let mut buf = [0u8; 10]; // 10 = 64 / 7 rounded up.
+        let mut ix = 0;
+        loop {
+            let b = (val % 128) as u8;
+            val /= 128;
+            if val == 0 {
+                buf[ix] = b;
+                ix += 1;
+                break;
+            } else {
+                buf[ix] = b + 128;
+                ix += 1;
+            }
+        }
+        let _ = w.write(&buf[0..ix]);
+}
+
+pub fn len_usize(mut val: usize) -> usize {
+        let mut ix = 0;
+        loop {
+            val /= 128;
+            if val == 0 {
+                ix += 1;
+                break;
+            } else {
+                ix += 1;
+            }
+        }
+        ix
+}
+
+pub fn write_byte<W: std::io::Write>(b: u8, w: &mut W) {
+        let _ = w.write(&b.to_le_bytes());
+}
+
+pub fn read_byte(buf: &[u8], ix: &mut usize) -> u8 {
+        let x = buf[*ix];
+        *ix += 1;
+        x
+}
+
+pub fn read_usize(buf: &[u8], ix: &mut usize) -> usize {
+        let (x, sz) = DataType::decode_usize(&buf[*ix..]);
+        *ix += sz;
+        x
+}
+
+pub fn write_string<W: std::io::Write>(s: &str, w: &mut W) {
+    write_usize( s.len(), w);
+    let _ = w.write( s.as_bytes() );
+}
+
+pub fn read_string<'a>(buf: &'a [u8], ix: &mut usize) -> &'a str {
+    let len = read_usize(buf, ix);
+    let result = tos(&buf[*ix..*ix+len]);
+    *ix += len;
+    result
+}
+
+pub fn write_bool<W: std::io::Write>(val: bool, w: &mut W) {
+        let b : u8 = if val {1} else {0};
+        let _ = w.write(&b.to_le_bytes());
+}
+
+pub fn read_bool(buf: &[u8], ix: &mut usize) -> bool {
+        let x = buf[*ix];
+        *ix += 1;
+        x != 0 // Maybe should panic if not 0 or 1.
+}
+
+pub fn write_int<W: std::io::Write>(val: i64, w: &mut W) {
+        // Could use a variable length encoding to be efficient for small ints.
+        let _ = w.write(&val.to_le_bytes());
+}
+
+pub fn read_int(buf: &[u8], ix: &mut usize) -> i64 {
+        let x = i64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
+        *ix += 8;
+        x
+}
+
+pub fn read_float(buf: &[u8], ix: &mut usize) -> F64 {
+        let x = f64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
+        *ix += 8;
+        F64(x)
+}
+
+pub fn tos(s: &[u8]) -> &str {
+    str::from_utf8(s).unwrap()
+}
