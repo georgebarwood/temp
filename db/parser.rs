@@ -37,17 +37,17 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
         let s = match ident {
-            b"INSERT" => self.insert(),
-            b"UPDATE" => self.update(),
-            b"CREATE" => self.create(),
-            b"DROP" => self.drop(),
-            b"SELECT" => self.select(),
-            b"DELETE" => self.delete(),
-            b"LET" => self.lett(),
-            b"WHILE" => self.p_while(),
-            b"IF" => self.p_if(),
-            b"SET" => self.set(),
-            b"FOR" => self.p_for(),
+            b"insert" => self.insert(),
+            b"update" => self.update(),
+            b"create" => self.create(),
+            b"drop" => self.drop(),
+            b"select" => self.select(),
+            b"delete" => self.delete(),
+            b"let" => self.lett(),
+            b"while" => self.p_while(),
+            b"if" => self.p_if(),
+            b"set" => self.set(),
+            b"for" => self.p_for(),
             _ => {
                 return Err(E::new("Unknown keyword"));
             }
@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
     fn p_if(&mut self) -> Result<Statement<'a>, E> {
         let exp = self.bool_exp()?;
         let block = self.block()?;
-        let els = if self.is_ident(b"ELSE") {
+        let els = if self.is_ident(b"else") {
             self.next_token()?;
             Some(self.block()?)
         } else {
@@ -106,13 +106,14 @@ impl<'a> Parser<'a> {
     fn block(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
         let len = self.locs.len();
         let mut result = LVec::new();
-        if self.is_ident(b"BEGIN") {
+        if self.token == Token::LCurly {
             self.next_token()?;
-            while !self.test_ident(b"END")? {
+            while self.token != Token::RCurly {
                 let stat = self.stat()?;
                 let pos = self.position();
                 result.push((pos, stat));
             }
+            self.next_token()?;
         } else {
             let stat = self.stat()?;
             let pos = self.position();
@@ -161,7 +162,7 @@ impl<'a> Parser<'a> {
             }
             self.next_token()?;
         }
-        self.expect_ident(b"FROM")?;
+        self.expect_ident(b"from")?;
         let (from, _, _) = self.table()?;
 
         let len = self.locs.len();
@@ -176,7 +177,7 @@ impl<'a> Parser<'a> {
             self.locs.push(Loc { name, datatype: dt });
         }
 
-        let wher = if self.test_ident(b"WHERE")? {
+        let wher = if self.test_ident(b"where")? {
             let wher = self.bool_exp_table(&from)?;
             Some(wher)
         } else {
@@ -238,9 +239,9 @@ impl<'a> Parser<'a> {
 
     fn update(&mut self) -> Result<Statement<'a>, E> {
         let (table, _, _) = self.table()?;
-        self.expect_ident(b"SET")?;
+        self.expect_ident(b"set")?;
         let assigns = self.assigns(&table)?;
-        self.expect_ident(b"WHERE")?;
+        self.expect_ident(b"where")?;
 
         let wher = self.bool_exp_table(&table)?;
 
@@ -254,9 +255,9 @@ impl<'a> Parser<'a> {
     }
 
     fn delete(&mut self) -> Result<Statement<'a>, E> {
-        self.expect_ident(b"FROM")?;
+        self.expect_ident(b"from")?;
         let (table, _, _) = self.table()?;
-        self.expect_ident(b"WHERE")?;
+        self.expect_ident(b"where")?;
 
         let wher = self.bool_exp_table(&table)?;
 
@@ -289,11 +290,11 @@ impl<'a> Parser<'a> {
     }
 
     fn insert(&mut self) -> Result<Statement<'a>, E> {
-        self.expect_ident(b"INTO")?;
+        self.expect_ident(b"into")?;
         let (table, _, _) = self.table()?;
         let cols = self.name_list(&table)?;
 
-        self.expect_ident(b"VALUES")?;
+        self.expect_ident(b"values")?;
 
         let mut vals = LVec::new();
         {
@@ -332,10 +333,10 @@ impl<'a> Parser<'a> {
     fn select(&mut self) -> Result<Statement<'a>, E> {
         let mut vals = self.exp_list()?;
 
-        let result = if self.test_ident(b"FROM")? {
+        let result = if self.test_ident(b"from")? {
             let (from, _, _) = self.table()?;
 
-            let wher = if self.test_ident(b"WHERE")? {
+            let wher = if self.test_ident(b"where")? {
                 let wher = self.bool_exp_table(&from)?;
                 Some(wher)
             } else {
@@ -435,17 +436,25 @@ impl<'a> Parser<'a> {
                     && let Some(nid) = self.dict.names.get(*fname)
                     && let Some(fid) = self.dict.func_lookup.get(&(*sid, *nid))
                 {
-                    // ToDo : resolve the args, check types against f formal params
-                    for e in &mut *args {
-                        let _t = self.resolve(e, ctx)?;
-                        // ToDo check t against f.args.
+                    let f = &self.dict.funcs[*fid];
+
+                    // Resolve the args, check types.
+                    for (i, e) in (&mut *args).into_iter().enumerate() {
+                        let t = self.resolve(e, ctx)?;
+                        let pt = &f.parm_types[i];
+                        if !pt.similar(t) {
+                            return Err(E::new(&format!(
+                                "Function call parameter type mismatch t={:?} pt={:?}",
+                                t, pt
+                            )));
+                        }
                     }
                     let new = Exp::FnCall(*fid, std::mem::take(args));
                     *e = new;
 
-                    println!("Resolved FnCall {:?}", e);
-                    let f = &self.dict.funcs[*fid];
-                    &f.dt
+                    // println!("Resolved FnCall {:?}", e);
+
+                    &f.ret
                 } else {
                     println!("func lookup = {:?}", self.dict.func_lookup);
                     return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
@@ -515,9 +524,9 @@ impl<'a> Parser<'a> {
             Token::VBar => Operator::Concat,
 
             Token::Ident(_, _) => {
-                if self.is_ident(b"AND") {
+                if self.is_ident(b"and") {
                     Operator::And
-                } else if self.is_ident(b"OR") {
+                } else if self.is_ident(b"or") {
                     Operator::Or
                 } else {
                     Operator::None
@@ -634,16 +643,16 @@ impl<'a> Parser<'a> {
     fn create(&mut self) -> Result<Statement<'a>, E> {
         let ident = self.read_ident()?;
         match ident {
-            "TABLE" => self.create_table(),
-            "SCHEMA" => self.create_schema(),
-            "FN" => self.create_fn(),
-            _ => Err(E::new("Expected TABLE, SCHEMA, FUNCTION....")),
+            "table" => self.create_table(),
+            "schema" => self.create_schema(),
+            "fn" => self.create_fn(),
+            _ => Err(E::new("Expected table, schema, fn....")),
         }
     }
 
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
         let sname = self.read_ident()?;
-        if self.check_schema(sname).is_ok() {
+        if self.pass == 1 && self.check_schema(sname).is_ok() {
             return Err(E::new("Schema already exists"));
         }
         let result = CreateSchema { sname };
@@ -657,7 +666,7 @@ impl<'a> Parser<'a> {
         let schema_id = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        if self.check_table(schema_id, tname).is_ok() {
+        if self.pass == 1 && self.check_table(schema_id, tname).is_ok() {
             return Err(E::new("Table already exists"));
         }
         let col_defs = Arc::new(self.col_defs()?);
@@ -673,7 +682,7 @@ impl<'a> Parser<'a> {
     }
 
     fn create_fn(&mut self) -> Result<Statement<'a>, E> {
-        // CREATE FN schema.name ( param1 type1, param2 type2... ) RETURNS rtyp AS BEGIN statements END
+        // create fn schema.name ( param1 type1, param2 type2... ) returns rtyp as tatement
         let schema = self.read_ident()?;
         let schema_id = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
@@ -696,19 +705,19 @@ impl<'a> Parser<'a> {
         }
         self.expect_token(Token::RBra)?;
 
-        let rtyp = if self.test_ident(b"RETURNS")? {
+        let ret = if self.test_ident(b"returns")? {
             self.datatype()?
         } else {
             DataType::Empty
         };
-        let rtyp = Arc::new(rtyp);
+        let ret = Arc::new(ret);
 
-        self.expect_ident(b"AS")?;
+        self.expect_ident(b"as")?;
 
         let save = self.locs.len();
         self.locs.push(Loc {
             name: "result",
-            datatype: rtyp.clone(),
+            datatype: ret.clone(),
         });
         for (name, typ) in &args {
             let datatype = typ.clone();
@@ -725,7 +734,7 @@ impl<'a> Parser<'a> {
             schema_id,
             fname,
             args,
-            rtyp,
+            ret,
             block,
         };
 

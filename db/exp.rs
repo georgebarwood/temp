@@ -39,10 +39,10 @@ pub enum GExp {
     Local(usize),
     /// Binary expression.
     Binary(Operator, GBox<GExp>, GBox<GExp>),
-    
+
     /// Function call (unresolved). Schema id, Name id, args.
-    FnCallById(i64, i64, GVec<GExp>), 
-    
+    FnCallById(i64, i64, GVec<GExp>),
+
     /// Function call (resolved).
     FnCall(usize, GVec<GExp>),
 }
@@ -64,11 +64,9 @@ impl<'a> Exp<'a> {
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
-                println!("FnCall");
-
                 // Push default value for result onto stack.
                 let f = &dict.funcs[*f];
-                let def = f.dt.default_value();
+                let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
@@ -89,7 +87,7 @@ impl<'a> Exp<'a> {
         }
     }
 
-    pub fn eval_lr(&self, run: &mut Run, dict:&Dict, lr: &mut LazyRow, ps: &mut PageSet) -> Value {
+    pub fn eval_lr(&self, run: &mut Run, dict: &Dict, lr: &mut LazyRow, ps: &mut PageSet) -> Value {
         use Exp::*;
         match self {
             Col(x) => lr.item(*x, ps),
@@ -134,7 +132,7 @@ impl GExp {
             }
             Col(_) => panic!(),
             FnCall(_f, _args) => {
-               todo!() // Will use _dict
+                todo!() // Will use _dict
             }
             _ => todo!(),
         }

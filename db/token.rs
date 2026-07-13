@@ -12,6 +12,8 @@ pub enum Token {
     Dot,
     LBra,
     RBra,
+    LCurly,
+    RCurly,
     Comma,
     Colon,
     SemiColon,
@@ -122,6 +124,8 @@ impl<'a> TokenReader<'a> {
             }
             b'(' => Token::LBra,
             b')' => Token::RBra,
+            b'{' => Token::LCurly,
+            b'}' => Token::RCurly,
             b',' => Token::Comma,
             _ => Token::Err,
         };

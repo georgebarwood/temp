@@ -4,6 +4,11 @@ use datatype::DataType;
 use serde::*;
 use std::collections::HashMap;
 
+/* Need to check when deleting a function that it has no callers.
+   Also if a function is updated, either the signature must be the same,
+   or there must be no callers.
+*/
+
 /// Dictionary to look up schema, tables, etc.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Dict {
@@ -45,7 +50,7 @@ impl Dict {
     /// Serialize as bytes, with pre-pended id.
     fn to_bytes_id(&self, id: u64) -> LVec<u8> {
         // Should first prepare self.funcs for serialisation.
-    
+
         let mut result = LVec::new();
         result.extend_from_slice(&id.to_le_bytes());
         postcard::to_io(self, &mut result).unwrap();
@@ -54,13 +59,17 @@ impl Dict {
 
     /// Deserialise from bytes, first 8 bytes are skipped (id field).
     fn from_bytes_id(b: &[u8]) -> Self {
-        postcard::from_bytes(&b[8..]).unwrap()       
+        postcard::from_bytes(&b[8..]).unwrap()
     }
 
     /// Save dict to sys store.
     pub fn save_to_sys_store(&self, ps: &mut PageSet) {
         let id = crate::DICT_ID;
         let bytes = self.to_bytes_id(id);
+
+        // println!("Dict::save_to_sys_store, new dict size={} bytes.", bytes.len() );
+        // println!("Dict::Save_to_sys_store, new dict={:?}.", self);
+
         let ssc = ps.sys_store.clone();
         let mut sys_store = ssc.borrow_mut();
         let key = IdVKey::new(id);
@@ -77,7 +86,7 @@ impl Dict {
             let dict = Dict::from_bytes_id(&bytes);
 
             // Here should resolve any calls in funcs.
-            
+
             Arc::new(dict)
         } else {
             panic!()
@@ -102,8 +111,8 @@ impl STable {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc {
     /// result datatype
-    pub dt: Arc<DataType>,
-    // pub parms: todo
+    pub ret: Arc<DataType>,
+    pub parm_types: GVec<Arc<DataType>>,
     pub block: GVec<(usize, GStatement)>,
 }
 

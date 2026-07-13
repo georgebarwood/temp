@@ -23,7 +23,7 @@ pub struct CreateTable<'a> {
 pub struct CreateFn<'a> {
     pub schema_id: i64,
     pub fname: &'a str,
-    pub rtyp: Arc<DataType>,
+    pub ret: Arc<DataType>,
     pub args: LVec<(&'a str, Arc<DataType>)>,
     pub block: LVec<(usize, Statement<'a>)>,
 }

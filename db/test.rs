@@ -1,23 +1,21 @@
 use crate::*;
 
 pub fn test() {
-    let sql: [&[u8]; 3] = [
-        b"CREATE SCHEMA dbo",
-        /*
-        b"CREATE TABLE dbo.cust(Name string,Age int,Height float,Email string)",
-        b"INSERT INTO dbo.cust(Name,Age,Email) VALUES('George', 60+8, 'george@gmail.com')",
-        b"LET name :string = 'Marilyn' INSERT INTO dbo.cust(Name,Age) VALUES(name, 66)",
-        b"INSERT INTO dbo.cust(Name,Age) VALUES('Freddy', 2)",
-        b"UPDATE dbo.cust SET Age = Age + 1 WHERE Age != 66 AND true",
-        b"DELETE FROM dbo.cust WHERE Age > 70 OR Age > 10 AND Age < 20",
-        b"SELECT Id, Name, Age FROM dbo.cust WHERE Age!=66 AND Age > 5",
-        // b"LET x : int = 10 SELECT Id, Name, x * Age FROM dbo.cust WHERE Id < x",
-        b"LET x = 6 LET f = 1 WHILE x > 0 BEGIN SET f = f * x SET x = x - 1 END SELECT 'f=', f",
-        // b"DROP TABLE dbo.cust",
-        b"LET total = 0 FOR x = Age FROM dbo.cust WHERE Age < 20 SET total = total + x SELECT total",
-        */
-        b"CREATE FN dbo.test(x int,y int) RETURNS int AS BEGIN SET result = x * 2 + y END",
-        b"SELECT dbo.test(5,6)",
+    let sql: [&[u8]; 12] = [
+        b"create schema dbo",
+        b"create table dbo.cust(Name string,Age int,Height float,Email string)",
+        b"insert into dbo.cust(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
+        b"let name :string = 'Marilyn' insert into dbo.cust(Name,Age) values(name, 66)",
+        b"insert into dbo.cust(Name,Age) values('Freddy', 2)",
+        b"update dbo.cust set Age = Age + 1 where Age != 66 and true",
+        b"delete from dbo.cust where Age > 70 or Age > 10 and Age < 20",
+        b"select Id, Name, Age from dbo.cust where Age!=66 and Age > 5",
+        // b"let x : int = 10 select Id, Name, x * Age from dbo.cust where Id < x",
+        b"let x = 6 let f = 1 while x > 0 { set f = f * x set x = x - 1 } select 'f=', f",
+        // b"drop table dbo.cust",
+        b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
+        b"create fn dbo.test(x int,y int) returns int as set result = x * 2 + y",
+        b"select dbo.test(5,6)",
     ];
 
     let (is_new, spd) = get_spd();

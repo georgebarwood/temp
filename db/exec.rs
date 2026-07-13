@@ -67,8 +67,17 @@ fn execute_schema_updates(
     ps: &mut PageSet,
 ) {
     for (_pos, s) in slist {
-        println!("Pass={} executing {:?}", pass, s);
+        // println!("Pass={} executing {:?}", pass, s);
         match s {
+            Statement::CreateSchema(cs) => {
+                if pass == 2 {
+                    let schema_id = dict.new_schema_id();
+                    let s = GString::from(cs.sname);
+                    dict.schemas.insert(s, schema_id);
+                    println!("Schema {} created", cs.sname);
+                }
+            }
+
             Statement::CreateTable(ct) => {
                 if pass == 1 {
                     let id = dict.new_table_id();
@@ -76,6 +85,7 @@ fn execute_schema_updates(
                         id,
                         dt: ct.col_defs.clone(),
                     };
+                    println!("Table Created {:?}", &table);
                     let nid = dict.new_name_id(ct.tname);
                     dict.tables.insert((ct.schema_id, nid), Arc::new(table));
                 }
@@ -86,8 +96,13 @@ fn execute_schema_updates(
                     let func_id = dict.funcs.len();
                     let nid = dict.new_name_id(cf.fname);
                     let block = GVec::new(); // Dummy block on pass 1
+                    let mut parm_types = GVec::new();
+                    for (_name, typ) in &cf.args {
+                        parm_types.push(typ.clone());
+                    }
                     let func = SFunc {
-                        dt: cf.rtyp.clone(),
+                        ret: cf.ret.clone(),
+                        parm_types,
                         block,
                     };
                     dict.funcs.push(func);
@@ -108,21 +123,17 @@ fn execute_schema_updates(
                     Table::drop(dt.table.id, dt.table.dt.clone(), ps);
                 }
             }
-
-            Statement::CreateSchema(cs) => {
-                if pass == 2 {
-                    let schema_id = dict.new_schema_id();
-                    let s = GString::from(cs.sname);
-                    dict.schemas.insert(s, schema_id);
-                    println!("Schema {} created", cs.sname);
-                }
-            }
             _ => todo!(),
         }
     }
 }
 
-fn execute_block(slist: &[(usize, Statement)], run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
+fn execute_block(
+    slist: &[(usize, Statement)],
+    run: &mut Run,
+    dict: &Dict,
+    ps: &mut PageSet,
+) -> Result<(), E> {
     let slen = run.stack.len(); // At end restore stack to this length.
     let mut result = Ok(());
     for (pos, s) in slist {
@@ -343,7 +354,13 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Re
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> LVec<i64> {
+fn ids(
+    t: &LRc<RefCell<Table>>,
+    wher: &Exp,
+    run: &mut Run,
+    dict: &Dict,
+    ps: &mut PageSet,
+) -> LVec<i64> {
     let mut result = LVec::new();
     {
         let table = t.borrow();
