@@ -34,6 +34,7 @@ pub enum Token {
     VBarEqual,
     PlusEqual,
     MinusEqual,
+    MinusGreater,
     Err,
 }
 
@@ -107,6 +108,9 @@ impl<'a> TokenReader<'a> {
                 if nc == b'=' {
                     self.getc();
                     Token::MinusEqual
+                } else if nc == b'>' {
+                    self.getc();
+                    Token::MinusGreater
                 } else {
                     Token::Minus
                 }

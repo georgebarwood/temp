@@ -2,19 +2,19 @@ use crate::*;
 
 pub fn test() {
     let sql: [&[u8]; 12] = [
-        b"create schema dbo",
-        b"create table dbo.cust(Name string,Age int,Height float,Email string)",
+        b"schema dbo",
+        b"table dbo.cust(Name string,Age int,Height float,Email string)",
         b"insert into dbo.cust(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
-        b"let name :string = 'Marilyn' insert into dbo.cust(Name,Age) values(name, 66)",
+        b"let name: string = 'Marilyn' insert into dbo.cust(Name,Age) values(name, 66)",
         b"insert into dbo.cust(Name,Age) values('Freddy', 2)",
-        b"update dbo.cust set Age = Age + 1 where Age != 66 and true",
+        b"update dbo.cust set Age = Age + 1 where Age != 66",
         b"delete from dbo.cust where Age > 70 or Age > 10 and Age < 20",
         b"select Id, Name, Age from dbo.cust where Age!=66 and Age > 5",
         // b"let x : int = 10 select Id, Name, x * Age from dbo.cust where Id < x",
         b"let x = 6 let f = 1 while x > 0 { set f = f * x set x = x - 1 } select 'f=', f",
         // b"drop table dbo.cust",
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
-        b"create fn dbo.test(x int,y int) returns int as set result = x * 2 + y",
+        b"fn dbo.test(x int,y int) -> int set result = x * 2 + y",
         b"select dbo.test(5,6)",
     ];
 

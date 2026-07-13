@@ -53,7 +53,7 @@ use parser::*;
 pub mod token;
 use token::*;
 
-/// [Dict]ionary of schemas, tables, [STable], [RContext], [Loc]al variable.
+/// [Dict]ionary of schemas, tables, [STable], [SFunc], [RContext], [Loc]al variable.
 pub mod schema;
 use schema::*;
 

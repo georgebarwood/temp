@@ -2,8 +2,6 @@ use crate::*;
 use datatype::DataType;
 use serde::*;
 
-// Statements.
-
 /// CREATE SCHEMA statement.
 #[derive(Debug)]
 pub struct CreateSchema<'a> {
@@ -187,7 +185,7 @@ pub enum Statement<'a> {
     DropTable(DropTable),
 }
 
-// Similar to Statement but storeable and shareable.
+/// Similar to [Statement] but storeable and shareable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GStatement {
     Let(GLet),
@@ -202,6 +200,7 @@ pub enum GStatement {
 }
 
 impl GStatement {
+    /// Convert [Statement] to [GStatement].
     pub fn from(stat: &Statement) -> Self {
         match stat {
             Statement::Let(x) => GStatement::Let(GLet {
@@ -277,6 +276,7 @@ impl GStatement {
     }
 }
 
+/// Convert list of Exp to list of GExp.
 pub fn gvals(list: &[Exp]) -> GVec<GExp> {
     let mut result = GVec::with_capacity(list.len());
     for e in list {
@@ -285,6 +285,7 @@ pub fn gvals(list: &[Exp]) -> GVec<GExp> {
     result
 }
 
+/// Convert list of Statements to list of GStatement.
 pub fn gblock(list: &[(usize, Statement)]) -> GVec<(usize, GStatement)> {
     let mut block = GVec::with_capacity(list.len());
     for (i, s) in list {

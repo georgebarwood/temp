@@ -39,7 +39,6 @@ impl<'a> Parser<'a> {
         let s = match ident {
             b"insert" => self.insert(),
             b"update" => self.update(),
-            b"create" => self.create(),
             b"drop" => self.drop(),
             b"select" => self.select(),
             b"delete" => self.delete(),
@@ -48,6 +47,9 @@ impl<'a> Parser<'a> {
             b"if" => self.p_if(),
             b"set" => self.set(),
             b"for" => self.p_for(),
+            b"table" => self.create_table(),
+            b"schema" => self.create_schema(),
+            b"fn" => self.create_fn(),
             _ => {
                 return Err(E::new("Unknown keyword"));
             }
@@ -640,16 +642,6 @@ impl<'a> Parser<'a> {
         Ok((table, sid, nid))
     }
 
-    fn create(&mut self) -> Result<Statement<'a>, E> {
-        let ident = self.read_ident()?;
-        match ident {
-            "table" => self.create_table(),
-            "schema" => self.create_schema(),
-            "fn" => self.create_fn(),
-            _ => Err(E::new("Expected table, schema, fn....")),
-        }
-    }
-
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
         let sname = self.read_ident()?;
         if self.pass == 1 && self.check_schema(sname).is_ok() {
@@ -682,7 +674,7 @@ impl<'a> Parser<'a> {
     }
 
     fn create_fn(&mut self) -> Result<Statement<'a>, E> {
-        // create fn schema.name ( param1 type1, param2 type2... ) returns rtyp as tatement
+        // create fn schema.name ( param1 type1, param2 type2... ) -> rtyp as tatement
         let schema = self.read_ident()?;
         let schema_id = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
@@ -705,14 +697,13 @@ impl<'a> Parser<'a> {
         }
         self.expect_token(Token::RBra)?;
 
-        let ret = if self.test_ident(b"returns")? {
+        let ret = if self.token == Token::MinusGreater {
+            self.next_token()?;
             self.datatype()?
         } else {
             DataType::Empty
         };
         let ret = Arc::new(ret);
-
-        self.expect_ident(b"as")?;
 
         let save = self.locs.len();
         self.locs.push(Loc {
@@ -723,9 +714,6 @@ impl<'a> Parser<'a> {
             let datatype = typ.clone();
             self.locs.push(Loc { name, datatype });
         }
-
-        // Only resolve names and check types on 2nd pass.
-        // First pass just creates function stubs in dict, with declared type info.
 
         let block = self.block()?;
         self.locs.truncate(save);
