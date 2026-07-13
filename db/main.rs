@@ -1,7 +1,7 @@
 /* What next plan...
 
    ORDER BY, Indexes.
-   +=, |= 
+   +=, |=
    Auto-conversion of ints to strings.
 
    How should CREATE FN work?

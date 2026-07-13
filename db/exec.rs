@@ -37,9 +37,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                     execute_schema_updates(pass, &slist, md, ps);
                     update_dict = true;
                 } else if pass == 2 {
-                    let mut run = Run {
-                        stack: LVec::new(),
-                    };
+                    let mut run = Run { stack: LVec::new() };
                     execute_block(&slist, &mut run, parser.dict, ps);
                 }
             }
@@ -53,12 +51,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     update_dict
 }
 
-fn execute_schema_updates(
-    pass: u8,
-    slist: &[Statement],
-    dict: &mut Dict,
-    ps: &mut PageSet,
-) {
+fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &mut PageSet) {
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         match s {
@@ -121,12 +114,7 @@ fn execute_schema_updates(
     }
 }
 
-fn execute_block(
-    slist: &[Statement],
-    run: &mut Run,
-    dict: &Dict,
-    ps: &mut PageSet,
-) {
+fn execute_block(slist: &[Statement], run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
         match s {
@@ -148,21 +136,18 @@ fn execute_block(
 fn exec_let(x: &Let, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     run.stack.push(v);
-    
 }
 
 fn exec_set(x: &Set, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     let ix = run.stack.len() - 1 - x.i;
     run.stack[ix] = v;
-    
 }
 
 fn exec_while(x: &While, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     while x.exp.eval(run, dict, ps).bool() {
         execute_block(&x.block, run, dict, ps);
     }
-    
 }
 
 fn exec_if(x: &If, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -175,7 +160,6 @@ fn exec_if(x: &If, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     } else if let Some(els) = &x.els {
         execute_block(els, run, dict, ps);
     }
-    
 }
 
 fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -225,8 +209,6 @@ fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         table.record_count(),
         row
     );
-
-    
 }
 
 fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -253,7 +235,6 @@ fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         }
         table.update(*id, &row, ps);
     }
-    
 }
 
 fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -262,7 +243,7 @@ fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let mut table = t.borrow_mut();
     for id in &ids {
         table.remove(*id, ps);
-    } 
+    }
 }
 
 fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -301,8 +282,6 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         }
         println!();
     }
-
-    
 }
 
 fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -332,17 +311,10 @@ fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
             run.stack.truncate(len);
         }
     }
-    
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids(
-    t: &RTable,
-    wher: &Exp,
-    run: &mut Run,
-    dict: &Dict,
-    ps: &mut PageSet,
-) -> LVec<i64> {
+fn ids(t: &RTable, wher: &Exp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> LVec<i64> {
     let mut result = LVec::new();
     {
         let table = t.borrow();
@@ -364,12 +336,7 @@ pub fn execute_fn(f: &SFunc, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     execute_gblock(&f.block, run, dict, ps);
 }
 
-fn execute_gblock(
-    slist: &[GStatement],
-    run: &mut Run,
-    dict: &Dict,
-    ps: &mut PageSet,
-) {
+fn execute_gblock(slist: &[GStatement], run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
         match s {
@@ -387,25 +354,21 @@ fn execute_gblock(
     run.stack.truncate(slen); // pop local variables from stack.
 }
 
-
 fn exec_glet(x: &GLet, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     run.stack.push(v);
-    
 }
 
 fn exec_gset(x: &GSet, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     let ix = run.stack.len() - 1 - x.i;
     run.stack[ix] = v;
-    
 }
 
 fn exec_gwhile(x: &GWhile, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     while x.exp.eval(run, dict, ps).bool() {
         execute_gblock(&x.block, run, dict, ps);
     }
-    
 }
 
 fn exec_gif(x: &GIf, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -418,7 +381,6 @@ fn exec_gif(x: &GIf, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     } else if let Some(els) = &x.els {
         execute_gblock(els, run, dict, ps);
     }
-    
 }
 
 fn exec_ginsert(ins: &GInsert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -468,8 +430,6 @@ fn exec_ginsert(ins: &GInsert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         table.record_count(),
         row
     );
-
-    
 }
 
 fn exec_gupdate(upd: &GUpdate, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -496,7 +456,6 @@ fn exec_gupdate(upd: &GUpdate, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         }
         table.update(*id, &row, ps);
     }
-    
 }
 
 fn exec_gdelete(del: &GDelete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -506,7 +465,6 @@ fn exec_gdelete(del: &GDelete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     for id in &ids {
         table.remove(*id, ps);
     }
-    
 }
 
 fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -545,8 +503,6 @@ fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         }
         println!();
     }
-
-    
 }
 
 fn exec_gfor(x: &GFor, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -576,18 +532,10 @@ fn exec_gfor(x: &GFor, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
             run.stack.truncate(len);
         }
     }
-    
 }
 
-
 /// Get a list of ids for records from table that satisfy where condition.
-fn gids(
-    t: &RTable,
-    wher: &GExp,
-    run: &mut Run,
-    dict: &Dict,
-    ps: &mut PageSet,
-) -> LVec<i64> {
+fn gids(t: &RTable, wher: &GExp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> LVec<i64> {
     let mut result = LVec::new();
     {
         let table = t.borrow();

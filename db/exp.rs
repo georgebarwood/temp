@@ -44,7 +44,7 @@ pub enum GExp {
 }
 
 impl<'a> Exp<'a> {
-    pub fn eval(&self, run: &mut Run, dict: &Dict, ps:&mut PageSet) -> Value {
+    pub fn eval(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Value {
         use Exp::*;
         match self {
             Bool(x) => Value::Bool(*x),
@@ -74,10 +74,9 @@ impl<'a> Exp<'a> {
                 execute_fn(f, run, dict, ps);
 
                 run.stack.truncate(save);
-                let result = run.stack.pop().unwrap(); // Pop return value.
-                result
+                run.stack.pop().unwrap() // Pop return value.
             }
-            Col(_) | Name(_) | FnCallByName(_, _, _) => panic!()
+            Col(_) | Name(_) | FnCallByName(_, _, _) => panic!(),
         }
     }
 
@@ -99,14 +98,14 @@ impl<'a> Exp<'a> {
                 let save = run.stack.len();
                 for e in args {
                     let v = e.eval_lr(run, dict, ps, lr);
+                    // println!("func arg={:?}", v);
                     run.stack.push(v);
                 }
                 // Execute the function.
                 execute_fn(f, run, dict, ps);
 
                 run.stack.truncate(save);
-                let result = run.stack.pop().unwrap(); // Pop return value.
-                result
+                run.stack.pop().unwrap() // Pop return value.
             }
             _ => self.eval(run, dict, ps),
         }
@@ -136,8 +135,7 @@ impl<'a> Exp<'a> {
                 execute_fn(f, run, dict, ps);
 
                 run.stack.truncate(save);
-                let result = run.stack.pop().unwrap(); // Pop return value.
-                result
+                run.stack.pop().unwrap() // Pop return value.
             }
             _ => self.eval(run, dict, ps),
         }
@@ -177,7 +175,7 @@ impl GExp {
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            Col(_) => panic!()
+            Col(_) => panic!(),
         }
     }
     pub fn eval_lr(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, lr: &mut LazyRow) -> Value {
@@ -258,7 +256,7 @@ impl GExp {
                 let args = gvals(args);
                 GExp::FnCall(*fid, args)
             }
-            Exp::Name(_) | Exp::FnCallByName(_, _, _) => panic!()
+            Exp::Name(_) | Exp::FnCallByName(_, _, _) => panic!(),
         }
     }
 }

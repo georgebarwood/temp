@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
         if let Some((i, vdt)) = local(&self.locs, name) {
             if self.pass == 2 {
                 let rctx = RContext::Local(&self.locs);
-                let edt = self.resolve(&mut exp, &rctx)?;
+                let edt = self.resolve(&mut exp, &rctx, 0)?;
                 self.check_types(vdt, edt)?;
             }
             Ok(Statement::Set(Set { i, exp }))
@@ -171,7 +171,7 @@ impl<'a> Parser<'a> {
             let val = &mut vals[i];
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(&from, &lctx);
-            let dt = self.resolve(val, &tctx)?;
+            let dt = self.resolve(val, &tctx, 0)?;
             let dt = Arc::new(dt.clone());
             self.locs.push(Loc { name, datatype: dt });
         }
@@ -210,7 +210,7 @@ impl<'a> Parser<'a> {
         let mut exp = self.exp(0)?;
         {
             let rctx = RContext::Local(&self.locs);
-            let edt = self.resolve(&mut exp, &rctx)?;
+            let edt = self.resolve(&mut exp, &rctx, 0)?;
 
             if let Some(dt) = &dt {
                 self.check_types(dt, edt)?;
@@ -274,7 +274,7 @@ impl<'a> Parser<'a> {
                 {
                     let lctx = RContext::Local(&self.locs);
                     let tctx = RContext::STable(table, &lctx);
-                    self.resolve(&mut exp, &tctx)?;
+                    self.resolve(&mut exp, &tctx, 0)?;
                 }
                 result.push((col_id, exp));
             } else {
@@ -304,7 +304,7 @@ impl<'a> Parser<'a> {
                 {
                     // Resolve variables and check expression has correct type.
                     let lctx = RContext::Local(&self.locs);
-                    let vt = self.resolve(&mut val, &lctx)?;
+                    let vt = self.resolve(&mut val, &lctx, 0)?;
                     let et = table.dt.dt_struct(cols[i]);
                     self.check_types(vt, et)?;
                 }
@@ -372,14 +372,20 @@ impl<'a> Parser<'a> {
 
     fn resolve_names(&self, vals: &mut [Exp<'a>], ctx: &RContext) -> Result<(), E> {
         for val in vals {
-            let _dt = self.resolve(val, ctx)?;
+            let _dt = self.resolve(val, ctx, 0)?;
         }
         Ok(())
     }
 
     /// Resolve any variable or column names in expression, returns datatype.
     /// Exp::Name expressions are changed to Exp::Col or Exp::Local nodes.
-    fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E>
+    /// aos = Arguments on Stack which increase distance to local variables.
+    fn resolve<'b>(
+        &self,
+        e: &mut Exp<'a>,
+        ctx: &'b RContext,
+        mut aos: usize,
+    ) -> Result<&'b DataType, E>
     where
         'a: 'b,
     {
@@ -396,12 +402,13 @@ impl<'a> Parser<'a> {
                         *e = Exp::Col(col);
                         dt
                     } else {
-                        self.resolve(e, nxt)?
+                        self.resolve(e, nxt, aos)?
                     }
                 }
                 RContext::Local(locs) => {
                     if let Some((i, typ)) = local(locs, name) {
-                        *e = Exp::Local(i);
+                        // println!("name={} aos={}", name, aos);
+                        *e = Exp::Local(i + aos);
                         typ
                     } else {
                         let e = &format!("Name not found : {:?}", name);
@@ -412,8 +419,8 @@ impl<'a> Parser<'a> {
             },
 
             Exp::Binary(op, lhs, rhs) => {
-                let t1 = self.resolve(lhs, ctx)?;
-                let t2 = self.resolve(rhs, ctx)?;
+                let t1 = self.resolve(lhs, ctx, aos)?;
+                let t2 = self.resolve(rhs, ctx, aos)?;
 
                 if !t1.similar(t2) {
                     // May want to do some conversion on rhs in future, e.g. int -> string.
@@ -438,8 +445,10 @@ impl<'a> Parser<'a> {
                     let f = &self.dict.funcs[*fid];
 
                     // Resolve the args, check types.
+                    aos += 1; // Allows for result.
                     for (i, e) in (&mut *args).into_iter().enumerate() {
-                        let t = self.resolve(e, ctx)?;
+                        let t = self.resolve(e, ctx, aos)?;
+                        aos += 1;
                         let pt = &f.parm_types[i];
                         if !pt.similar(t) {
                             return Err(E::new(&format!(
@@ -469,7 +478,7 @@ impl<'a> Parser<'a> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let rctx = RContext::Local(&self.locs);
-            let edt = self.resolve(&mut exp, &rctx)?;
+            let edt = self.resolve(&mut exp, &rctx, 0)?;
             if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
             }
@@ -482,7 +491,7 @@ impl<'a> Parser<'a> {
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(t, &lctx);
-            let edt = self.resolve(&mut exp, &tctx)?;
+            let edt = self.resolve(&mut exp, &tctx, 0)?;
             if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
             }
