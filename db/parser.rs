@@ -7,7 +7,7 @@ pub fn tos(s: &[u8]) -> &str {
 pub struct Parser<'a> {
     token: Token,
     tr: TokenReader<'a>,
-    dict: &'a Dict,
+    pub dict: &'a Dict,
     pub schema_updates: bool,
     non_schema_statements: bool,
     locs: LVec<Loc<'a>>, // Local variable declarations.
@@ -433,19 +433,21 @@ impl<'a> Parser<'a> {
                 // Use self.dict to resolve function.
                 if let Some(sid) = self.dict.schemas.get(*sname)
                     && let Some(nid) = self.dict.names.get(*fname)
-                    && let Some(f) = self.dict.funcs.get(&(*sid, *nid))
+                    && let Some(fid) = self.dict.func_lookup.get(&(*sid, *nid))
                 {
                     // ToDo : resolve the args, check types against f formal params
                     for e in &mut *args {
                         let _t = self.resolve(e, ctx)?;
                         // ToDo check t against f.args.
                     }
-                    let new = Exp::FnCall(f.clone(), std::mem::take(args));
+                    let new = Exp::FnCall(*fid, std::mem::take(args));
                     *e = new;
 
                     println!("Resolved FnCall {:?}", e);
+                    let f = &self.dict.funcs[*fid];
                     &f.dt
                 } else {
+                    println!("func lookup = {:?}", self.dict.func_lookup);
                     return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
                 }
             }
@@ -677,7 +679,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Dot)?;
         let fname = self.read_ident()?;
 
-        if self.check_function(schema_id, fname).is_ok() {
+        if self.pass == 1 && self.check_function(schema_id, fname).is_ok() {
             return Err(E::new("Function already exists"));
         }
 
@@ -809,10 +811,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_function(&self, schema: i64, fname: &str) -> Result<(Arc<SFunc>, i64), E> {
+    fn check_function(&self, schema: i64, fname: &str) -> Result<(usize, i64), E> {
         let nid = self.check_tfname(fname)?;
-        if let Some(func) = self.dict.funcs.get(&(schema, nid)) {
-            Ok((func.clone(), nid))
+        if let Some(fid) = self.dict.func_lookup.get(&(schema, nid)) {
+            Ok((*fid, nid))
         } else {
             Err(E::new("Function not found"))
         }

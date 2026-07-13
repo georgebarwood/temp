@@ -8,8 +8,6 @@ pub struct Run {
 
 /// Executes a batch of statements. Result is whether dict was updated.
 pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
-    let dc = dict.clone(); // Cloning an Arc is cheap.
-    let mut parser = Parser::new(source, &dc);
     let mut temp_dict = dict.clone();
     let mut update_dict = false;
 
@@ -19,6 +17,8 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     for pass in 1..=2
     // If we know there are no CREATE FNs, can skip pass 1.
     {
+        let parse_dict = temp_dict.clone();
+        let mut parser = Parser::new(source, &parse_dict);
         match parser.pass(pass) {
             Err(e) => {
                 let pos = parser.position();
@@ -42,7 +42,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                         stack: LVec::new(),
                         pos: 0,
                     };
-                    let result = execute_block(&slist, &mut run, ps);
+                    let result = execute_block(&slist, &mut run, parser.dict, ps);
                     if let Err(e) = &result {
                         println!("Error {} at {}", e.message, run.pos);
                         println!("Source: {}", tos(&source[0..run.pos]));
@@ -54,6 +54,8 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     }
     if update_dict {
         *dict = temp_dict;
+        // println!("dict updated to {:?}", &dict);
+        // println!();
     }
     update_dict
 }
@@ -81,27 +83,26 @@ fn execute_schema_updates(
 
             Statement::CreateFn(cf) => {
                 if pass == 1 {
-                    let func_id = 0; // ToDo
+                    let func_id = dict.funcs.len();
                     let nid = dict.new_name_id(cf.fname);
                     let block = GVec::new(); // Dummy block on pass 1
                     let func = SFunc {
-                        id: func_id,
                         dt: cf.rtyp.clone(),
                         block,
                     };
-                    dict.funcs.insert((cf.schema_id, nid), Arc::new(func));
+                    dict.funcs.push(func);
+                    dict.func_lookup.insert((cf.schema_id, nid), func_id);
                 } else {
                     // Set the function block.
                     let nid = dict.names.get(cf.fname).unwrap();
-                    let mut func = dict.funcs.remove(&(cf.schema_id, *nid)).unwrap();
-                    let mf = Arc::make_mut(&mut func);
-                    mf.block = gblock(&cf.block);
-                    dict.funcs.insert((cf.schema_id, *nid), func);
+                    let fid = dict.func_lookup.get(&(cf.schema_id, *nid)).unwrap();
+                    let f = &mut dict.funcs[*fid];
+                    f.block = gblock(&cf.block);
                 }
             }
 
             Statement::DropTable(dt) => {
-                if pass == 1 {
+                if pass == 2 {
                     dict.tables.remove(&(dt.schema_id, dt.name_id));
                     // Remove record from sys_schema using dt.table_id and ps.
                     Table::drop(dt.table.id, dt.table.dt.clone(), ps);
@@ -109,7 +110,7 @@ fn execute_schema_updates(
             }
 
             Statement::CreateSchema(cs) => {
-                if pass == 1 {
+                if pass == 2 {
                     let schema_id = dict.new_schema_id();
                     let s = GString::from(cs.sname);
                     dict.schemas.insert(s, schema_id);
@@ -121,7 +122,7 @@ fn execute_schema_updates(
     }
 }
 
-fn execute_block(slist: &[(usize, Statement)], run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn execute_block(slist: &[(usize, Statement)], run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     let slen = run.stack.len(); // At end restore stack to this length.
     let mut result = Ok(());
     for (pos, s) in slist {
@@ -129,15 +130,15 @@ fn execute_block(slist: &[(usize, Statement)], run: &mut Run, ps: &mut PageSet) 
         // println!("executing {:?} position={}", s, pos);
         run.pos = *pos;
         result = match s {
-            Statement::Insert(x) => exec_insert(x, run, ps),
-            Statement::Update(x) => exec_update(x, run, ps),
-            Statement::Delete(x) => exec_delete(x, run, ps),
-            Statement::Select(x) => exec_select(x, run, ps),
-            Statement::Let(x) => exec_let(x, run),
-            Statement::Set(x) => exec_set(x, run),
-            Statement::While(x) => exec_while(x, run, ps),
-            Statement::If(x) => exec_if(x, run, ps),
-            Statement::For(x) => exec_for(x, run, ps),
+            Statement::Insert(x) => exec_insert(x, run, dict, ps),
+            Statement::Update(x) => exec_update(x, run, dict, ps),
+            Statement::Delete(x) => exec_delete(x, run, dict, ps),
+            Statement::Select(x) => exec_select(x, run, dict, ps),
+            Statement::Let(x) => exec_let(x, run, dict),
+            Statement::Set(x) => exec_set(x, run, dict),
+            Statement::While(x) => exec_while(x, run, dict, ps),
+            Statement::If(x) => exec_if(x, run, dict, ps),
+            Statement::For(x) => exec_for(x, run, dict, ps),
             _ => todo!(),
         };
         if result.is_err() {
@@ -148,13 +149,13 @@ fn execute_block(slist: &[(usize, Statement)], run: &mut Run, ps: &mut PageSet) 
     result
 }
 
-fn exec_let(x: &Let, run: &mut Run) -> Result<(), E> {
-    let v = x.exp.eval(run);
+fn exec_let(x: &Let, run: &mut Run, dict: &Dict) -> Result<(), E> {
+    let v = x.exp.eval(run, dict);
     run.stack.push(v);
     Ok(())
 }
 
-fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     // Iterate through table. For each row with valid where condition,
     // push evaluated exps on the stack and execute block.
 
@@ -165,7 +166,7 @@ fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         let mut lr = table.lazy_row(b);
 
         let ok = if let Some(wher) = &x.wher {
-            let v = wher.eval_lr(run, &mut lr, ps);
+            let v = wher.eval_lr(run, dict, &mut lr, ps);
             v.bool()
         } else {
             true
@@ -174,50 +175,50 @@ fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         if ok {
             let len = run.stack.len();
             for e in &x.vals {
-                let v = e.eval_lr(run, &mut lr, ps);
+                let v = e.eval_lr(run, dict, &mut lr, ps);
                 run.stack.push(v);
             }
-            execute_block(&x.block, run, ps)?;
+            execute_block(&x.block, run, dict, ps)?;
             run.stack.truncate(len);
         }
     }
     Ok(())
 }
 
-fn exec_set(x: &Set, run: &mut Run) -> Result<(), E> {
-    let v = x.exp.eval(run);
+fn exec_set(x: &Set, run: &mut Run, dict: &Dict) -> Result<(), E> {
+    let v = x.exp.eval(run, dict);
     let ix = run.stack.len() - 1 - x.i;
     run.stack[ix] = v;
     Ok(())
 }
 
-fn exec_if(x: &If, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_if(x: &If, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     let ok = {
-        let v = x.exp.eval(run);
+        let v = x.exp.eval(run, dict);
         v.bool()
     };
     if ok {
-        execute_block(&x.block, run, ps)?;
+        execute_block(&x.block, run, dict, ps)?;
     } else if let Some(els) = &x.els {
-        execute_block(els, run, ps)?;
+        execute_block(els, run, dict, ps)?;
     }
     Ok(())
 }
 
-fn exec_while(x: &While, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
-    while x.exp.eval(run).bool() {
-        execute_block(&x.block, run, ps)?;
+fn exec_while(x: &While, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
+    while x.exp.eval(run, dict).bool() {
+        execute_block(&x.block, run, dict, ps)?;
     }
     Ok(())
 }
 
-fn exec_insert(ins: &Insert, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     // println!("ins={:?}", ins);
 
     // First evaluate the expressions.
     let mut ee = LVec::with_capacity(ins.vals.len());
     for e in &ins.vals {
-        ee.push(e.eval(run));
+        ee.push(e.eval(run, dict));
     }
     // println!("ins ee={:?}", &ee );
 
@@ -264,12 +265,12 @@ fn exec_insert(ins: &Insert, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_update(upd: &Update, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     // println!("upd={:?}", upd);
 
     let t = ps.load_table(upd.table.id, &upd.table.dt);
 
-    let ids = ids(&t, &upd.wher, run, ps);
+    let ids = ids(&t, &upd.wher, run, dict, ps);
 
     // println!("ids to be updated={:?}", ids);
     let mut table = t.borrow_mut();
@@ -278,7 +279,7 @@ fn exec_update(upd: &Update, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         let mut vals = LVec::new();
         {
             for (_col, e) in &upd.assigns {
-                let v = e.eval_vals(run, row.list());
+                let v = e.eval_vals(run, dict, row.list());
                 vals.push(v);
             }
         }
@@ -291,9 +292,9 @@ fn exec_update(upd: &Update, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_delete(del: &Delete, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     let t = ps.load_table(del.table.id, &del.table.dt);
-    let ids = ids(&t, &del.wher, run, ps);
+    let ids = ids(&t, &del.wher, run, dict, ps);
     let mut table = t.borrow_mut();
     for id in &ids {
         table.remove(*id, ps);
@@ -301,7 +302,7 @@ fn exec_delete(del: &Delete, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     Ok(())
 }
 
-fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
+fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Result<(), E> {
     // println!("exec_sel sel={:?}", sel);
 
     if let Some(f) = &sel.from {
@@ -313,7 +314,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
             let ok = if let Some(wher) = &sel.wher {
-                wher.eval_lr(run, &mut lr, ps).bool()
+                wher.eval_lr(run, dict, &mut lr, ps).bool()
             } else {
                 true
             };
@@ -321,7 +322,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
             if ok {
                 print!("Selected vals=");
                 for e in &sel.vals {
-                    let v = e.eval_lr(run, &mut lr, ps);
+                    let v = e.eval_lr(run, dict, &mut lr, ps);
                     print!(" {:?} ", v);
                 }
                 println!();
@@ -332,7 +333,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     } else {
         // SELECT with no FROM
         for e in &sel.vals {
-            let v = e.eval(run);
+            let v = e.eval(run, dict);
             print!(" {:?} ", v);
         }
         println!();
@@ -342,14 +343,14 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, run: &mut Run, ps: &mut PageSet) -> LVec<i64> {
+fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> LVec<i64> {
     let mut result = LVec::new();
     {
         let table = t.borrow();
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             let mut lr = table.lazy_row(b);
-            if wher.eval_lr(run, &mut lr, ps).bool() {
+            if wher.eval_lr(run, dict, &mut lr, ps).bool() {
                 let id = lr.item(0, ps).int();
                 result.push(id);
             }
@@ -359,19 +360,19 @@ fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, run: &mut Run, ps: &mut PageSet) -> 
 }
 
 // Note: statements are GStatement rather than Statement, so need their own execution functions.
-pub fn execute_fn(f: &SFunc, run: &mut Run) -> Result<(), E> {
+pub fn execute_fn(f: &SFunc, run: &mut Run, dict: &Dict) -> Result<(), E> {
     println!("execute_fn f={:?}", f);
     for (_pos, s) in &f.block {
         match s {
-            GStatement::Set(x) => exec_gset(x, run)?,
+            GStatement::Set(x) => exec_gset(x, run, dict)?,
             _ => todo!(),
         }
     }
     Ok(())
 }
 
-fn exec_gset(x: &GSet, run: &mut Run) -> Result<(), E> {
-    let v = x.exp.eval(run);
+fn exec_gset(x: &GSet, run: &mut Run, dict: &Dict) -> Result<(), E> {
+    let v = x.exp.eval(run, dict);
     let ix = run.stack.len() - 1 - x.i;
     run.stack[ix] = v;
     Ok(())

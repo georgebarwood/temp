@@ -10,7 +10,8 @@ pub struct Dict {
     pub schemas: HashMap<GString, i64>,
     pub names: HashMap<GString, i64>,
     pub tables: HashMap<(i64, i64), Arc<STable>>,
-    pub funcs: HashMap<(i64, i64), Arc<SFunc>>,
+    pub func_lookup: HashMap<(i64, i64), usize>, // Lookup func ix from schema and name id.
+    pub funcs: GVec<SFunc>,
     last_schema_id: i64,
     last_name_id: i64,
     last_table_id: i64,
@@ -43,6 +44,8 @@ impl Dict {
 
     /// Serialize as bytes, with pre-pended id.
     fn to_bytes_id(&self, id: u64) -> LVec<u8> {
+        // Should first prepare self.funcs for serialisation.
+    
         let mut result = LVec::new();
         result.extend_from_slice(&id.to_le_bytes());
         postcard::to_io(self, &mut result).unwrap();
@@ -51,7 +54,7 @@ impl Dict {
 
     /// Deserialise from bytes, first 8 bytes are skipped (id field).
     fn from_bytes_id(b: &[u8]) -> Self {
-        postcard::from_bytes(&b[8..]).unwrap()
+        postcard::from_bytes(&b[8..]).unwrap()       
     }
 
     /// Save dict to sys store.
@@ -72,6 +75,9 @@ impl Dict {
         if let Some(mut sdata) = sys_store.get(&key, ps) {
             let bytes = sdata.bytes();
             let dict = Dict::from_bytes_id(&bytes);
+
+            // Here should resolve any calls in funcs.
+            
             Arc::new(dict)
         } else {
             panic!()
@@ -95,7 +101,6 @@ impl STable {
 /// Schema Stored Function - result DataType, Params and Statements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc {
-    pub id: i64,
     /// result datatype
     pub dt: Arc<DataType>,
     // pub parms: todo
