@@ -24,7 +24,7 @@ pub struct CreateFn<'a> {
     pub schema_id: i64,
     pub fname: &'a str,
     pub rtyp: Arc<DataType>,
-    pub args: LVec< (&'a str, Arc<DataType>) >,
+    pub args: LVec<(&'a str, Arc<DataType>)>,
     pub block: LVec<(usize, Statement<'a>)>,
 }
 
@@ -44,7 +44,7 @@ pub struct Insert<'a> {
     pub vals: LVec<Exp<'a>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GInsert {
     pub table: Arc<STable>,
     pub cols: GVec<usize>,
@@ -60,12 +60,12 @@ pub struct Select<'a> {
     pub order_by: Option<LVec<(Exp<'a>, bool)>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GSelect {
     pub vals: GVec<GExp>,
     pub from: Option<Arc<STable>>,
     pub wher: Option<GExp>,
-    pub order_by: Option<LVec<(GExp, bool)>>,
+    pub order_by: Option<GVec<(GExp, bool)>>,
 }
 
 /// FOR statement.
@@ -78,7 +78,7 @@ pub struct For<'a> {
     pub block: LVec<(usize, Statement<'a>)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GFor {
     pub vals: GVec<GExp>,
     pub from: Arc<STable>,
@@ -95,7 +95,7 @@ pub struct Update<'a> {
     pub wher: Exp<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GUpdate {
     pub assigns: GVec<(usize, GExp)>, // col num, Exp
     pub table: Arc<STable>,
@@ -109,7 +109,7 @@ pub struct Delete<'a> {
     pub wher: Exp<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GDelete {
     pub table: Arc<STable>,
     pub wher: GExp,
@@ -121,7 +121,7 @@ pub struct Let<'a> {
     pub exp: Exp<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GLet {
     pub exp: GExp,
 }
@@ -133,7 +133,7 @@ pub struct Set<'a> {
     pub exp: Exp<'a>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GSet {
     pub i: usize,
     pub exp: GExp,
@@ -146,7 +146,7 @@ pub struct While<'a> {
     pub block: LVec<(usize, Statement<'a>)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GWhile {
     pub exp: GExp,
     pub block: GVec<(usize, GStatement)>,
@@ -160,7 +160,7 @@ pub struct If<'a> {
     pub els: Option<LVec<(usize, Statement<'a>)>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GIf {
     pub exp: GExp,
     pub block: GVec<(usize, GStatement)>,
@@ -188,7 +188,7 @@ pub enum Statement<'a> {
 }
 
 // Similar to Statement but storeable and shareable.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GStatement {
     Let(GLet),
     Set(GSet),
@@ -277,16 +277,15 @@ impl GStatement {
     }
 }
 
-fn gvals(list: &[Exp]) -> GVec<GExp>
-{
+pub fn gvals(list: &[Exp]) -> GVec<GExp> {
     let mut result = GVec::with_capacity(list.len());
     for e in list {
-       result.push( GExp::from(e) );
+        result.push(GExp::from(e));
     }
     result
 }
 
-fn gblock(list: &[(usize, Statement)]) -> GVec<(usize, GStatement)> {
+pub fn gblock(list: &[(usize, Statement)]) -> GVec<(usize, GStatement)> {
     let mut block = GVec::with_capacity(list.len());
     for (i, s) in list {
         block.push((*i, GStatement::from(s)));

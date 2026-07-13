@@ -1,3 +1,4 @@
+use crate::{Operator, Run, SFunc, execute_fn, gvals};
 use serde::*;
 use tablestg::*;
 
@@ -18,10 +19,14 @@ pub enum Exp<'a> {
     Local(usize),
     /// Binary expression.
     Binary(Operator, LBox<Exp<'a>>, LBox<Exp<'a>>),
+    /// Function call (unresolved). Schema, fname, args.
+    FnCallByName(&'a str, &'a str, LVec<Exp<'a>>),
+    /// Function call (fully resolved).
+    FnCall(Arc<SFunc>, LVec<Exp<'a>>),
 }
 
 /// Parsed Expression (for shared stored functions).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GExp {
     /// Bool constant
     Bool(bool),
@@ -35,175 +40,123 @@ pub enum GExp {
     Local(usize),
     /// Binary expression.
     Binary(Operator, GBox<GExp>, GBox<GExp>),
-}
-
-/// Arithmetic and other binary operators.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum Operator {
-    None,
-    Equal,
-    NotEqual,
-    Greater,
-    Less,
-    GreaterEqual,
-    LessEqual,
-    Plus,
-    Minus,
-    Multiply,
-    Divide,
-    Remainder,
-    Concat,
-    And,
-    Or,
-}
-
-impl Operator {
-    pub fn yields_bool(self) -> bool {
-        use Operator::*;
-        matches!(
-            self,
-            Equal | NotEqual | Greater | Less | GreaterEqual | LessEqual | And | Or
-        )
-    }
-    pub fn eval(&self, x: &Value, y: &Value) -> Value {
-        if let Value::Int(x) = &x
-            && let Value::Int(y) = &y
-        {
-            match self {
-                Operator::Equal => Value::Bool(x == y),
-                Operator::NotEqual => Value::Bool(x != y),
-                Operator::Less => Value::Bool(x < y),
-                Operator::Greater => Value::Bool(x > y),
-                Operator::LessEqual => Value::Bool(x <= y),
-                Operator::GreaterEqual => Value::Bool(x >= y),
-
-                Operator::Plus => Value::Int(x + y),
-                Operator::Minus => Value::Int(x - y),
-                Operator::Multiply => Value::Int(x * y),
-                Operator::Divide => Value::Int(x / y),
-                Operator::Remainder => Value::Int(x % y),
-                _ => todo!(),
-            }
-        } else if let Value::Bool(x) = &x
-            && let Value::Bool(y) = &y
-        {
-            match self {
-                Operator::And => Value::Bool(*x && *y),
-                Operator::Or => Value::Bool(*x || *y),
-                _ => todo!(),
-            }
-        } else if let Value::String(x) = &x
-            && let Value::String(y) = &y
-        {
-            match self {
-                Operator::Concat => concat(x, y),
-                _ => todo!(),
-            }
-        } else {
-            println!("self={:?}", self);
-            todo!()
-        }
-    }
-}
-
-fn concat(x: &str, y: &str) -> Value {
-    let mut s = LString::with_capacity(x.len() + y.len());
-    s.push_str(x);
-    s.push_str(y);
-    let s = LRc::new(s);
-    Value::String(s)
+    /// Function call (unresolved). Schema id, Name id, args.
+    FnCallById(i64, i64, GVec<GExp>), // These are resolved after deserialising.
+    /// Function call (fully resolved). // These are changed to ById before serialising.
+    FnCall(Arc<SFunc>, GVec<GExp>),
 }
 
 impl<'a> Exp<'a> {
-    pub fn eval(&self, locals: &'a [Value]) -> Value {
+    pub fn eval(&self, run: &mut Run) -> Value {
         use Exp::*;
         match self {
             Bool(x) => Value::Bool(*x),
             Int(x) => Value::Int(*x),
             String(x) => Value::String(LRc::new(LString::from(*x))),
             Local(x) => {
-                let ix = locals.len() - (x + 1);
-                locals[ix].clone()
+                let ix = run.stack.len() - (x + 1);
+                run.stack[ix].clone()
             }
             Binary(op, x, y) => {
-                let x = x.eval(locals);
-                let y = y.eval(locals);
+                let x = x.eval(run);
+                let y = y.eval(run);
                 op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                println!("FnCall");
+
+                // Push default value for result onto stack.
+                let def = f.dt.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval(run);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run).unwrap(); // Should handle any error by returning it.
+
+                run.stack.truncate(save);
+                let result = run.stack.pop().unwrap(); // Pop return value.
+                result
             }
             Col(_) => panic!(),
             Name(_) => panic!(),
+            _ => todo!("Eval not implemented for {:?}", self),
         }
     }
 
-    pub fn eval_lr(&self, locals: &'a [Value], lr: &mut LazyRow, ps: &mut PageSet) -> Value {
+    pub fn eval_lr(&self, run: &mut Run, lr: &mut LazyRow, ps: &mut PageSet) -> Value {
         use Exp::*;
         match self {
             Col(x) => lr.item(*x, ps),
             Binary(op, x, y) => {
-                let x = x.eval_lr(locals, lr, ps);
-                let y = y.eval_lr(locals, lr, ps);
+                let x = x.eval_lr(run, lr, ps);
+                let y = y.eval_lr(run, lr, ps);
                 op.eval(&x, &y)
             }
-            _ => self.eval(locals),
+            _ => self.eval(run),
         }
     }
 
-    pub fn eval_vals(&self, locals: &[Value], vals: &[Value]) -> Value {
+    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
         use Exp::*;
         match self {
             Col(x) => vals[*x].clone(),
             Binary(op, x, y) => {
-                let x = x.eval_vals(locals, vals);
-                let y = y.eval_vals(locals, vals);
+                let x = x.eval_vals(run, vals);
+                let y = y.eval_vals(run, vals);
                 op.eval(&x, &y)
             }
-            _ => self.eval(locals),
+            _ => self.eval(run),
         }
     }
 }
 
 impl GExp {
-    pub fn eval(&self, locals: &[Value]) -> Value {
+    pub fn eval(&self, run: &mut Run) -> Value {
         use GExp::*;
         match self {
             Bool(x) => Value::Bool(*x),
             Int(x) => Value::Int(*x),
             String(x) => Value::String(LRc::new(LString::from(&**x))),
             Local(x) => {
-                let ix = locals.len() - (x + 1);
-                locals[ix].clone()
+                let ix = run.stack.len() - (x + 1);
+                run.stack[ix].clone()
             }
             Binary(op, x, y) => {
-                let x = x.eval(locals);
-                let y = y.eval(locals);
+                let x = x.eval(run);
+                let y = y.eval(run);
                 op.eval(&x, &y)
             }
             Col(_) => panic!(),
+            _ => todo!(),
         }
     }
-    pub fn eval_lr(&self, locals: &[Value], lr: &mut LazyRow, ps: &mut PageSet) -> Value {
+    pub fn eval_lr(&self, run: &mut Run, lr: &mut LazyRow, ps: &mut PageSet) -> Value {
         use GExp::*;
         match self {
             Col(x) => lr.item(*x, ps),
             Binary(op, x, y) => {
-                let x = x.eval_lr(locals, lr, ps);
-                let y = y.eval_lr(locals, lr, ps);
+                let x = x.eval_lr(run, lr, ps);
+                let y = y.eval_lr(run, lr, ps);
                 op.eval(&x, &y)
             }
-            _ => self.eval(locals),
+            _ => self.eval(run),
         }
     }
 
-    pub fn eval_vals(&self, locals: &[Value], vals: &[Value]) -> Value {
+    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
         use GExp::*;
         match self {
             Col(x) => vals[*x].clone(),
             Binary(op, x, y) => {
-                let x = x.eval_vals(locals, vals);
-                let y = y.eval_vals(locals, vals);
+                let x = x.eval_vals(run, vals);
+                let y = y.eval_vals(run, vals);
                 op.eval(&x, &y)
             }
-            _ => self.eval(locals),
+            _ => self.eval(run),
         }
     }
 }
@@ -222,6 +175,11 @@ impl GExp {
                 let rhs = GBox::new(GExp::from(rhs));
                 GExp::Binary(*op, lhs, rhs)
             }
+            Exp::FnCall(f, args) => {
+                let args = gvals(args);
+                GExp::FnCall(f.clone(), args)
+            }
+            _ => todo!(),
         }
     }
 }

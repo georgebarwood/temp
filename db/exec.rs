@@ -1,77 +1,120 @@
 use crate::*;
 use std::cell::RefCell;
 
-struct Run {
-    stack: LVec<Value>,
-    pos: usize, // Of error.
+pub struct Run {
+    pub stack: LVec<Value>,
+    pub pos: usize, // Error position.
 }
 
 /// Executes a batch of statements. Result is whether dict was updated.
 pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
-    let dc = dict.clone();
+    let dc = dict.clone(); // Cloning an Arc is cheap.
     let mut parser = Parser::new(source, &dc);
-
-    let mut dict_updated = false;
+    let mut temp_dict = dict.clone();
+    let mut update_dict = false;
 
     println!();
     println!("Go source={}", tos(source));
 
-    // Should be a loop here - parser.statements can return without exhausting input ("GO").
-    match parser.statements() {
-        Err(e) => {
-            let pos = parser.position();
-            println!("Error {} at input position {}", e.message, pos);
-            println!("Source: {}", tos(&source[0..pos]));
-            println!();
-        }
-        Ok(slist) => {
-            if parser.schema_updates {
-                // println!("statements={:#?}", &slist);
-                let md = Arc::make_mut(dict);
-                execute_schema_updates(&slist, md, ps);
-                dict_updated = true;
-            } else {
-                let mut run = Run {
-                    stack: LVec::new(),
-                    pos: 0,
-                };
-                let result = execute_block(&slist, &mut run, ps);
-                if let Err(e) = &result {
-                    println!("Error {} at {}", e.message, run.pos);
-                    println!("Source: {}", tos(&source[0..run.pos]));
-                    println!();
+    for pass in 1..=2
+    // If we know there are no CREATE FNs, can skip pass 1.
+    {
+        match parser.pass(pass) {
+            Err(e) => {
+                let pos = parser.position();
+                println!(
+                    "Pass {} Error {} at input position {}",
+                    pass, e.message, pos
+                );
+                println!("Source: {}", tos(&source[0..pos]));
+                println!();
+                update_dict = false;
+                break;
+            }
+            Ok(slist) => {
+                if parser.schema_updates {
+                    // println!("statements={:#?}", &slist);
+                    let md = Arc::make_mut(&mut temp_dict);
+                    execute_schema_updates(pass, &slist, md, ps);
+                    update_dict = true;
+                } else if pass == 2 {
+                    let mut run = Run {
+                        stack: LVec::new(),
+                        pos: 0,
+                    };
+                    let result = execute_block(&slist, &mut run, ps);
+                    if let Err(e) = &result {
+                        println!("Error {} at {}", e.message, run.pos);
+                        println!("Source: {}", tos(&source[0..run.pos]));
+                        println!();
+                    }
                 }
             }
         }
     }
-    dict_updated
+    if update_dict {
+        *dict = temp_dict;
+    }
+    update_dict
 }
 
-fn execute_schema_updates(slist: &[(usize, Statement)], dict: &mut Dict, ps: &mut PageSet) {
+fn execute_schema_updates(
+    pass: u8,
+    slist: &[(usize, Statement)],
+    dict: &mut Dict,
+    ps: &mut PageSet,
+) {
     for (_pos, s) in slist {
-        println!("executing {:?}", s);
+        println!("Pass={} executing {:?}", pass, s);
         match s {
             Statement::CreateTable(ct) => {
-                let id = dict.new_table_id();
-                let table = STable {
-                    id,
-                    dt: ct.col_defs.clone(),
-                };
-                let nid = dict.new_name_id(ct.tname);
-                dict.tables.insert((ct.schema_id, nid), Arc::new(table));
+                if pass == 1 {
+                    let id = dict.new_table_id();
+                    let table = STable {
+                        id,
+                        dt: ct.col_defs.clone(),
+                    };
+                    let nid = dict.new_name_id(ct.tname);
+                    dict.tables.insert((ct.schema_id, nid), Arc::new(table));
+                }
+            }
+
+            Statement::CreateFn(cf) => {
+                if pass == 1 {
+                    let func_id = 0; // ToDo
+                    let nid = dict.new_name_id(cf.fname);
+                    let block = GVec::new(); // Dummy block on pass 1
+                    let func = SFunc {
+                        id: func_id,
+                        dt: cf.rtyp.clone(),
+                        block,
+                    };
+                    dict.funcs.insert((cf.schema_id, nid), Arc::new(func));
+                } else {
+                    // Set the function block.
+                    let nid = dict.names.get(cf.fname).unwrap();
+                    let mut func = dict.funcs.remove(&(cf.schema_id, *nid)).unwrap();
+                    let mf = Arc::make_mut(&mut func);
+                    mf.block = gblock(&cf.block);
+                    dict.funcs.insert((cf.schema_id, *nid), func);
+                }
             }
 
             Statement::DropTable(dt) => {
-                dict.tables.remove(&(dt.schema_id, dt.name_id));
-                // Remove record from sys_schema using dt.table_id and ps.
-                Table::drop(dt.table.id, dt.table.dt.clone(), ps);
+                if pass == 1 {
+                    dict.tables.remove(&(dt.schema_id, dt.name_id));
+                    // Remove record from sys_schema using dt.table_id and ps.
+                    Table::drop(dt.table.id, dt.table.dt.clone(), ps);
+                }
             }
 
             Statement::CreateSchema(cs) => {
-                let schema_id = dict.new_schema_id();
-                let s = GString::from(cs.sname);
-                dict.schemas.insert(s, schema_id);
-                println!("Schema {} created", cs.sname);
+                if pass == 1 {
+                    let schema_id = dict.new_schema_id();
+                    let s = GString::from(cs.sname);
+                    dict.schemas.insert(s, schema_id);
+                    println!("Schema {} created", cs.sname);
+                }
             }
             _ => todo!(),
         }
@@ -106,7 +149,7 @@ fn execute_block(slist: &[(usize, Statement)], run: &mut Run, ps: &mut PageSet) 
 }
 
 fn exec_let(x: &Let, run: &mut Run) -> Result<(), E> {
-    let v = x.exp.eval(&run.stack);
+    let v = x.exp.eval(run);
     run.stack.push(v);
     Ok(())
 }
@@ -122,7 +165,7 @@ fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         let mut lr = table.lazy_row(b);
 
         let ok = if let Some(wher) = &x.wher {
-            let v = wher.eval_lr(&run.stack, &mut lr, ps);
+            let v = wher.eval_lr(run, &mut lr, ps);
             v.bool()
         } else {
             true
@@ -131,7 +174,7 @@ fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         if ok {
             let len = run.stack.len();
             for e in &x.vals {
-                let v = e.eval_lr(&run.stack, &mut lr, ps);
+                let v = e.eval_lr(run, &mut lr, ps);
                 run.stack.push(v);
             }
             execute_block(&x.block, run, ps)?;
@@ -142,7 +185,7 @@ fn exec_for(x: &For, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
 }
 
 fn exec_set(x: &Set, run: &mut Run) -> Result<(), E> {
-    let v = x.exp.eval(&run.stack);
+    let v = x.exp.eval(run);
     let ix = run.stack.len() - 1 - x.i;
     run.stack[ix] = v;
     Ok(())
@@ -150,7 +193,7 @@ fn exec_set(x: &Set, run: &mut Run) -> Result<(), E> {
 
 fn exec_if(x: &If, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     let ok = {
-        let v = x.exp.eval(&run.stack);
+        let v = x.exp.eval(run);
         v.bool()
     };
     if ok {
@@ -162,13 +205,7 @@ fn exec_if(x: &If, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
 }
 
 fn exec_while(x: &While, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
-    loop {
-        {
-            let v = x.exp.eval(&run.stack);
-            if !v.bool() {
-                break;
-            };
-        }
+    while x.exp.eval(run).bool() {
         execute_block(&x.block, run, ps)?;
     }
     Ok(())
@@ -180,7 +217,7 @@ fn exec_insert(ins: &Insert, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     // First evaluate the expressions.
     let mut ee = LVec::with_capacity(ins.vals.len());
     for e in &ins.vals {
-        ee.push(e.eval(&run.stack));
+        ee.push(e.eval(run));
     }
     // println!("ins ee={:?}", &ee );
 
@@ -241,7 +278,7 @@ fn exec_update(upd: &Update, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
         let mut vals = LVec::new();
         {
             for (_col, e) in &upd.assigns {
-                let v = e.eval_vals(&run.stack, row.list());
+                let v = e.eval_vals(run, row.list());
                 vals.push(v);
             }
         }
@@ -276,7 +313,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
             let ok = if let Some(wher) = &sel.wher {
-                wher.eval_lr(&run.stack, &mut lr, ps).bool()
+                wher.eval_lr(run, &mut lr, ps).bool()
             } else {
                 true
             };
@@ -284,7 +321,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
             if ok {
                 print!("Selected vals=");
                 for e in &sel.vals {
-                    let v = e.eval_lr(&run.stack, &mut lr, ps);
+                    let v = e.eval_lr(run, &mut lr, ps);
                     print!(" {:?} ", v);
                 }
                 println!();
@@ -295,7 +332,7 @@ fn exec_select(sel: &Select, run: &mut Run, ps: &mut PageSet) -> Result<(), E> {
     } else {
         // SELECT with no FROM
         for e in &sel.vals {
-            let v = e.eval(&run.stack);
+            let v = e.eval(run);
             print!(" {:?} ", v);
         }
         println!();
@@ -312,11 +349,30 @@ fn ids(t: &LRc<RefCell<Table>>, wher: &Exp, run: &mut Run, ps: &mut PageSet) -> 
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             let mut lr = table.lazy_row(b);
-            if wher.eval_lr(&run.stack, &mut lr, ps).bool() {
+            if wher.eval_lr(run, &mut lr, ps).bool() {
                 let id = lr.item(0, ps).int();
                 result.push(id);
             }
         }
     }
     result
+}
+
+// Note: statements are GStatement rather than Statement, so need their own execution functions.
+pub fn execute_fn(f: &SFunc, run: &mut Run) -> Result<(), E> {
+    println!("execute_fn f={:?}", f);
+    for (_pos, s) in &f.block {
+        match s {
+            GStatement::Set(x) => exec_gset(x, run)?,
+            _ => todo!(),
+        }
+    }
+    Ok(())
+}
+
+fn exec_gset(x: &GSet, run: &mut Run) -> Result<(), E> {
+    let v = x.exp.eval(run);
+    let ix = run.stack.len() - 1 - x.i;
+    run.stack[ix] = v;
+    Ok(())
 }

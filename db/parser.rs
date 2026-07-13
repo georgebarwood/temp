@@ -11,6 +11,7 @@ pub struct Parser<'a> {
     pub schema_updates: bool,
     non_schema_statements: bool,
     locs: LVec<Loc<'a>>, // Local variable declarations.
+    pass: u8,            // 1 or 2, pass 1 doesn't resolve names or do type checking.
 }
 
 impl<'a> Parser<'a> {
@@ -23,7 +24,15 @@ impl<'a> Parser<'a> {
             schema_updates: false,
             non_schema_statements: false,
             locs: LVec::new(),
+            pass: 1,
         }
+    }
+
+    pub fn pass(&mut self, pass: u8) -> Result<LVec<(usize, Statement<'a>)>, E> {
+        self.pass = pass;
+        self.tr.pos = 0;
+        self.locs.clear();
+        self.statements()
     }
 
     fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
@@ -118,7 +127,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::Equal)?;
         let mut exp = self.exp(0)?;
         if let Some((i, vdt)) = local(&self.locs, name) {
-            {
+            if self.pass == 2 {
                 let rctx = RContext::Local(&self.locs);
                 let edt = self.resolve(&mut exp, &rctx)?;
                 self.check_types(vdt, edt)?;
@@ -130,7 +139,7 @@ impl<'a> Parser<'a> {
     }
 
     fn check_types(&self, x: &DataType, y: &DataType) -> Result<(), E> {
-        if x.similar(y) {
+        if self.pass == 1 || x.similar(y) {
             Ok(())
         } else {
             let msg = format!("Type mismatch expected {:?} got {:?}", x, y);
@@ -370,7 +379,13 @@ impl<'a> Parser<'a> {
 
     /// Resolve any variable or column names in expression, returns datatype.
     /// Exp::Name expressions are changed to Exp::Col or Exp::Local nodes.
-    fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E> {
+    fn resolve<'b>(&self, e: &mut Exp<'a>, ctx: &'b RContext) -> Result<&'b DataType, E>
+    where
+        'a: 'b,
+    {
+        if self.pass == 1 {
+            return Ok(&DataType::Empty);
+        }
         let dt = match e {
             Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
@@ -414,19 +429,35 @@ impl<'a> Parser<'a> {
                     t1
                 }
             }
-            Exp::Local(_) => {
-                panic!()
-            } // Should not occur, Local is output of resolve.
-            Exp::Col(_) => {
-                panic!()
-            } // Should not occur, Col is output of resolve.
+            Exp::FnCallByName(sname, fname, args) => {
+                // Use self.dict to resolve function.
+                if let Some(sid) = self.dict.schemas.get(*sname)
+                    && let Some(nid) = self.dict.names.get(*fname)
+                    && let Some(f) = self.dict.funcs.get(&(*sid, *nid))
+                {
+                    // ToDo : resolve the args, check types against f formal params
+                    for e in &mut *args {
+                        let _t = self.resolve(e, ctx)?;
+                        // ToDo check t against f.args.
+                    }
+                    let new = Exp::FnCall(f.clone(), std::mem::take(args));
+                    *e = new;
+
+                    println!("Resolved FnCall {:?}", e);
+                    &f.dt
+                } else {
+                    return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
+                }
+            }
+            Exp::Col(_) => panic!(),
+            _ => todo!(),
         };
         Ok(dt)
     }
 
     fn bool_exp(&mut self) -> Result<Exp<'a>, E> {
         let mut exp = self.exp(0)?;
-        {
+        if self.pass == 2 {
             let rctx = RContext::Local(&self.locs);
             let edt = self.resolve(&mut exp, &rctx)?;
             if edt != &DataType::Bool {
@@ -438,7 +469,7 @@ impl<'a> Parser<'a> {
 
     fn bool_exp_table(&mut self, t: &STable) -> Result<Exp<'a>, E> {
         let mut exp = self.exp(0)?;
-        {
+        if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(t, &lctx);
             let edt = self.resolve(&mut exp, &tctx)?;
@@ -542,7 +573,7 @@ impl<'a> Parser<'a> {
                 Ok(match name {
                     b"true" => Exp::Bool(true),
                     b"false" => Exp::Bool(false),
-                    _ => Exp::Name(tos(name)),
+                    _ => self.name_exp(tos(name))?,
                 })
             }
             Token::LBra => {
@@ -553,6 +584,22 @@ impl<'a> Parser<'a> {
             }
             _ => Err(E::new("Expression expected")),
         }
+    }
+
+    // Variable reference or function call.
+    fn name_exp(&mut self, name: &'a str) -> Result<Exp<'a>, E> {
+        let result = if self.token == Token::Dot {
+            self.next_token()?;
+            let schema = name;
+            let fname = self.read_ident()?;
+            self.expect_token(Token::LBra)?;
+            let args = self.exp_list()?;
+            self.expect_token(Token::RBra)?;
+            Exp::FnCallByName(schema, fname, args)
+        } else {
+            Exp::Name(name)
+        };
+        Ok(result)
     }
 
     fn name_list(&mut self, table: &STable) -> Result<LVec<usize>, E> {
@@ -629,7 +676,7 @@ impl<'a> Parser<'a> {
         let schema_id = self.check_schema(schema)?;
         self.expect_token(Token::Dot)?;
         let fname = self.read_ident()?;
-        
+
         if self.check_function(schema_id, fname).is_ok() {
             return Err(E::new("Function already exists"));
         }
@@ -640,32 +687,45 @@ impl<'a> Parser<'a> {
             let ident = self.read_ident()?;
             let typ = self.datatype()?;
             args.push((ident, Arc::new(typ)));
-            if self.token != Token::Comma { break; }
+            if self.token != Token::Comma {
+                break;
+            }
             self.next_token()?;
         }
         self.expect_token(Token::RBra)?;
 
         let rtyp = if self.test_ident(b"RETURNS")? {
             self.datatype()?
-        } else { DataType::Empty };
+        } else {
+            DataType::Empty
+        };
         let rtyp = Arc::new(rtyp);
-        
+
         self.expect_ident(b"AS")?;
 
         let save = self.locs.len();
-        self.locs.push( Loc{name: "result",datatype:rtyp.clone()} );
-        for (name,typ) in &args {
-           let datatype = typ.clone();
-           self.locs.push( Loc{name,datatype} );
+        self.locs.push(Loc {
+            name: "result",
+            datatype: rtyp.clone(),
+        });
+        for (name, typ) in &args {
+            let datatype = typ.clone();
+            self.locs.push(Loc { name, datatype });
         }
-        
+
         // Only resolve names and check types on 2nd pass.
         // First pass just creates function stubs in dict, with declared type info.
-        
+
         let block = self.block()?;
         self.locs.truncate(save);
 
-        let result = CreateFn{ schema_id, fname, args, rtyp, block };
+        let result = CreateFn {
+            schema_id,
+            fname,
+            args,
+            rtyp,
+            block,
+        };
 
         let result = Statement::CreateFn(result);
         self.schema_updates = true;
@@ -840,7 +900,10 @@ impl<'a> Parser<'a> {
     fn show_ct(&self) -> &str {
         match &self.token {
             Token::Ident(x, y) => tos(&self.tr.input[*x..*y]),
-            _ => panic!(),
+            _ => {
+                println!("show_ct {:?}", self.token);
+                "todo"
+            }
         }
     }
 

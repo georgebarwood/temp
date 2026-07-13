@@ -80,7 +80,7 @@ impl Dict {
 }
 
 /// Schema Table - id and DataType.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct STable {
     pub id: i64,
     pub dt: Arc<DataType>,
@@ -92,13 +92,14 @@ impl STable {
     }
 }
 
-/// Schema Function - result DataType, Params and Statements.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Schema Stored Function - result DataType, Params and Statements.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc {
+    pub id: i64,
     /// result datatype
     pub dt: Arc<DataType>,
     // pub parms: todo
-    // pub stats: todo
+    pub block: GVec<(usize, GStatement)>,
 }
 
 /// Local variable declaration.
