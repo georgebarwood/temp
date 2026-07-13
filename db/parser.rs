@@ -28,7 +28,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn pass(&mut self, pass: u8) -> Result<LVec<(usize, Statement<'a>)>, E> {
+    pub fn pass(&mut self, pass: u8) -> Result<LVec<Statement<'a>>, E> {
         self.pass = pass;
         self.tr.pos = 0;
         self.locs.clear();
@@ -67,7 +67,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn statements(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
+    pub fn statements(&mut self) -> Result<LVec<Statement<'a>>, E> {
         self.next_token()?;
         let mut result = LVec::new();
         loop {
@@ -76,8 +76,7 @@ impl<'a> Parser<'a> {
                     let ident = &self.tr.input[*x..*y];
                     self.next_token()?;
                     let s = self.statement(ident)?;
-                    let end = self.position();
-                    result.push((end, s));
+                    result.push(s);
                 }
                 Token::Eof => break,
                 _ => return Err(E::new("Statement keyword expected")),
@@ -105,21 +104,19 @@ impl<'a> Parser<'a> {
         Ok(Statement::If(If { exp, block, els }))
     }
 
-    fn block(&mut self) -> Result<LVec<(usize, Statement<'a>)>, E> {
+    fn block(&mut self) -> Result<LVec<Statement<'a>>, E> {
         let len = self.locs.len();
         let mut result = LVec::new();
         if self.token == Token::LCurly {
             self.next_token()?;
             while self.token != Token::RCurly {
                 let stat = self.stat()?;
-                let pos = self.position();
-                result.push((pos, stat));
+                result.push(stat);
             }
             self.next_token()?;
         } else {
             let stat = self.stat()?;
-            let pos = self.position();
-            result.push((pos, stat));
+            result.push(stat);
         }
         self.locs.truncate(len);
         Ok(result)

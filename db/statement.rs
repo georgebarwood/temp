@@ -23,7 +23,7 @@ pub struct CreateFn<'a> {
     pub fname: &'a str,
     pub ret: Arc<DataType>,
     pub args: LVec<(&'a str, Arc<DataType>)>,
-    pub block: LVec<(usize, Statement<'a>)>,
+    pub block: LVec<Statement<'a>>,
 }
 
 /// DROP TABLE statement.
@@ -73,7 +73,7 @@ pub struct For<'a> {
     pub from: Arc<STable>,
     pub wher: Option<Exp<'a>>,
     pub order_by: Option<LVec<(Exp<'a>, bool)>>,
-    pub block: LVec<(usize, Statement<'a>)>,
+    pub block: LVec<Statement<'a>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +82,7 @@ pub struct GFor {
     pub from: Arc<STable>,
     pub wher: Option<GExp>,
     pub order_by: Option<GVec<(GExp, bool)>>,
-    pub block: GVec<(usize, GStatement)>,
+    pub block: GVec<GStatement>,
 }
 
 /// UPDATE statement.
@@ -141,28 +141,28 @@ pub struct GSet {
 #[derive(Debug)]
 pub struct While<'a> {
     pub exp: Exp<'a>,
-    pub block: LVec<(usize, Statement<'a>)>,
+    pub block: LVec<Statement<'a>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GWhile {
     pub exp: GExp,
-    pub block: GVec<(usize, GStatement)>,
+    pub block: GVec<GStatement>,
 }
 
 /// IF statement.
 #[derive(Debug)]
 pub struct If<'a> {
     pub exp: Exp<'a>,
-    pub block: LVec<(usize, Statement<'a>)>,
-    pub els: Option<LVec<(usize, Statement<'a>)>>,
+    pub block: LVec<Statement<'a>>,
+    pub els: Option<LVec<Statement<'a>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GIf {
     pub exp: GExp,
-    pub block: GVec<(usize, GStatement)>,
-    pub els: Option<GVec<(usize, GStatement)>>,
+    pub block: GVec<GStatement>,
+    pub els: Option<GVec<GStatement>>,
 }
 
 /// Statement.
@@ -286,10 +286,10 @@ pub fn gvals(list: &[Exp]) -> GVec<GExp> {
 }
 
 /// Convert list of Statements to list of GStatement.
-pub fn gblock(list: &[(usize, Statement)]) -> GVec<(usize, GStatement)> {
+pub fn gblock(list: &[Statement]) -> GVec<GStatement> {
     let mut block = GVec::with_capacity(list.len());
-    for (i, s) in list {
-        block.push((*i, GStatement::from(s)));
+    for s in list {
+        block.push(GStatement::from(s));
     }
     block
 }

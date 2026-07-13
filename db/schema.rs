@@ -113,7 +113,7 @@ pub struct SFunc {
     /// result datatype
     pub ret: Arc<DataType>,
     pub parm_types: GVec<Arc<DataType>>,
-    pub block: GVec<(usize, GStatement)>,
+    pub block: GVec<GStatement>,
 }
 
 /// Local variable declaration.
