@@ -1,9 +1,8 @@
 use crate::*;
-use std::cell::RefCell;
 
+/// Stack of values that store local variables, function parameters and function result.
 pub struct Run {
     pub stack: LVec<Value>,
-    pub pos: usize, // Error position.
 }
 
 /// Executes a batch of statements. Result is whether dict was updated.
@@ -15,7 +14,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     println!("Go source={}", tos(source));
 
     for pass in 1..=2
-    // If we know there are no CREATE FNs, can skip pass 1.
+    // If we know there are no schema updates, could skip pass 1.
     {
         let parse_dict = temp_dict.clone();
         let mut parser = Parser::new(source, &parse_dict);
@@ -40,7 +39,6 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                 } else if pass == 2 {
                     let mut run = Run {
                         stack: LVec::new(),
-                        pos: 0,
                     };
                     execute_block(&slist, &mut run, parser.dict, ps);
                 }
@@ -112,7 +110,7 @@ fn execute_schema_updates(
             }
 
             Statement::DropTable(dt) => {
-                if pass == 2 {
+                if pass == 1 {
                     dict.tables.remove(&(dt.schema_id, dt.name_id));
                     // Remove record from sys_schema using dt.table_id and ps.
                     Table::drop(dt.table.id, dt.table.dt.clone(), ps);
@@ -264,8 +262,7 @@ fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let mut table = t.borrow_mut();
     for id in &ids {
         table.remove(*id, ps);
-    }
-    
+    } 
 }
 
 fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -297,7 +294,7 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
             }
         }
     } else {
-        // SELECT with no FROM
+        // select with no from
         for e in &sel.vals {
             let v = e.eval(run, dict, ps);
             print!(" {:?} ", v);
@@ -340,7 +337,7 @@ fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 
 /// Get a list of ids for records from table that satisfy where condition.
 fn ids(
-    t: &LRc<RefCell<Table>>,
+    t: &RTable,
     wher: &Exp,
     run: &mut Run,
     dict: &Dict,
@@ -363,7 +360,7 @@ fn ids(
 
 // Note: statements are GStatement rather than Statement, so need their own execution functions.
 pub fn execute_fn(f: &SFunc, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    println!("execute_fn f={:?}", f);
+    // println!("execute_fn f={:?}", f);
     execute_gblock(&f.block, run, dict, ps);
 }
 
@@ -585,7 +582,7 @@ fn exec_gfor(x: &GFor, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 
 /// Get a list of ids for records from table that satisfy where condition.
 fn gids(
-    t: &LRc<RefCell<Table>>,
+    t: &RTable,
     wher: &GExp,
     run: &mut Run,
     dict: &Dict,

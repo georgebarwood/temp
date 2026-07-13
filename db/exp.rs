@@ -77,9 +77,7 @@ impl<'a> Exp<'a> {
                 let result = run.stack.pop().unwrap(); // Pop return value.
                 result
             }
-            Col(_) => panic!(),
-            Name(_) => panic!(),
-            _ => todo!("Eval not implemented for {:?}", self),
+            Col(_) | Name(_) | FnCallByName(_, _, _) => panic!()
         }
     }
 
@@ -91,6 +89,24 @@ impl<'a> Exp<'a> {
                 let x = x.eval_lr(run, dict, ps, lr);
                 let y = y.eval_lr(run, dict, ps, lr);
                 op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_lr(run, dict, ps, lr);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run, dict, ps);
+
+                run.stack.truncate(save);
+                let result = run.stack.pop().unwrap(); // Pop return value.
+                result
             }
             _ => self.eval(run, dict, ps),
         }
@@ -104,6 +120,24 @@ impl<'a> Exp<'a> {
                 let x = x.eval_vals(run, dict, ps, vals);
                 let y = y.eval_vals(run, dict, ps, vals);
                 op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_vals(run, dict, ps, vals);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run, dict, ps);
+
+                run.stack.truncate(save);
+                let result = run.stack.pop().unwrap(); // Pop return value.
+                result
             }
             _ => self.eval(run, dict, ps),
         }
@@ -126,7 +160,6 @@ impl GExp {
                 let y = y.eval(run, dict, ps);
                 op.eval(&x, &y)
             }
-            Col(_) => panic!(),
             FnCall(f, args) => {
                 // Push default value for result onto stack.
                 let f = &dict.funcs[*f];
@@ -144,6 +177,7 @@ impl GExp {
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
+            Col(_) => panic!()
         }
     }
     pub fn eval_lr(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, lr: &mut LazyRow) -> Value {
@@ -154,6 +188,23 @@ impl GExp {
                 let x = x.eval_lr(run, dict, ps, lr);
                 let y = y.eval_lr(run, dict, ps, lr);
                 op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_lr(run, dict, ps, lr);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run, dict, ps);
+
+                run.stack.truncate(save);
+                run.stack.pop().unwrap() // Pop return value.
             }
             _ => self.eval(run, dict, ps),
         }
@@ -168,6 +219,23 @@ impl GExp {
                 let y = y.eval_vals(run, dict, ps, vals);
                 op.eval(&x, &y)
             }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_vals(run, dict, ps, vals);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run, dict, ps);
+
+                run.stack.truncate(save);
+                run.stack.pop().unwrap() // Pop return value.
+            }
             _ => self.eval(run, dict, ps),
         }
     }
@@ -179,7 +247,6 @@ impl GExp {
             Exp::Bool(x) => GExp::Bool(*x),
             Exp::Int(x) => GExp::Int(*x),
             Exp::String(x) => GExp::String(GString::from(*x)),
-            Exp::Name(_x) => panic!(),
             Exp::Col(x) => GExp::Col(*x),
             Exp::Local(x) => GExp::Local(*x),
             Exp::Binary(op, lhs, rhs) => {
@@ -191,7 +258,7 @@ impl GExp {
                 let args = gvals(args);
                 GExp::FnCall(*fid, args)
             }
-            _ => todo!(),
+            Exp::Name(_) | Exp::FnCallByName(_, _, _) => panic!()
         }
     }
 }

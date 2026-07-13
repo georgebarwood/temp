@@ -15,7 +15,7 @@ pub fn test() {
         // b"drop table dbo.cust",
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
         b"fn dbo.test(x int,y int) -> int set result = x * 2 + y",
-        b"select dbo.test(5,6)",
+        b"select Id, Name, Age, dbo.test(5,Age) from dbo.cust",
     ];
 
     let (is_new, spd) = get_spd();

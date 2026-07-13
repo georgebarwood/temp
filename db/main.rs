@@ -1,13 +1,17 @@
 /* What next plan...
 
+   ORDER BY, Indexes.
+   +=, |= 
+   Auto-conversion of ints to strings.
+
    How should CREATE FN work?
    Could have several CREATE FNs then a GO, may be forward calls or recursion.
    So first pass, create an entry in dictonary, but no type-checking.
    Second pass, do type checking, resolve all function names.
 
-   Next: create function call expression.
+   Next: create function call expression. DONE
 
-   Stored functions.
+   Stored functions. DONE
 
    Local variable declarations, BEGIN END blocks (done)
        IF ELSE etc. Done

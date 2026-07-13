@@ -107,7 +107,7 @@ impl STable {
     }
 }
 
-/// Schema Stored Function - result DataType, Params and Statements.
+/// Schema Stored Function - result DataType, Param types and Statements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc {
     /// result datatype
