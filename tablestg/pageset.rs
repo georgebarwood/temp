@@ -1,4 +1,4 @@
-use crate::{Arc, Data, DataType, LRc, Store, Table};
+use crate::{Arc, Data, DataType, LRc, Store, Table, RTable};
 use std::cell::RefCell;
 
 use page_store::*;
@@ -9,7 +9,7 @@ pub struct PageSet {
     pages: HashMap<u64, PData>,
     pub sys_store: LRc<RefCell<Store>>,
     /// Cache of tables.
-    pub tables: HashMap<i64, LRc<RefCell<Table>>>,
+    pub tables: HashMap<i64, RTable>,
 }
 
 impl PageSet {
@@ -94,7 +94,7 @@ impl PageSet {
         }
     }
 
-    pub fn load_table(&mut self, tid: i64, dt: &Arc<DataType>) -> LRc<RefCell<Table>> {
+    pub fn load_table(&mut self, tid: i64, dt: &Arc<DataType>) -> RTable {
         if let Some(t) = self.tables.get(&tid) {
             t.clone()
         } else {

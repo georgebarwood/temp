@@ -1,6 +1,6 @@
 //! This crate is not yet reliable or stable!
 //!
-//! [Table] stores [Value]s which have a specific [IataType].
+//! [Table] stores [Value]s which have a specific [DataType].
 
 /* 
    Idea for re-using indirect values.
@@ -44,7 +44,7 @@
 
 /// [Table] stores [Value]s which have a specific [DataType].
 pub mod table;
-pub use table::{LazyRow, Table};
+pub use table::{LazyRow, Table, RTable};
 
 /// Generic [Value]s.
 pub mod value;

@@ -1,4 +1,5 @@
 use crate::*;
+use std::cell::RefCell;
 
 /// A Table stores [Value]s which have a specific [DataType].
 ///
@@ -15,6 +16,9 @@ pub struct Table {
     /// Changed
     changed: bool,
 }
+
+/// Table wrapped in LRc / RefCell.
+pub type RTable = LRc<RefCell<Table>>;
 
 /// This is data that needs to be saved.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
