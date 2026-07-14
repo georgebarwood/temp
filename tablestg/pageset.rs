@@ -115,11 +115,13 @@ impl PageSet {
 
         for (pnum, data) in self.pages.drain() {
             if data.borrow().changed {
-                println!(
-                    "PageSet save pnum={} len={}",
-                    pnum,
-                    data.borrow().data.len()
-                );
+                if false {
+                    println!(
+                        "PageSet save pnum={} len={}",
+                        pnum,
+                        data.borrow().data.len()
+                    );
+                }
                 self.wapd.set_data(pnum - 1, take_data(&data));
             }
         }

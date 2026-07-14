@@ -83,15 +83,15 @@ impl DataType {
     }
 
     /// Encode value (which must match DataType) as bytes. DataType will later be used to decode the bytes.
-    pub fn value_to_bytes0(&self, val: &Value) -> GVec<u8> {
-        let mut w = GVec::new();
+    pub fn value_to_bytes0(&self, val: &Value) -> LVec<u8> {
+        let mut w = LVec::new();
         self.value_to_writer0(val, &mut w);
         w
     }
 
     /// Encode value (which must match DataType) as bytes. DataType will later be used to decode the bytes.
-    pub fn value_to_bytes(&self, val: &Value, spx: &mut MSPX) -> GVec<u8> {
-        let mut w = GVec::new();
+    pub fn value_to_bytes(&self, val: &Value, spx: &mut MSPX) -> LVec<u8> {
+        let mut w = LVec::new();
         self.value_to_writer(val, &mut w, spx);
         w
     }

@@ -186,7 +186,7 @@ impl Table {
 
     /// Save the table to sys_store.
     pub fn save(&mut self, id: i64, ps: &mut PageSet) {
-        println!("Table::Save id={} changed={}", id, self.changed());
+        // println!("Table::Save id={} changed={}", id, self.changed());
         if self.changed() {
             let id = id as u64;
             self.changed = false;
