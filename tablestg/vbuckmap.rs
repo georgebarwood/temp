@@ -264,7 +264,7 @@ impl<'a> VBuckMap<'a> {
     fn expand<K: VKey>(&mut self, key: &K) {
         let buckets = 1 + self.buckets * 2;
 
-        println!("expand buckets={} new buckets={}", self.buckets, buckets);
+        // println!("expand buckets={} new buckets={}", self.buckets, buckets);
 
         // We cannot mutably borrow ps multiple times, so use save().
         let mut new = VBuckMap::new(buckets, self.ps).save();

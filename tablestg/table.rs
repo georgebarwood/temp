@@ -206,7 +206,7 @@ impl Table {
 
         let key = IdVKey::new(id as u64);
         if let Some(sdata) = sys_store.get(&key, ps) {
-            println!("Table::restore decoding table id={}", id);
+            // println!("Table::restore decoding table id={}", id);
             let inner = sdata.decode_table_inner();
             Self {
                 inner,
@@ -214,7 +214,7 @@ impl Table {
                 changed: false,
             }
         } else {
-            println!("Table::restore creating new table id={}", id);
+            // println!("Table::restore creating new table id={}", id);
             // create a new table
             let table = Table::new(datatype, ps);
             let bytes = table.inner.to_bytes_id(id as u64);
