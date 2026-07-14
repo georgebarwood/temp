@@ -10,9 +10,6 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
     let mut temp_dict = dict.clone();
     let mut update_dict = false;
 
-    println!();
-    println!("Go source={}", tos(source));
-
     for pass in 1..=2
     // If we know there are no schema updates, could skip pass 1.
     {
@@ -204,11 +201,11 @@ fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 
     table.insert(&row, ps);
 
-    println!(
+    /* println!(
         "ins table record count={} row={:?}",
         table.record_count(),
         row
-    );
+    ); */
 }
 
 fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -219,7 +216,7 @@ fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let mut table = t.borrow_mut();
     for id in &ids {
         let mut row = table.fetch(*id, ps).unwrap();
-        let mut vals = LVec::new();
+        let mut vals = LVec::with_capacity(upd.assigns.len());
         {
             for (_col, e) in &upd.assigns {
                 let v = e.eval_vals(run, dict, ps, row.list());
@@ -459,7 +456,7 @@ fn exec_gupdate(upd: &GUpdate, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let mut table = t.borrow_mut();
     for id in &ids {
         let mut row = table.fetch(*id, ps).unwrap();
-        let mut vals = LVec::new();
+        let mut vals = LVec::with_capacity(upd.assigns.len());
         {
             for (_col, e) in &upd.assigns {
                 let v = e.eval_vals(run, dict, ps, row.list());
@@ -618,8 +615,6 @@ fn get_temp(
     let table = t.borrow();
     let mut iter = table.iter(ps);
 
-    // Different approaches are possible, but for now build temp list of order exps and exps.
-    // Then sort and output the exps.
     let mut temp = LVec::new();
     while let Some(b) = iter.next_ref(ps) {
         let mut lr = table.lazy_row(b);
@@ -629,7 +624,7 @@ fn get_temp(
             true
         };
         if ok {
-            let mut row = LVec::new();
+            let mut row = LVec::with_capacity(ob.len()+vals.len());
             for e in ob {
                 let v = e.eval_lr(run, dict, ps, &mut lr);
                 row.push(v);
@@ -655,13 +650,10 @@ fn get_gtemp(
     ps: &mut PageSet,
 ) -> LVec<LVec<Value>> {
     let (ob, desc) = order_by.as_ref().unwrap();
-    // let f = sel.from.as_ref().unwrap();
     let t = ps.load_table(f.id, &f.dt);
     let table = t.borrow();
     let mut iter = table.iter(ps);
 
-    // Different approaches are possible, but for now build temp list of order exps and exps.
-    // Then sort and output the exps.
     let mut temp = LVec::new();
     while let Some(b) = iter.next_ref(ps) {
         let mut lr = table.lazy_row(b);
@@ -671,7 +663,7 @@ fn get_gtemp(
             true
         };
         if ok {
-            let mut row = LVec::new();
+            let mut row = LVec::with_capacity(ob.len()+vals.len());
             for e in ob {
                 let v = e.eval_lr(run, dict, ps, &mut lr);
                 row.push(v);

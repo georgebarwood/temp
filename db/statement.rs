@@ -34,93 +34,6 @@ pub struct DropTable {
     pub table: Arc<STable>,
 }
 
-/// INSERT statement.
-#[derive(Debug)]
-pub struct Insert<'a> {
-    pub table: Arc<STable>,
-    pub cols: LVec<usize>,
-    pub vals: LVec<Exp<'a>>,
-}
-
-/// INSERT statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GInsert {
-    pub table: Arc<STable>,
-    pub cols: GVec<usize>,
-    pub vals: GVec<GExp>,
-}
-
-pub type OrderBy<'a> = Option<(LVec<Exp<'a>>, LVec<bool>)>;
-pub type GOrderBy = Option<(GVec<GExp>, GVec<bool>)>;
-
-/// SELECT statement.
-#[derive(Debug)]
-pub struct Select<'a> {
-    pub vals: LVec<Exp<'a>>,
-    pub from: Option<Arc<STable>>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
-}
-
-/// SELECT statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GSelect {
-    pub vals: GVec<GExp>,
-    pub from: Option<Arc<STable>>,
-    pub wher: Option<GExp>,
-    pub order_by: GOrderBy,
-}
-
-/// FOR statement.
-#[derive(Debug)]
-pub struct For<'a> {
-    pub vals: LVec<Exp<'a>>,
-    pub from: Arc<STable>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
-    pub block: LVec<Statement<'a>>,
-}
-
-/// FOR statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GFor {
-    pub vals: GVec<GExp>,
-    pub from: Arc<STable>,
-    pub wher: Option<GExp>,
-    pub order_by: GOrderBy,
-    pub block: GVec<GStatement>,
-}
-
-/// UPDATE statement.
-#[derive(Debug)]
-pub struct Update<'a> {
-    pub assigns: LVec<(usize, Exp<'a>)>, // col num, Exp
-    pub table: Arc<STable>,
-    pub wher: Exp<'a>,
-}
-
-/// UPDATE statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GUpdate {
-    pub assigns: GVec<(usize, GExp)>, // col num, Exp
-    pub table: Arc<STable>,
-    pub wher: GExp,
-}
-
-/// DELETE statement.
-#[derive(Debug)]
-pub struct Delete<'a> {
-    pub table: Arc<STable>,
-    pub wher: Exp<'a>,
-}
-
-/// DELETE statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GDelete {
-    pub table: Arc<STable>,
-    pub wher: GExp,
-}
-
 /// LET statement.
 #[derive(Debug)]
 pub struct Let<'a> {
@@ -191,6 +104,93 @@ pub struct GIf {
     pub els: Option<GVec<GStatement>>,
 }
 
+/// INSERT statement.
+#[derive(Debug)]
+pub struct Insert<'a> {
+    pub table: Arc<STable>,
+    pub cols: LVec<usize>,
+    pub vals: LVec<Exp<'a>>,
+}
+
+/// INSERT statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GInsert {
+    pub table: Arc<STable>,
+    pub cols: GVec<usize>,
+    pub vals: GVec<GExp>,
+}
+
+/// UPDATE statement.
+#[derive(Debug)]
+pub struct Update<'a> {
+    pub table: Arc<STable>,
+    pub assigns: LVec<(usize, Exp<'a>)>, // col num, Exp
+    pub wher: Exp<'a>,
+}
+
+/// UPDATE statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GUpdate {
+    pub table: Arc<STable>,
+    pub assigns: GVec<(usize, GExp)>, // col num, Exp
+    pub wher: GExp,
+}
+
+/// DELETE statement.
+#[derive(Debug)]
+pub struct Delete<'a> {
+    pub table: Arc<STable>,
+    pub wher: Exp<'a>,
+}
+
+/// DELETE statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GDelete {
+    pub table: Arc<STable>,
+    pub wher: GExp,
+}
+
+pub type OrderBy<'a> = Option<(LVec<Exp<'a>>, LVec<bool>)>;
+pub type GOrderBy = Option<(GVec<GExp>, GVec<bool>)>;
+
+/// SELECT statement.
+#[derive(Debug)]
+pub struct Select<'a> {
+    pub vals: LVec<Exp<'a>>,
+    pub from: Option<Arc<STable>>,
+    pub wher: Option<Exp<'a>>,
+    pub order_by: OrderBy<'a>,
+}
+
+/// SELECT statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GSelect {
+    pub vals: GVec<GExp>,
+    pub from: Option<Arc<STable>>,
+    pub wher: Option<GExp>,
+    pub order_by: GOrderBy,
+}
+
+/// FOR statement.
+#[derive(Debug)]
+pub struct For<'a> {
+    pub vals: LVec<Exp<'a>>,
+    pub from: Arc<STable>,
+    pub wher: Option<Exp<'a>>,
+    pub order_by: OrderBy<'a>,
+    pub block: LVec<Statement<'a>>,
+}
+
+/// FOR statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GFor {
+    pub vals: GVec<GExp>,
+    pub from: Arc<STable>,
+    pub wher: Option<GExp>,
+    pub order_by: GOrderBy,
+    pub block: GVec<GStatement>,
+}
+
 /// Statement.
 #[derive(Debug)]
 pub enum Statement<'a> {
@@ -206,14 +206,14 @@ pub enum Statement<'a> {
     If(If<'a>),
     /// Insert into table.
     Insert(Insert<'a>),
-    /// Output values.
-    Select(Select<'a>),
-    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
-    For(For<'a>),
     /// Update table rows. Where condition is not optional, use "where true" to update all rows.
     Update(Update<'a>),
     /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
     Delete(Delete<'a>),
+    /// Output values.
+    Select(Select<'a>),
+    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
+    For(For<'a>),
     /// Create Schema.
     CreateSchema(CreateSchema<'a>),
     /// Create Table.
@@ -239,14 +239,14 @@ pub enum GStatement {
     If(GIf),
     /// Insert into table.
     Insert(GInsert),
-    /// Output values.
-    Select(GSelect),
-    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
-    For(GFor),
     /// Update table rows. Where condition is not optional, use "where true" to update all rows.
     Update(GUpdate),
     /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
     Delete(GDelete),
+    /// Output values.
+    Select(GSelect),
+    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
+    For(GFor),
 }
 
 impl GStatement {
