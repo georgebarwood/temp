@@ -50,13 +50,16 @@ pub struct GInsert {
     pub vals: GVec<GExp>,
 }
 
+pub type OrderBy<'a> = Option<(LVec<Exp<'a>>, LVec<bool>)>;
+pub type GOrderBy = Option<(GVec<GExp>, GVec<bool>)>;
+
 /// SELECT statement.
 #[derive(Debug)]
 pub struct Select<'a> {
     pub vals: LVec<Exp<'a>>,
     pub from: Option<Arc<STable>>,
     pub wher: Option<Exp<'a>>,
-    pub order_by: Option<LVec<(Exp<'a>, bool)>>,
+    pub order_by: OrderBy<'a>,
 }
 
 /// SELECT statement.
@@ -65,7 +68,7 @@ pub struct GSelect {
     pub vals: GVec<GExp>,
     pub from: Option<Arc<STable>>,
     pub wher: Option<GExp>,
-    pub order_by: Option<GVec<(GExp, bool)>>,
+    pub order_by: GOrderBy,
 }
 
 /// FOR statement.
@@ -74,7 +77,7 @@ pub struct For<'a> {
     pub vals: LVec<Exp<'a>>,
     pub from: Arc<STable>,
     pub wher: Option<Exp<'a>>,
-    pub order_by: Option<LVec<(Exp<'a>, bool)>>,
+    pub order_by: OrderBy<'a>,
     pub block: LVec<Statement<'a>>,
 }
 
@@ -84,7 +87,7 @@ pub struct GFor {
     pub vals: GVec<GExp>,
     pub from: Arc<STable>,
     pub wher: Option<GExp>,
-    pub order_by: Option<GVec<(GExp, bool)>>,
+    pub order_by: GOrderBy,
     pub block: GVec<GStatement>,
 }
 
@@ -282,7 +285,7 @@ impl GStatement {
                 let vals = gvals(&x.vals);
                 let from = x.from.clone();
                 let wher = x.wher.as_ref().map(|wher| GExp::from(wher));
-                let order_by = None;
+                let order_by = gorder_by(&x.order_by);
                 GStatement::Select(GSelect {
                     vals,
                     from,
@@ -294,7 +297,7 @@ impl GStatement {
                 let vals = gvals(&x.vals);
                 let from = x.from.clone();
                 let wher = x.wher.as_ref().map(|wher| GExp::from(wher));
-                let order_by = None;
+                let order_by = gorder_by(&x.order_by);
                 let block = gblock(&x.block);
                 GStatement::For(GFor {
                     vals,
@@ -343,4 +346,17 @@ pub fn gblock(list: &[Statement]) -> GVec<GStatement> {
         block.push(GStatement::from(s));
     }
     block
+}
+
+pub fn gorder_by(list: &OrderBy) -> GOrderBy {
+    if let Some((exps, descs)) = list {
+        let mut result = GVec::with_capacity(exps.len());
+        for e in exps {
+            result.push(GExp::from(e));
+        }
+        let descs = GVec::from(&**descs);
+        Some((result, descs))
+    } else {
+        None
+    }
 }

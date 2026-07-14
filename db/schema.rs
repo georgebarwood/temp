@@ -12,10 +12,15 @@ use std::collections::HashMap;
 /// Dictionary to look up schema, tables, functions etc.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Dict {
+    /// Map from string to schema id.
     pub schemas: HashMap<GString, i64>,
+    /// Map from string to name id.
     pub names: HashMap<GString, i64>,
+    /// Map from (schema id,name id) to STable.
     pub tables: HashMap<(i64, i64), Arc<STable>>,
-    pub func_lookup: HashMap<(i64, i64), usize>, // Lookup func ix from schema and name id.
+    /// Map from (schema id, name id) to index into funcs.
+    pub func_lookup: HashMap<(i64, i64), usize>,
+    /// List of stored functions.
     pub funcs: GVec<SFunc>,
     last_schema_id: i64,
     last_name_id: i64,

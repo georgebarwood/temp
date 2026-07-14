@@ -15,7 +15,7 @@ pub fn test() {
         // b"drop table dbo.cust",
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
         b"fn dbo.test(x int,y int) -> int set result = x + y * 2",
-        b"let x=5 select Id, Name, Age, dbo.test(Age,x) from dbo.cust",
+        b"let x=5 select Id, Name, Age, dbo.test(Age,x) from dbo.cust order by Name, Id desc",
         b"let s='' for n = Name from dbo.cust set s |= n select s",
     ];
 

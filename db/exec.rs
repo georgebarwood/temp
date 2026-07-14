@@ -129,8 +129,7 @@ fn execute_block(slist: &[Statement], run: &mut Run, dict: &Dict, ps: &mut PageS
             Delete(x) => exec_delete(x, run, dict, ps),
             Select(x) => exec_select(x, run, dict, ps),
             For(x) => exec_for(x, run, dict, ps),
-            CreateSchema(_) |  CreateTable(_) 
-            | CreateFn(_) |  DropTable(_) => panic!()
+            CreateSchema(_) | CreateTable(_) | CreateFn(_) | DropTable(_) => panic!(),
         };
     }
     run.stack.truncate(slen); // pop local variables from stack.
@@ -150,7 +149,7 @@ fn exec_set(x: &Set, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 fn exec_append(x: &Append, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     let ix = run.stack.len() - 1 - x.i;
-    append( &mut run.stack[ix], &v );
+    append(&mut run.stack[ix], &v);
 }
 
 fn exec_while(x: &While, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -245,9 +244,12 @@ fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    if let Some(f) = &sel.from {
+    if sel.order_by.is_some() {
+        exec_select_order_by(sel, run, dict, ps)
+    } else if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);
         let table = t.borrow();
+
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
@@ -274,6 +276,66 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
             print!(" {:?} ", v);
         }
         println!();
+    }
+}
+
+fn exec_select_order_by(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let (ob, desc) = sel.order_by.as_ref().unwrap();
+    let f = sel.from.as_ref().unwrap();
+    let t = ps.load_table(f.id, &f.dt);
+    let table = t.borrow();
+    let mut iter = table.iter(ps);
+
+    // Different approaches are possible, but for now build temp list of order exps and exps.
+    // Then sort and output the exps.
+    let mut temp = LVec::new();
+    while let Some(b) = iter.next_ref(ps) {
+        let mut lr = table.lazy_row(b);
+        let ok = if let Some(wher) = &sel.wher {
+            wher.eval_lr(run, dict, ps, &mut lr).bool()
+        } else {
+            true
+        };
+        if ok {
+            let mut row = LVec::new();
+            for e in ob {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            for e in &sel.vals {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            temp.push(row);
+        }
+    }
+    temp.sort_by(|a, b| row_compare(a, b, desc));
+    let n = desc.len();
+    for row in &temp {
+        println!("sorted row={:?}", &row[n..]);
+    }
+}
+
+use std::cmp::Ordering;
+/// Compare table rows.
+pub fn row_compare(a: &[Value], b: &[Value], desc: &[bool]) -> Ordering {
+    let mut ix = 0;
+    loop {
+        let cmp = a[ix].cmp(&b[ix]);
+        if cmp != Ordering::Equal {
+            if !desc[ix] {
+                return cmp;
+            };
+            return if cmp == Ordering::Less {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            };
+        }
+        ix += 1;
+        if ix == desc.len() {
+            return Ordering::Equal;
+        }
     }
 }
 
@@ -363,7 +425,7 @@ fn exec_gset(x: &GSet, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 fn exec_gappend(x: &GAppend, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let v = x.exp.eval(run, dict, ps);
     let ix = run.stack.len() - 1 - x.i;
-    append( &mut run.stack[ix], &v );
+    append(&mut run.stack[ix], &v);
 }
 
 fn exec_gwhile(x: &GWhile, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
@@ -475,7 +537,7 @@ fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
                     print!(" {:?} ", v);
                 }
                 println!();
-           }
+            }
         }
     } else {
         // SELECT with no FROM
@@ -533,17 +595,16 @@ fn gids(t: &RTable, wher: &GExp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -
     result
 }
 
-fn append( x: &mut Value, y: &Value )
-{
-    match (x,y) {
-        ( Value::String(x), Value::String(y) ) => {
-           let mx = LRc::make_mut(x);
-           mx.push_str(y);
+fn append(x: &mut Value, y: &Value) {
+    match (x, y) {
+        (Value::String(x), Value::String(y)) => {
+            let mx = LRc::make_mut(x);
+            mx.push_str(y);
         }
-        ( Value::Binary(x), Value::Binary(y) ) => {
-           let mx = LRc::make_mut(x);
-           mx.extend_from_slice(y);
+        (Value::Binary(x), Value::Binary(y)) => {
+            let mx = LRc::make_mut(x);
+            mx.extend_from_slice(y);
         }
-        _ => panic!()
+        _ => panic!(),
     }
 }

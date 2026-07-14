@@ -64,7 +64,7 @@ use token::*;
 pub mod schema;
 use schema::*;
 
-/// [Statement]s.
+/// [Statement] and [GStatement].
 pub mod statement;
 use statement::*;
 
@@ -72,7 +72,7 @@ use statement::*;
 pub mod operator;
 use operator::*;
 
-/// [Exp]ressions.
+/// [Exp]ressions and [GExp].
 pub mod exp;
 use exp::*;
 
@@ -89,4 +89,6 @@ mod test;
 
 fn main() {
     test::test();
+    // Could check here that Perm is empty.
+    println!("Perm::info = {:?}", pstd::localalloc::Perm::info());
 }
