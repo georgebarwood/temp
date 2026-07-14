@@ -44,7 +44,7 @@ pub enum GExp {
 }
 
 impl<'a> Exp<'a> {
-    pub fn eval(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Value {
+    pub fn eval(&self, run: &mut Run) -> Value {
         use Exp::*;
         match self {
             Bool(x) => Value::Bool(*x),
@@ -55,23 +55,23 @@ impl<'a> Exp<'a> {
                 run.stack[ix].clone()
             }
             Binary(op, x, y) => {
-                let x = x.eval(run, dict, ps);
-                let y = y.eval(run, dict, ps);
+                let x = x.eval(run);
+                let y = y.eval(run);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval(run, dict, ps);
+                    let v = e.eval(run);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
@@ -80,70 +80,70 @@ impl<'a> Exp<'a> {
         }
     }
 
-    pub fn eval_lr(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, lr: &mut LazyRow) -> Value {
+    pub fn eval_lr(&self, run: &mut Run, lr: &mut LazyRow) -> Value {
         use Exp::*;
         match self {
-            Col(x) => lr.item(*x, ps),
+            Col(x) => lr.item(*x, run.ps),
             Binary(op, x, y) => {
-                let x = x.eval_lr(run, dict, ps, lr);
-                let y = y.eval_lr(run, dict, ps, lr);
+                let x = x.eval_lr(run, lr);
+                let y = y.eval_lr(run, lr);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval_lr(run, dict, ps, lr);
+                    let v = e.eval_lr(run, lr);
                     // println!("func arg={:?}", v);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            _ => self.eval(run, dict, ps),
+            _ => self.eval(run),
         }
     }
 
-    pub fn eval_vals(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, vals: &[Value]) -> Value {
+    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
         use Exp::*;
         match self {
             Col(x) => vals[*x].clone(),
             Binary(op, x, y) => {
-                let x = x.eval_vals(run, dict, ps, vals);
-                let y = y.eval_vals(run, dict, ps, vals);
+                let x = x.eval_vals(run, vals);
+                let y = y.eval_vals(run, vals);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval_vals(run, dict, ps, vals);
+                    let v = e.eval_vals(run, vals);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            _ => self.eval(run, dict, ps),
+            _ => self.eval(run),
         }
     }
 }
 
 impl GExp {
-    pub fn eval(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet) -> Value {
+    pub fn eval(&self, run: &mut Run) -> Value {
         use GExp::*;
         match self {
             Bool(x) => Value::Bool(*x),
@@ -154,23 +154,23 @@ impl GExp {
                 run.stack[ix].clone()
             }
             Binary(op, x, y) => {
-                let x = x.eval(run, dict, ps);
-                let y = y.eval(run, dict, ps);
+                let x = x.eval(run);
+                let y = y.eval(run);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval(run, dict, ps);
+                    let v = e.eval(run);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
@@ -178,63 +178,63 @@ impl GExp {
             Col(_) => panic!(),
         }
     }
-    pub fn eval_lr(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, lr: &mut LazyRow) -> Value {
+    pub fn eval_lr(&self, run: &mut Run, lr: &mut LazyRow) -> Value {
         use GExp::*;
         match self {
-            Col(x) => lr.item(*x, ps),
+            Col(x) => lr.item(*x, run.ps),
             Binary(op, x, y) => {
-                let x = x.eval_lr(run, dict, ps, lr);
-                let y = y.eval_lr(run, dict, ps, lr);
+                let x = x.eval_lr(run, lr);
+                let y = y.eval_lr(run, lr);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval_lr(run, dict, ps, lr);
+                    let v = e.eval_lr(run, lr);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            _ => self.eval(run, dict, ps),
+            _ => self.eval(run),
         }
     }
 
-    pub fn eval_vals(&self, run: &mut Run, dict: &Dict, ps: &mut PageSet, vals: &[Value]) -> Value {
+    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
         use GExp::*;
         match self {
             Col(x) => vals[*x].clone(),
             Binary(op, x, y) => {
-                let x = x.eval_vals(run, dict, ps, vals);
-                let y = y.eval_vals(run, dict, ps, vals);
+                let x = x.eval_vals(run, vals);
+                let y = y.eval_vals(run, vals);
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &dict.funcs[*f];
+                let f = &run.dict.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.eval_vals(run, dict, ps, vals);
+                    let v = e.eval_vals(run, vals);
                     run.stack.push(v);
                 }
                 // Execute the function.
-                execute_fn(f, run, dict, ps);
+                execute_fn(f, run);
 
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            _ => self.eval(run, dict, ps),
+            _ => self.eval(run),
         }
     }
 }
