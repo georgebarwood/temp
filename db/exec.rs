@@ -117,17 +117,20 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
 fn execute_block(slist: &[Statement], run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
+        use Statement::*;
         match s {
-            Statement::Let(x) => exec_let(x, run, dict, ps),
-            Statement::Set(x) => exec_set(x, run, dict, ps),
-            Statement::While(x) => exec_while(x, run, dict, ps),
-            Statement::If(x) => exec_if(x, run, dict, ps),
-            Statement::Insert(x) => exec_insert(x, run, dict, ps),
-            Statement::Update(x) => exec_update(x, run, dict, ps),
-            Statement::Delete(x) => exec_delete(x, run, dict, ps),
-            Statement::Select(x) => exec_select(x, run, dict, ps),
-            Statement::For(x) => exec_for(x, run, dict, ps),
-            _ => panic!(),
+            Let(x) => exec_let(x, run, dict, ps),
+            Set(x) => exec_set(x, run, dict, ps),
+            Append(x) => exec_append(x, run, dict, ps),
+            While(x) => exec_while(x, run, dict, ps),
+            If(x) => exec_if(x, run, dict, ps),
+            Insert(x) => exec_insert(x, run, dict, ps),
+            Update(x) => exec_update(x, run, dict, ps),
+            Delete(x) => exec_delete(x, run, dict, ps),
+            Select(x) => exec_select(x, run, dict, ps),
+            For(x) => exec_for(x, run, dict, ps),
+            CreateSchema(_) |  CreateTable(_) 
+            | CreateFn(_) |  DropTable(_) => panic!()
         };
     }
     run.stack.truncate(slen); // pop local variables from stack.
@@ -144,6 +147,12 @@ fn exec_set(x: &Set, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     run.stack[ix] = v;
 }
 
+fn exec_append(x: &Append, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let v = x.exp.eval(run, dict, ps);
+    let ix = run.stack.len() - 1 - x.i;
+    append( &mut run.stack[ix], &v );
+}
+
 fn exec_while(x: &While, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     while x.exp.eval(run, dict, ps).bool() {
         execute_block(&x.block, run, dict, ps);
@@ -151,11 +160,7 @@ fn exec_while(x: &While, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_if(x: &If, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    let ok = {
-        let v = x.exp.eval(run, dict, ps);
-        v.bool()
-    };
-    if ok {
+    if x.exp.eval(run, dict, ps).bool() {
         execute_block(&x.block, run, dict, ps);
     } else if let Some(els) = &x.els {
         execute_block(els, run, dict, ps);
@@ -163,15 +168,11 @@ fn exec_if(x: &If, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("ins={:?}", ins);
-
     // First evaluate the expressions.
     let mut ee = LVec::with_capacity(ins.vals.len());
     for e in &ins.vals {
         ee.push(e.eval(run, dict, ps));
     }
-    // println!("ins ee={:?}", &ee );
-
     let t = &ins.table;
     let t = ps.load_table(t.id, &t.dt);
     let mut table = t.borrow_mut();
@@ -212,13 +213,10 @@ fn exec_insert(ins: &Insert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_update(upd: &Update, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("upd={:?}", upd);
-
     let t = ps.load_table(upd.table.id, &upd.table.dt);
 
     let ids = ids(&t, &upd.wher, run, dict, ps);
 
-    // println!("ids to be updated={:?}", ids);
     let mut table = t.borrow_mut();
     for id in &ids {
         let mut row = table.fetch(*id, ps).unwrap();
@@ -247,12 +245,9 @@ fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("exec_sel sel={:?}", sel);
-
     if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);
         let table = t.borrow();
-
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
@@ -270,8 +265,6 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
                     print!(" {:?} ", v);
                 }
                 println!();
-            } else {
-                // println!(" row skipped due to where being false");
             }
         }
     } else {
@@ -342,6 +335,7 @@ fn execute_gblock(slist: &[GStatement], run: &mut Run, dict: &Dict, ps: &mut Pag
         match s {
             GStatement::Let(x) => exec_glet(x, run, dict, ps),
             GStatement::Set(x) => exec_gset(x, run, dict, ps),
+            GStatement::Append(x) => exec_gappend(x, run, dict, ps),
             GStatement::While(x) => exec_gwhile(x, run, dict, ps),
             GStatement::If(x) => exec_gif(x, run, dict, ps),
             GStatement::Insert(x) => exec_ginsert(x, run, dict, ps),
@@ -365,6 +359,12 @@ fn exec_gset(x: &GSet, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     run.stack[ix] = v;
 }
 
+fn exec_gappend(x: &GAppend, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let v = x.exp.eval(run, dict, ps);
+    let ix = run.stack.len() - 1 - x.i;
+    append( &mut run.stack[ix], &v );
+}
+
 fn exec_gwhile(x: &GWhile, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     while x.exp.eval(run, dict, ps).bool() {
         execute_gblock(&x.block, run, dict, ps);
@@ -372,11 +372,7 @@ fn exec_gwhile(x: &GWhile, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_gif(x: &GIf, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    let ok = {
-        let v = x.exp.eval(run, dict, ps);
-        v.bool()
-    };
-    if ok {
+    if x.exp.eval(run, dict, ps).bool() {
         execute_gblock(&x.block, run, dict, ps);
     } else if let Some(els) = &x.els {
         execute_gblock(els, run, dict, ps);
@@ -384,15 +380,11 @@ fn exec_gif(x: &GIf, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_ginsert(ins: &GInsert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("ins={:?}", ins);
-
     // First evaluate the expressions.
     let mut ee = LVec::with_capacity(ins.vals.len());
     for e in &ins.vals {
         ee.push(e.eval(run, dict, ps));
     }
-    // println!("ins ee={:?}", &ee );
-
     let t = &ins.table;
     let t = ps.load_table(t.id, &t.dt);
     let mut table = t.borrow_mut();
@@ -433,13 +425,8 @@ fn exec_ginsert(ins: &GInsert, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_gupdate(upd: &GUpdate, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("upd={:?}", upd);
-
     let t = ps.load_table(upd.table.id, &upd.table.dt);
-
     let ids = gids(&t, &upd.wher, run, dict, ps);
-
-    // println!("ids to be updated={:?}", ids);
     let mut table = t.borrow_mut();
     for id in &ids {
         let mut row = table.fetch(*id, ps).unwrap();
@@ -468,12 +455,9 @@ fn exec_gdelete(del: &GDelete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // println!("exec_sel sel={:?}", sel);
-
     if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);
         let table = t.borrow();
-
         let mut iter = table.iter(ps);
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
@@ -483,7 +467,6 @@ fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
             } else {
                 true
             };
-
             if ok {
                 print!("Selected vals=");
                 for e in &sel.vals {
@@ -491,9 +474,7 @@ fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
                     print!(" {:?} ", v);
                 }
                 println!();
-            } else {
-                // println!(" row skipped due to where being false");
-            }
+           }
         }
     } else {
         // SELECT with no FROM
@@ -549,4 +530,19 @@ fn gids(t: &RTable, wher: &GExp, run: &mut Run, dict: &Dict, ps: &mut PageSet) -
         }
     }
     result
+}
+
+fn append( x: &mut Value, y: &Value )
+{
+    match (x,y) {
+        ( Value::String(x), Value::String(y) ) => {
+           let mx = LRc::make_mut(x);
+           mx.push_str(y);
+        }
+        ( Value::Binary(x), Value::Binary(y) ) => {
+           let mx = LRc::make_mut(x);
+           mx.extend_from_slice(y);
+        }
+        _ => panic!()
+    }
 }

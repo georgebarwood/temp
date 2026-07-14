@@ -9,7 +9,7 @@ use std::collections::HashMap;
    or there must be no callers.
 */
 
-/// Dictionary to look up schema, tables, etc.
+/// Dictionary to look up schema, tables, functions etc.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Dict {
     pub schemas: HashMap<GString, i64>,
@@ -119,12 +119,11 @@ pub struct SFunc {
 /// Local variable declaration.
 pub struct Loc<'a> {
     pub name: &'a str,
-    pub datatype: Arc<DataType>, // Maybe could be &'a DataType instead?
+    pub datatype: Arc<DataType>,
 }
 
 /// Resolve Context ( for resolving names ).
 pub enum RContext<'a> {
-    None,
     STable(&'a STable, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }

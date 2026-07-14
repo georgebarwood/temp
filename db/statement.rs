@@ -42,6 +42,7 @@ pub struct Insert<'a> {
     pub vals: LVec<Exp<'a>>,
 }
 
+/// INSERT statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GInsert {
     pub table: Arc<STable>,
@@ -58,6 +59,7 @@ pub struct Select<'a> {
     pub order_by: Option<LVec<(Exp<'a>, bool)>>,
 }
 
+/// SELECT statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GSelect {
     pub vals: GVec<GExp>,
@@ -76,6 +78,7 @@ pub struct For<'a> {
     pub block: LVec<Statement<'a>>,
 }
 
+/// FOR statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GFor {
     pub vals: GVec<GExp>,
@@ -93,6 +96,7 @@ pub struct Update<'a> {
     pub wher: Exp<'a>,
 }
 
+/// UPDATE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GUpdate {
     pub assigns: GVec<(usize, GExp)>, // col num, Exp
@@ -107,6 +111,7 @@ pub struct Delete<'a> {
     pub wher: Exp<'a>,
 }
 
+/// DELETE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GDelete {
     pub table: Arc<STable>,
@@ -119,6 +124,7 @@ pub struct Let<'a> {
     pub exp: Exp<'a>,
 }
 
+/// LET statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GLet {
     pub exp: GExp,
@@ -131,8 +137,23 @@ pub struct Set<'a> {
     pub exp: Exp<'a>,
 }
 
+/// SET statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GSet {
+    pub i: usize,
+    pub exp: GExp,
+}
+
+/// APPEND ( |= ) statement.
+#[derive(Debug)]
+pub struct Append<'a> {
+    pub i: usize,
+    pub exp: Exp<'a>,
+}
+
+/// APPEND ( |= ) statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GAppend {
     pub i: usize,
     pub exp: GExp,
 }
@@ -144,6 +165,7 @@ pub struct While<'a> {
     pub block: LVec<Statement<'a>>,
 }
 
+/// WHILE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GWhile {
     pub exp: GExp,
@@ -158,6 +180,7 @@ pub struct If<'a> {
     pub els: Option<LVec<Statement<'a>>>,
 }
 
+/// IF statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GIf {
     pub exp: GExp,
@@ -168,34 +191,58 @@ pub struct GIf {
 /// Statement.
 #[derive(Debug)]
 pub enum Statement<'a> {
+    /// Declare and initialise a local variable.
     Let(Let<'a>),
+    /// Assign a local variable.
     Set(Set<'a>),
+    /// Append to a local string or binary variable.
+    Append(Append<'a>),
+    /// While loop.
     While(While<'a>),
+    /// Conditional evalaution.
     If(If<'a>),
-
+    /// Insert into table.
     Insert(Insert<'a>),
+    /// Output values.
     Select(Select<'a>),
+    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
     For(For<'a>),
+    /// Update table rows. Where condition is not optional, use "where true" to update all rows.
     Update(Update<'a>),
+    /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
     Delete(Delete<'a>),
-
+    /// Create Schema.
     CreateSchema(CreateSchema<'a>),
+    /// Create Table.
     CreateTable(CreateTable<'a>),
+    /// Create Function.
     CreateFn(CreateFn<'a>),
+    /// Drop Table.
     DropTable(DropTable),
 }
 
 /// Similar to [Statement] but storeable and shareable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GStatement {
+    /// Declare and initialise a local variable.
     Let(GLet),
+    /// Assign a local variable.
     Set(GSet),
+    /// Append to a local string or binary variable.
+    Append(GAppend),
+    /// While loop.
     While(GWhile),
+    /// Conditional evalaution.
     If(GIf),
+    /// Insert into table.
     Insert(GInsert),
+    /// Output values.
     Select(GSelect),
+    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
     For(GFor),
+    /// Update table rows. Where condition is not optional, use "where true" to update all rows.
     Update(GUpdate),
+    /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
     Delete(GDelete),
 }
 
@@ -207,6 +254,10 @@ impl GStatement {
                 exp: GExp::from(&x.exp),
             }),
             Statement::Set(x) => GStatement::Set(GSet {
+                i: x.i,
+                exp: GExp::from(&x.exp),
+            }),
+            Statement::Append(x) => GStatement::Append(GAppend {
                 i: x.i,
                 exp: GExp::from(&x.exp),
             }),

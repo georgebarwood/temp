@@ -1,8 +1,11 @@
 /* What next plan...
 
    ORDER BY, Indexes.
-   +=, |=
+   |= (DONE)
    Auto-conversion of ints to strings.
+   User-defined types. Could start with tuples, e.g. (int,int)
+
+   How to handle output (SELECT), and input params.
 
    How should CREATE FN work?
    Could have several CREATE FNs then a GO, may be forward calls or recursion.

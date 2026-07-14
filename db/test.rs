@@ -1,7 +1,7 @@
 use crate::*;
 
 pub fn test() {
-    let sql: [&[u8]; 12] = [
+    let sql: [&[u8]; 13] = [
         b"schema dbo",
         b"table dbo.cust(Name string,Age int,Height float,Email string)",
         b"insert into dbo.cust(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
@@ -16,6 +16,7 @@ pub fn test() {
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
         b"fn dbo.test(x int,y int) -> int set result = x + y * 2",
         b"let x=5 select Id, Name, Age, dbo.test(Age,x) from dbo.cust",
+        b"let s='' for n = Name from dbo.cust set s |= n select s",
     ];
 
     let (is_new, spd) = get_spd();

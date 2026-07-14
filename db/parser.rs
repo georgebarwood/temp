@@ -124,15 +124,30 @@ impl<'a> Parser<'a> {
 
     fn set(&mut self) -> Result<Statement<'a>, E> {
         let name = self.read_ident()?;
-        self.expect_token(Token::Equal)?;
+        let append = if self.token == Token::VBarEqual
+        {
+           self.next_token()?;
+           true
+        } else {
+           self.expect_token(Token::Equal)?;
+           false
+        };
         let mut exp = self.exp(0)?;
         if let Some((i, vdt)) = local(&self.locs, name) {
             if self.pass == 2 {
                 let rctx = RContext::Local(&self.locs);
                 let edt = self.resolve(&mut exp, &rctx, 0)?;
+                if append {
+                   self.check_string_or_binary(vdt)?;
+                }
                 self.check_types(vdt, edt)?;
             }
-            Ok(Statement::Set(Set { i, exp }))
+            if append
+            {
+                Ok(Statement::Append(Append { i, exp }))
+            } else {
+                Ok(Statement::Set(Set { i, exp }))
+            }
         } else {
             Err(E::new("Local variable name not found"))
         }
@@ -144,6 +159,20 @@ impl<'a> Parser<'a> {
         } else {
             let msg = format!("Type mismatch expected {:?} got {:?}", x, y);
             Err(E::new(&msg))
+        }
+    }
+
+    fn check_string_or_binary(&self, x: &DataType) -> Result<(), E> {
+        if self.pass == 1 {
+            Ok(())
+        } else { 
+            match x {
+                DataType::String(_) | DataType::Binary(_) => Ok(()),
+                 _ => {
+                   let msg = format!("string or binary exepected got {:?}", x);
+                   Err(E::new(&msg))
+                }
+            }
         }
     }
 
@@ -415,7 +444,6 @@ impl<'a> Parser<'a> {
                         return Err(E::new(e));
                     }
                 }
-                RContext::None => panic!(),
             },
 
             Exp::Binary(op, lhs, rhs) => {
