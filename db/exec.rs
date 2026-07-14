@@ -332,17 +332,18 @@ pub fn execute_fn(f: &SFunc, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 fn execute_gblock(slist: &[GStatement], run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
+        use GStatement::*;
         match s {
-            GStatement::Let(x) => exec_glet(x, run, dict, ps),
-            GStatement::Set(x) => exec_gset(x, run, dict, ps),
-            GStatement::Append(x) => exec_gappend(x, run, dict, ps),
-            GStatement::While(x) => exec_gwhile(x, run, dict, ps),
-            GStatement::If(x) => exec_gif(x, run, dict, ps),
-            GStatement::Insert(x) => exec_ginsert(x, run, dict, ps),
-            GStatement::Update(x) => exec_gupdate(x, run, dict, ps),
-            GStatement::Delete(x) => exec_gdelete(x, run, dict, ps),
-            GStatement::Select(x) => exec_gselect(x, run, dict, ps),
-            GStatement::For(x) => exec_gfor(x, run, dict, ps),
+            Let(x) => exec_glet(x, run, dict, ps),
+            Set(x) => exec_gset(x, run, dict, ps),
+            Append(x) => exec_gappend(x, run, dict, ps),
+            While(x) => exec_gwhile(x, run, dict, ps),
+            If(x) => exec_gif(x, run, dict, ps),
+            Insert(x) => exec_ginsert(x, run, dict, ps),
+            Update(x) => exec_gupdate(x, run, dict, ps),
+            Delete(x) => exec_gdelete(x, run, dict, ps),
+            Select(x) => exec_gselect(x, run, dict, ps),
+            For(x) => exec_gfor(x, run, dict, ps),
         };
     }
     run.stack.truncate(slen); // pop local variables from stack.
