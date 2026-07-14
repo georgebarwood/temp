@@ -243,10 +243,10 @@ fn exec_delete(del: &Delete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     }
 }
 
-fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    if sel.order_by.is_some() {
-        exec_select_order_by(sel, run, dict, ps)
-    } else if let Some(f) = &sel.from {
+fn exec_select(x: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    if x.order_by.is_some() {
+        exec_select_order_by(x, run, dict, ps)
+    } else if let Some(f) = &x.from {
         let t = ps.load_table(f.id, &f.dt);
         let table = t.borrow();
 
@@ -254,7 +254,7 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         while let Some(b) = iter.next_ref(ps) {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
-            let ok = if let Some(wher) = &sel.wher {
+            let ok = if let Some(wher) = &x.wher {
                 wher.eval_lr(run, dict, ps, &mut lr).bool()
             } else {
                 true
@@ -262,7 +262,7 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 
             if ok {
                 print!("Selected vals=");
-                for e in &sel.vals {
+                for e in &x.vals {
                     let v = e.eval_lr(run, dict, ps, &mut lr);
                     print!(" {:?} ", v);
                 }
@@ -271,7 +271,7 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
         }
     } else {
         // select with no from
-        for e in &sel.vals {
+        for e in &x.vals {
             let v = e.eval(run, dict, ps);
             print!(" {:?} ", v);
         }
@@ -279,92 +279,58 @@ fn exec_select(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     }
 }
 
-fn exec_select_order_by(sel: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    let (ob, desc) = sel.order_by.as_ref().unwrap();
-    let f = sel.from.as_ref().unwrap();
-    let t = ps.load_table(f.id, &f.dt);
-    let table = t.borrow();
-    let mut iter = table.iter(ps);
+fn exec_select_order_by(x: &Select, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let f = x.from.as_ref().unwrap();
+    let temp = get_temp(f, &x.vals, &x.wher, &x.order_by, run, dict, ps);
 
-    // Different approaches are possible, but for now build temp list of order exps and exps.
-    // Then sort and output the exps.
-    let mut temp = LVec::new();
-    while let Some(b) = iter.next_ref(ps) {
-        let mut lr = table.lazy_row(b);
-        let ok = if let Some(wher) = &sel.wher {
-            wher.eval_lr(run, dict, ps, &mut lr).bool()
-        } else {
-            true
-        };
-        if ok {
-            let mut row = LVec::new();
-            for e in ob {
-                let v = e.eval_lr(run, dict, ps, &mut lr);
-                row.push(v);
-            }
-            for e in &sel.vals {
-                let v = e.eval_lr(run, dict, ps, &mut lr);
-                row.push(v);
-            }
-            temp.push(row);
-        }
-    }
-    temp.sort_by(|a, b| row_compare(a, b, desc));
-    let n = desc.len();
+    let n = x.order_by.as_ref().unwrap().0.len();
     for row in &temp {
         println!("sorted row={:?}", &row[n..]);
     }
 }
 
-use std::cmp::Ordering;
-/// Compare table rows.
-pub fn row_compare(a: &[Value], b: &[Value], desc: &[bool]) -> Ordering {
-    let mut ix = 0;
-    loop {
-        let cmp = a[ix].cmp(&b[ix]);
-        if cmp != Ordering::Equal {
-            if !desc[ix] {
-                return cmp;
-            };
-            return if cmp == Ordering::Less {
-                Ordering::Greater
+fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    if x.order_by.is_some() {
+        exec_for_order_by(x, run, dict, ps);
+    } else {
+        let t = ps.load_table(x.from.id, &x.from.dt);
+        let table = t.borrow();
+        let mut iter = table.iter(ps);
+        while let Some(b) = iter.next_ref(ps) {
+            let mut lr = table.lazy_row(b);
+
+            let ok = if let Some(wher) = &x.wher {
+                let v = wher.eval_lr(run, dict, ps, &mut lr);
+                v.bool()
             } else {
-                Ordering::Less
+                true
             };
-        }
-        ix += 1;
-        if ix == desc.len() {
-            return Ordering::Equal;
+
+            if ok {
+                let len = run.stack.len();
+                for e in &x.vals {
+                    let v = e.eval_lr(run, dict, ps, &mut lr);
+                    run.stack.push(v);
+                }
+                execute_block(&x.block, run, dict, ps);
+                run.stack.truncate(len);
+            }
         }
     }
 }
 
-fn exec_for(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // Iterate through table. For each row with valid where condition,
-    // push evaluated exps on the stack and execute block.
+fn exec_for_order_by(x: &For, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let temp = get_temp(&x.from, &x.vals, &x.wher, &x.order_by, run, dict, ps);
 
-    let t = ps.load_table(x.from.id, &x.from.dt);
-    let table = t.borrow();
-    let mut iter = table.iter(ps);
-    while let Some(b) = iter.next_ref(ps) {
-        let mut lr = table.lazy_row(b);
+    let n = x.order_by.as_ref().unwrap().0.len();
 
-        let ok = if let Some(wher) = &x.wher {
-            let v = wher.eval_lr(run, dict, ps, &mut lr);
-            v.bool()
-        } else {
-            true
-        };
-
-        if ok {
-            let len = run.stack.len();
-            for e in &x.vals {
-                let v = e.eval_lr(run, dict, ps, &mut lr);
-                run.stack.push(v);
-            }
-            execute_block(&x.block, run, dict, ps);
-            run.stack.truncate(len);
+    for row in &temp {
+        let len = run.stack.len();
+        for v in &row[n..] {
+            run.stack.push(v.clone());
         }
+        execute_block(&x.block, run, dict, ps);
+        run.stack.truncate(len);
     }
 }
 
@@ -518,7 +484,9 @@ fn exec_gdelete(del: &GDelete, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
 }
 
 fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    if let Some(f) = &sel.from {
+    if sel.order_by.is_some() {
+        exec_gselect_order_by(sel, run, dict, ps)
+    } else if let Some(f) = &sel.from {
         let t = ps.load_table(f.id, &f.dt);
         let table = t.borrow();
         let mut iter = table.iter(ps);
@@ -549,32 +517,58 @@ fn exec_gselect(sel: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
     }
 }
 
+fn exec_gselect_order_by(x: &GSelect, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let f = x.from.as_ref().unwrap();
+    let temp = get_gtemp(f, &x.vals, &x.wher, &x.order_by, run, dict, ps);
+
+    let n = x.order_by.as_ref().unwrap().0.len();
+    for row in &temp {
+        println!("sorted row={:?}", &row[n..]);
+    }
+}
+
 fn exec_gfor(x: &GFor, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
-    // Iterate through table. For each row with valid where condition,
-    // push evaluated exps on the stack and execute block.
+    if x.order_by.is_some() {
+        exec_gfor_order_by(x, run, dict, ps);
+    } else {
+        let t = ps.load_table(x.from.id, &x.from.dt);
+        let table = t.borrow();
+        let mut iter = table.iter(ps);
+        while let Some(b) = iter.next_ref(ps) {
+            let mut lr = table.lazy_row(b);
 
-    let t = ps.load_table(x.from.id, &x.from.dt);
-    let table = t.borrow();
-    let mut iter = table.iter(ps);
-    while let Some(b) = iter.next_ref(ps) {
-        let mut lr = table.lazy_row(b);
+            let ok = if let Some(wher) = &x.wher {
+                let v = wher.eval_lr(run, dict, ps, &mut lr);
+                v.bool()
+            } else {
+                true
+            };
 
-        let ok = if let Some(wher) = &x.wher {
-            let v = wher.eval_lr(run, dict, ps, &mut lr);
-            v.bool()
-        } else {
-            true
-        };
-
-        if ok {
-            let len = run.stack.len();
-            for e in &x.vals {
-                let v = e.eval_lr(run, dict, ps, &mut lr);
-                run.stack.push(v);
+            if ok {
+                let len = run.stack.len();
+                for e in &x.vals {
+                    let v = e.eval_lr(run, dict, ps, &mut lr);
+                    run.stack.push(v);
+                }
+                execute_gblock(&x.block, run, dict, ps);
+                run.stack.truncate(len);
             }
-            execute_gblock(&x.block, run, dict, ps);
-            run.stack.truncate(len);
         }
+    }
+}
+
+fn exec_gfor_order_by(x: &GFor, run: &mut Run, dict: &Dict, ps: &mut PageSet) {
+    let temp = get_gtemp(&x.from, &x.vals, &x.wher, &x.order_by, run, dict, ps);
+
+    let n = x.order_by.as_ref().unwrap().0.len();
+
+    for row in &temp {
+        let len = run.stack.len();
+        for v in &row[n..] {
+            run.stack.push(v.clone());
+        }
+        execute_gblock(&x.block, run, dict, ps);
+        run.stack.truncate(len);
     }
 }
 
@@ -606,5 +600,112 @@ fn append(x: &mut Value, y: &Value) {
             mx.extend_from_slice(y);
         }
         _ => panic!(),
+    }
+}
+
+fn get_temp(
+    f: &STable,
+    vals: &[Exp],
+    wher: &Option<Exp>,
+    order_by: &OrderBy,
+    run: &mut Run,
+    dict: &Dict,
+    ps: &mut PageSet,
+) -> LVec<LVec<Value>> {
+    let (ob, desc) = order_by.as_ref().unwrap();
+    // let f = sel.from.as_ref().unwrap();
+    let t = ps.load_table(f.id, &f.dt);
+    let table = t.borrow();
+    let mut iter = table.iter(ps);
+
+    // Different approaches are possible, but for now build temp list of order exps and exps.
+    // Then sort and output the exps.
+    let mut temp = LVec::new();
+    while let Some(b) = iter.next_ref(ps) {
+        let mut lr = table.lazy_row(b);
+        let ok = if let Some(wher) = &wher {
+            wher.eval_lr(run, dict, ps, &mut lr).bool()
+        } else {
+            true
+        };
+        if ok {
+            let mut row = LVec::new();
+            for e in ob {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            for e in vals {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            temp.push(row);
+        }
+    }
+    temp.sort_by(|a, b| row_compare(a, b, desc));
+    temp
+}
+
+fn get_gtemp(
+    f: &STable,
+    vals: &[GExp],
+    wher: &Option<GExp>,
+    order_by: &GOrderBy,
+    run: &mut Run,
+    dict: &Dict,
+    ps: &mut PageSet,
+) -> LVec<LVec<Value>> {
+    let (ob, desc) = order_by.as_ref().unwrap();
+    // let f = sel.from.as_ref().unwrap();
+    let t = ps.load_table(f.id, &f.dt);
+    let table = t.borrow();
+    let mut iter = table.iter(ps);
+
+    // Different approaches are possible, but for now build temp list of order exps and exps.
+    // Then sort and output the exps.
+    let mut temp = LVec::new();
+    while let Some(b) = iter.next_ref(ps) {
+        let mut lr = table.lazy_row(b);
+        let ok = if let Some(wher) = &wher {
+            wher.eval_lr(run, dict, ps, &mut lr).bool()
+        } else {
+            true
+        };
+        if ok {
+            let mut row = LVec::new();
+            for e in ob {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            for e in vals {
+                let v = e.eval_lr(run, dict, ps, &mut lr);
+                row.push(v);
+            }
+            temp.push(row);
+        }
+    }
+    temp.sort_by(|a, b| row_compare(a, b, desc));
+    temp
+}
+
+use std::cmp::Ordering;
+/// Compare table rows.
+pub fn row_compare(a: &[Value], b: &[Value], desc: &[bool]) -> Ordering {
+    let mut ix = 0;
+    loop {
+        let cmp = a[ix].cmp(&b[ix]);
+        if cmp != Ordering::Equal {
+            if !desc[ix] {
+                return cmp;
+            };
+            return if cmp == Ordering::Less {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            };
+        }
+        ix += 1;
+        if ix == desc.len() {
+            return Ordering::Equal;
+        }
     }
 }
