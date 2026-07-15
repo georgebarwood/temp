@@ -237,6 +237,33 @@ impl GExp {
             _ => self.eval(run),
         }
     }
+    pub fn walk<F>(&mut self, f:&mut F) where F: FnMut(&mut GExp) {
+        f(self);
+        match self {
+            GExp::Binary(_,lhs,rhs) => {
+                lhs.walk(f);
+                rhs.walk(f);
+            }
+            GExp::FnCall(_,args) => {
+                for e in args { e.walk(f) }
+            }
+            _ => {}
+        }
+    }
+}
+
+use std::fmt::Display;
+use std::fmt::Formatter;
+impl <'a> Display for Exp<'a>
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> 
+    { 
+        match self {
+           Exp::Bool(x) => f.write_str( if *x {"true"} else {"false"} )?,
+           _ => f.write_str( "Some Expression ToDo" )?,
+        }
+        Ok(())
+    }
 }
 
 impl GExp {

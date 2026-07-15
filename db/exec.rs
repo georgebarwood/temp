@@ -6,10 +6,25 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
+    output: &'a mut LVec<u8>, // Maybe could generalise this in future.
+}
+
+impl <'a> Run<'a> {
+    pub fn output( &mut self, v: &Value )
+    {
+        match v {
+            Value::String(v) => self.output.extend_from_slice(v.as_bytes()),
+            Value::Binary(v) => self.output.extend_from_slice(&v),
+            _ => {
+                let s = val_to_str(v);
+                self.output.extend_from_slice(s.as_bytes());
+            }
+        }
+    }
 }
 
 /// Executes a batch of statements. Result is whether dict was updated.
-pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
+pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LVec<u8>) -> bool {
     let mut temp_dict = dict.clone();
     let mut update_dict = false;
 
@@ -41,6 +56,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                         stack: LVec::new(),
                         dict: parser.dict,
                         ps,
+                        output,
                     };
                     execute_block(&slist, &mut run);
                 }
@@ -68,16 +84,25 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                 }
             }
 
-            Statement::CreateTable(ct) => {
+            Statement::CreateTable(x) => {
                 if pass == 1 {
                     let id = dict.new_table_id();
                     let table = STable {
                         id,
-                        dt: ct.col_defs.clone(),
+                        dt: x.col_defs.clone(),
                     };
                     println!("Table Created {:?}", &table);
-                    let nid = dict.new_name_id(ct.tname);
-                    dict.tables.insert((ct.schema_id, nid), Arc::new(table));
+                    let nid = dict.new_name_id(x.tname);
+                    dict.tables.insert((x.schema_id, nid), Arc::new(table));
+                }
+            }
+
+
+            Statement::RenameTable(x) => {
+                if pass == 1 {
+                    let t = dict.tables.remove(&(x.old_schema_id, x.old_nid)).unwrap();
+                    let new_nid = dict.new_name_id(x.new_tname);
+                    dict.tables.insert((x.new_schema_id, new_nid), t);
                 }
             }
 
@@ -103,6 +128,14 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                     let fid = dict.func_lookup.get(&(cf.schema_id, *nid)).unwrap();
                     let f = &mut dict.funcs[*fid];
                     f.block = gblock(&cf.block);
+                }
+            }
+
+            Statement::RenameFn(x) => {
+                if pass == 1 {
+                    let f = dict.func_lookup.remove(&(x.old_schema_id, x.old_nid)).unwrap();
+                    let new_nid = dict.new_name_id(x.new_fname);
+                    dict.func_lookup.insert((x.new_schema_id, new_nid), f);
                 }
             }
 
@@ -133,7 +166,8 @@ fn execute_block(slist: &[Statement], run: &mut Run) {
             Delete(x) => exec_delete(x, run),
             Select(x) => exec_select(x, run),
             For(x) => exec_for(x, run),
-            CreateSchema(_) | CreateTable(_) | CreateFn(_) | DropTable(_) => panic!(),
+            CreateSchema(_) | CreateTable(_) | RenameTable(_) 
+               | CreateFn(_) | RenameFn(_) | DropTable(_) => panic!(),
         };
     }
     run.stack.truncate(slen); // pop local variables from stack.
@@ -265,21 +299,18 @@ fn exec_select(x: &Select, run: &mut Run) {
             };
 
             if ok {
-                print!("Selected vals=");
                 for e in &x.vals {
                     let v = e.eval_lr(run, &mut lr);
-                    print!(" {:?} ", v);
+                    run.output(&v);
                 }
-                println!();
             }
         }
     } else {
         // select with no from
         for e in &x.vals {
             let v = e.eval(run);
-            print!(" {:?} ", v);
+            run.output(&v);
         }
-        println!();
     }
 }
 
@@ -289,7 +320,9 @@ fn exec_select_order_by(x: &Select, run: &mut Run) {
 
     let n = x.order_by.as_ref().unwrap().0.len();
     for row in &temp {
-        println!("sorted row={:?}", &row[n..]);
+        for v in &row[n..] {
+           run.output(v);
+        }
     }
 }
 
@@ -485,37 +518,34 @@ fn exec_gdelete(del: &GDelete, run: &mut Run) {
     }
 }
 
-fn exec_gselect(sel: &GSelect, run: &mut Run) {
-    if sel.order_by.is_some() {
-        exec_gselect_order_by(sel, run)
-    } else if let Some(f) = &sel.from {
+fn exec_gselect(x: &GSelect, run: &mut Run) {
+    if x.order_by.is_some() {
+        exec_gselect_order_by(x, run)
+    } else if let Some(f) = &x.from {
         let t = run.ps.load_table(f.id, &f.dt);
         let table = t.borrow();
         let mut iter = table.iter(run.ps);
         while let Some(b) = iter.next_ref(run.ps) {
             // print!("got a row :");
             let mut lr = table.lazy_row(b);
-            let ok = if let Some(wher) = &sel.wher {
+            let ok = if let Some(wher) = &x.wher {
                 wher.eval_lr(run, &mut lr).bool()
             } else {
                 true
             };
             if ok {
-                print!("Selected vals=");
-                for e in &sel.vals {
+                for e in &x.vals {
                     let v = e.eval_lr(run, &mut lr);
-                    print!(" {:?} ", v);
+                    run.output(&v);
                 }
-                println!();
             }
         }
     } else {
         // SELECT with no FROM
-        for e in &sel.vals {
+        for e in &x.vals {
             let v = e.eval(run);
-            print!(" {:?} ", v);
+            run.output(&v);
         }
-        println!();
     }
 }
 
@@ -525,7 +555,9 @@ fn exec_gselect_order_by(x: &GSelect, run: &mut Run) {
 
     let n = x.order_by.as_ref().unwrap().0.len();
     for row in &temp {
-        println!("sorted row={:?}", &row[n..]);
+        for v in &row[n..] {
+           run.output(v);
+        }
     }
 }
 
@@ -590,6 +622,7 @@ fn gids(t: &RTable, wher: &GExp, run: &mut Run) -> LVec<i64> {
 }
 
 fn append(x: &mut Value, y: &Value) {
+    // Could use get_mut + with_capacity instead of make_mut.
     match (x, y) {
         (Value::String(x), Value::String(y)) => LRc::make_mut(x).push_str(y),
         (Value::Binary(x), Value::Binary(y)) => LRc::make_mut(x).extend_from_slice(y),

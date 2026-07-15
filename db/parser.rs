@@ -63,6 +63,7 @@ impl<'a> Parser<'a> {
             b"table" => self.create_table(),
             b"fn" => self.create_fn(),
             b"drop" => self.drop(),
+            b"rename" => self.rename(),
             _ => {
                 return Err(E::new("Unknown keyword"));
             }
@@ -262,11 +263,21 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    fn rename(&mut self) -> Result<Statement<'a>, E> {
+        let ident = self.read_ident()?;
+        match ident {
+            "table" => self.rename_table(),
+            "fn" => self.rename_fn(),
+            // "schema" => self.drop_schema(),
+            _ => Err(E::new("Expected TABLE, SCHEMA....")),
+        }
+    }
+
     fn drop(&mut self) -> Result<Statement<'a>, E> {
         let ident = self.read_ident()?;
         match ident {
-            "TABLE" => self.drop_table(),
-            // "SCHEMA" => self.drop_schema(),
+            "table" => self.drop_table(),
+            // "schema" => self.drop_schema(),
             _ => Err(E::new("Expected TABLE, SCHEMA....")),
         }
     }
@@ -485,7 +496,7 @@ impl<'a> Parser<'a> {
                 let t1 = self.resolve(lhs, ctx, aos)?;
                 let t2 = self.resolve(rhs, ctx, aos)?;
 
-                if t1.similar(t2) || *op == Operator::Concat && is_string_or_binary(t1) {
+                if t1.similar(t2) || *op == Operator::Concat {
                     // Ok
                 } else {
                     return Err(E::new(&format!(
@@ -710,6 +721,15 @@ impl<'a> Parser<'a> {
         Ok((table, sid, nid))
     }
 
+    fn function(&mut self) -> Result<(usize, i64, i64), E> {
+        let schema = self.read_ident()?;
+        let sid = self.check_schema(schema)?;
+        self.expect_token(Token::Dot)?;
+        let fname = self.read_ident()?;
+        let (func, nid) = self.check_function(sid, fname)?;
+        Ok((func, sid, nid))
+    }
+
     fn create_schema(&mut self) -> Result<Statement<'a>, E> {
         let sname = self.read_ident()?;
         if self.pass == 1 && self.check_schema(sname).is_ok() {
@@ -717,6 +737,37 @@ impl<'a> Parser<'a> {
         }
         let result = CreateSchema { sname };
         let result = Statement::CreateSchema(result);
+        self.schema_updates = true;
+        Ok(result)
+    }
+
+
+    fn rename_table(&mut self) -> Result<Statement<'a>, E> {
+        let (old_schema_id,old_nid) = 
+        {
+           let t = self.table();
+           if self.pass == 2 { (0,0) }
+           else {
+             let (_,x,y) = t?;
+             (x, y)
+           }
+        };
+        
+        self.expect_ident(b"to")?;
+        let new_schema = self.read_ident()?;
+        let new_schema_id = self.check_schema(new_schema)?;
+        self.expect_token(Token::Dot)?;
+        let new_tname = self.read_ident()?;
+        if self.pass == 1 && self.check_table(new_schema_id, new_tname).is_ok() {
+            return Err(E::new("Table already exists"));
+        }
+        let result = RenameTable {
+            old_schema_id,
+            old_nid,
+            new_schema_id,
+            new_tname,
+        };
+        let result = Statement::RenameTable(result);
         self.schema_updates = true;
         Ok(result)
     }
@@ -797,6 +848,37 @@ impl<'a> Parser<'a> {
         self.schema_updates = true;
         Ok(result)
     }
+
+    fn rename_fn(&mut self) -> Result<Statement<'a>, E> {
+        let (old_schema_id,old_nid) = 
+        {
+           let t = self.function();
+           if self.pass == 2 { (0,0) }
+           else {
+             let (_,x,y) = t?;
+             (x, y)
+           }
+        };
+        
+        self.expect_ident(b"to")?;
+        let new_schema = self.read_ident()?;
+        let new_schema_id = self.check_schema(new_schema)?;
+        self.expect_token(Token::Dot)?;
+        let new_fname = self.read_ident()?;
+        if self.pass == 1 && self.check_function(new_schema_id, new_fname).is_ok() {
+            return Err(E::new("Function already exists"));
+        }
+        let result = RenameFn {
+            old_schema_id,
+            old_nid,
+            new_schema_id,
+            new_fname,
+        };
+        let result = Statement::RenameFn(result);
+        self.schema_updates = true;
+        Ok(result)
+    }
+
 
     fn drop_table(&mut self) -> Result<Statement<'a>, E> {
         let (table, schema_id, name_id) = self.table()?;

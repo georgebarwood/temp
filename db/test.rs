@@ -1,25 +1,28 @@
 use crate::*;
 
-pub fn test() {
-    let _sql: [&[u8]; 13] = [
+pub fn test() {    
+    let sql : [&[u8]; 15] = [
         b"schema dbo",
-        b"table dbo.cust(Name string,Age int,Height float,Email string)",
-        b"insert into dbo.cust(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
-        b"let name: string = 'Marilyn' insert into dbo.cust(Name,Age) values(name, 66)",
+        b"table dbo.xxx(Name string,Age int,Height float,Email string)",
+        b"insert into dbo.xxx(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
+        b"let name: string = 'Marilyn' insert into dbo.xxx(Name,Age) values(name, 66)",
+        b"rename table dbo.xxx to dbo.cust",
         b"insert into dbo.cust(Name,Age) values('Freddy', 2)",
         b"update dbo.cust set Age = Age + 1 where Age != 66",
         b"delete from dbo.cust where Age > 70 or Age > 10 and Age < 20",
         b"select Id, Name, Age from dbo.cust where Age!=66 and Age > 5",
         // b"let x : int = 10 select Id, Name, x * Age from dbo.cust where Id < x",
-        b"let x = 6 let f = 1 while x > 0 { set f = f * x set x = x - 1 } select 'f=', f",
+        b"let x = 6 let f = 1 while x > 0 { set f = f * x set x = x - 1 } select 'f=' | f",
         // b"drop table dbo.cust",
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
-        b"fn dbo.test(x int,y int) -> int set result = x + y * 2",
-        b"let x=5 select Id, Name | Age, dbo.test(Age,x) from dbo.cust order by Name, Id desc",
+        b"fn dbo.testxx(x int,y int) -> int set result = x + y * 2",
+        b"rename fn dbo.testxx to dbo.test",
+        b"let x=5 select ' Id=' | Id | ' Name=' | Name | ' Age=' | Age | ' test=' | dbo.test(Age,x) 
+            from dbo.cust order by Name, Id desc",
         b"let s='' for n = Name from dbo.cust order by Name desc set s |= n select s",
     ];
 
-    let sql: [&[u8]; 4] = [
+    let _sql : [&[u8]; 4] = [
         b"schema test",
         b"table test.users (name string, age int)",
         b"let i = 8192
@@ -55,12 +58,15 @@ pub fn test() {
         println!("Source='{}'", tos(s));
 
         let start = std::time::Instant::now();
-        if go(s, &mut dict, ps) {
+        let mut output = LVec::new();
+        if go(s, &mut dict, ps, &mut output) {
             dict_changed = true;
         }
-        println!("elapsed micros={}", start.elapsed().as_micros());
+        println!("elapsed micros={} output={}", start.elapsed().as_micros(), tos(&output));
     }
 
+    println!();
+    
     global.lock().unwrap().commit(ps, dict, dict_changed);
 
     global.lock().unwrap().shutdown();

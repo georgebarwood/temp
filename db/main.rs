@@ -1,7 +1,24 @@
 /* What next plan...
 
-   ORDER BY DONE
+   rename fn x to y
+   alter fn -- allowed provided number and types of args, and ret type, does not change.
+   rename table x to y
+   alter table -- allowed provided number and types of columns does not change.
+   sys.display_fn -- built in function that gets function source
+   sys.display_table -- built in function that gets table definition.
+   replace table x with y
+      -- Edits functions changing table references from x to y
+      -- Allowed provided all referenced columns in x have columns in y with same name and type
+
    Indexes.
+      Part 1 : in FOR statements, look for WHERE Id = ... where conditions.
+        Change wher to WhereById
+      Part 2 : look for WHERE (int column) = ... where conditions.
+        Construct index, use WhereByIndex and send index to update task when done.
+      Part 3 : look for more complex WHERE conditions, then same as Part 2.
+
+   Check function bodies do not have schema update statements.
+     
    |= (DONE)
    Auto-conversion of ints to strings. DONE
    User-defined types. Could start with tuples, e.g. (int,int)
@@ -39,6 +56,7 @@
    Order By -- ToDo
       Store ids and order by values in an LVec, sort using values, then iterate.
       Could also store referenced values in the LVec.
+      DONE
 
    Test with large number of rows.
 

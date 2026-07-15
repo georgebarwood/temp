@@ -16,6 +16,15 @@ pub struct CreateTable<'a> {
     pub col_defs: Arc<DataType>,
 }
 
+/// RENAME TABLE statement.
+#[derive(Debug)]
+pub struct RenameTable<'a> {
+    pub old_schema_id: i64,
+    pub old_nid: i64,
+    pub new_schema_id: i64,
+    pub new_tname: &'a str,
+}
+
 /// CREATE FN statement.
 #[derive(Debug)]
 pub struct CreateFn<'a> {
@@ -24,6 +33,15 @@ pub struct CreateFn<'a> {
     pub ret: Arc<DataType>,
     pub args: LVec<(&'a str, Arc<DataType>)>,
     pub block: LVec<Statement<'a>>,
+}
+
+/// RENAME FN statement.
+#[derive(Debug)]
+pub struct RenameFn<'a> {
+    pub old_schema_id: i64,
+    pub old_nid: i64,
+    pub new_schema_id: i64,
+    pub new_fname: &'a str,
 }
 
 /// DROP TABLE statement.
@@ -218,8 +236,12 @@ pub enum Statement<'a> {
     CreateSchema(CreateSchema<'a>),
     /// Create Table.
     CreateTable(CreateTable<'a>),
+    /// Rename Table.
+    RenameTable(RenameTable<'a>),
     /// Create Function.
     CreateFn(CreateFn<'a>),
+    /// Rename Function.
+    RenameFn(RenameFn<'a>),
     /// Drop Table.
     DropTable(DropTable),
 }

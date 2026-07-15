@@ -56,18 +56,23 @@ impl Operator {
                 Operator::Or => Value::Bool(*x || *y),
                 _ => todo!(),
             }
-        } else if let Value::String(x) = &x {
-            match self {
-                Operator::Concat => {
-                    if let Value::String(y) = &y {
-                        concat(x, y)
+        } else if *self == Operator::Concat {
+                    if let Value::String(x) = &x {
+                        if let Value::String(y) = &y {
+                            concat(x, y)
+                        } else {
+                            let temp = val_to_str(y);
+                            concat(x, &temp)
+                        }
                     } else {
-                        let temp = val_to_str(y);
-                        concat(x, &temp)
+                        let temp = val_to_str(x);
+                        if let Value::String(y) = &y {
+                            concat(&temp, y)
+                        } else {
+                            let temp2 = val_to_str(y);
+                            concat(&temp, &temp2)
+                        } 
                     }
-                }
-                _ => todo!(),
-            }
         } else {
             println!("self={:?}", self);
             todo!()
