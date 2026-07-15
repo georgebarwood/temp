@@ -15,7 +15,7 @@ pub fn test() {
         // b"drop table dbo.cust",
         b"let total = 0 for x = Age from dbo.cust where Age < 20 set total = total + x select total",
         b"fn dbo.test(x int,y int) -> int set result = x + y * 2",
-        b"let x=5 select Id, Name, Age, dbo.test(Age,x) from dbo.cust order by Name, Id desc",
+        b"let x=5 select Id, Name | Age, dbo.test(Age,x) from dbo.cust order by Name, Id desc",
         b"let s='' for n = Name from dbo.cust order by Name desc set s |= n select s",
     ];
 
@@ -25,7 +25,7 @@ pub fn test() {
         b"let i = 8192
           while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
         b"let total=0 for x = age from test.users set total = total + x select total",
-    ];    
+    ];
 
     let (is_new, spd) = get_spd();
 
@@ -53,7 +53,7 @@ pub fn test() {
     for s in sql {
         println!();
         println!("Source='{}'", tos(s));
-        
+
         let start = std::time::Instant::now();
         if go(s, &mut dict, ps) {
             dict_changed = true;

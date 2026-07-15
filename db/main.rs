@@ -1,16 +1,22 @@
 /* What next plan...
 
-   ORDER BY, Indexes.
+   ORDER BY DONE
+   Indexes.
    |= (DONE)
-   Auto-conversion of ints to strings.
+   Auto-conversion of ints to strings. DONE
    User-defined types. Could start with tuples, e.g. (int,int)
 
    How to handle output (SELECT), and input params.
+     Maybe web handler should take Struct/Map param.
+     Should there be async functions? Web handler takes async input byte stream.
+     Output can just be byte stream.
+     Maybe input and output can be byte streams.
 
    How should CREATE FN work?
    Could have several CREATE FNs then a GO, may be forward calls or recursion.
    So first pass, create an entry in dictonary, but no type-checking.
    Second pass, do type checking, resolve all function names.
+   DONE
 
    Next: create function call expression. DONE
 
@@ -19,7 +25,7 @@
    Local variable declarations, BEGIN END blocks (done)
        IF ELSE etc. Done
 
-   FOR var = name ... FROM table WHERE ... ORDER BY ... <statement> -- Done (except order by)
+   FOR var = name ... FROM table WHERE ... ORDER BY ... <statement> -- Done
 
    Local var decl, make type optional.(done)
       == Allow multiple lets  let x=0, y=2, z=3
@@ -53,35 +59,35 @@ use std::sync::Mutex;
 use tablestg::*;
 
 /// SQL(-like) parsing. [Parser]
-pub mod parser;
+mod parser;
 use parser::*;
 
 /// [TokenReader] reads [Token]s from a byte string.
-pub mod token;
+mod token;
 use token::*;
 
-/// [Dict]ionary of schemas, tables, [STable], [SFunc], [RContext], [Loc]al variable.
-pub mod schema;
+/// [Dict]ionary of schemas, tables, functions. [STable], [SFunc].
+mod schema;
 use schema::*;
 
 /// [Statement] and [GStatement].
-pub mod statement;
+mod statement;
 use statement::*;
 
 /// [Operator]s.
-pub mod operator;
+mod operator;
 use operator::*;
 
 /// [Exp]ressions and [GExp].
-pub mod exp;
+mod exp;
 use exp::*;
 
-/// Global state, initialisation.
+/// Global state [GSS], initialisation.
 pub mod global;
 use global::*;
 
 /// Execution of statements.
-pub mod exec;
+mod exec;
 use exec::*;
 
 /// Test

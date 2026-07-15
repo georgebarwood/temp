@@ -13,7 +13,7 @@ pub struct GSS {
 }
 
 impl GSS {
-    /// Create Global shared sate. dict is initialised later by init_dict.
+    /// Create Global shared state. dict is initialised later by init_dict.
     pub fn new(spd: Arc<SharedPagedData>) -> Self {
         let dict = Arc::new(Dict::new());
         Self { spd, dict }
@@ -24,7 +24,7 @@ impl GSS {
         self.dict = dict;
     }
 
-    /// Gets PageSet and Dict for writer.
+    /// Get PageSet and Dict for writing.
     pub fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
         let apd = self.spd.new_writer();
         let ps = PageSet::new(apd);
@@ -32,7 +32,7 @@ impl GSS {
         (ps, dict)
     }
 
-    /// Gets PageSet and Dict for reader.
+    /// Get PageSet and Dict for reading.
     pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
         let apd = self.spd.new_reader();
         let ps = PageSet::new(apd);

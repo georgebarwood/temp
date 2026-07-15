@@ -37,7 +37,11 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet) -> bool {
                     execute_schema_updates(pass, &slist, md, ps);
                     update_dict = true;
                 } else if pass == 2 {
-                    let mut run = Run { stack: LVec::new(), dict: parser.dict, ps };
+                    let mut run = Run {
+                        stack: LVec::new(),
+                        dict: parser.dict,
+                        ps,
+                    };
                     execute_block(&slist, &mut run);
                 }
             }
@@ -579,7 +583,7 @@ fn gids(t: &RTable, wher: &GExp, run: &mut Run) -> LVec<i64> {
         let mut lr = table.lazy_row(b);
         if wher.eval_lr(run, &mut lr).bool() {
             let id = lr.item(0, run.ps).int();
-             result.push(id);
+            result.push(id);
         }
     }
     result
@@ -594,16 +598,15 @@ fn append(x: &mut Value, y: &Value) {
 }
 
 fn get_temp(
-    f: &STable,
+    st: &STable,
     vals: &[Exp],
     wher: &Option<Exp>,
     order_by: &OrderBy,
-    run: &mut Run
+    run: &mut Run,
 ) -> LVec<LVec<Value>> {
     let (ob, desc) = order_by.as_ref().unwrap();
-    // let f = sel.from.as_ref().unwrap();
-    let t = run.ps.load_table(f.id, &f.dt);
-    let table = t.borrow();
+    let table = run.ps.load_table(st.id, &st.dt);
+    let table = table.borrow();
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
@@ -615,7 +618,7 @@ fn get_temp(
             true
         };
         if ok {
-            let mut row = LVec::with_capacity(ob.len()+vals.len());
+            let mut row = LVec::with_capacity(ob.len() + vals.len());
             for e in ob {
                 let v = e.eval_lr(run, &mut lr);
                 row.push(v);
@@ -632,15 +635,15 @@ fn get_temp(
 }
 
 fn get_gtemp(
-    f: &STable,
+    st: &STable,
     vals: &[GExp],
     wher: &Option<GExp>,
     order_by: &GOrderBy,
-    run: &mut Run
+    run: &mut Run,
 ) -> LVec<LVec<Value>> {
     let (ob, desc) = order_by.as_ref().unwrap();
-    let t = run.ps.load_table(f.id, &f.dt);
-    let table = t.borrow();
+    let table = run.ps.load_table(st.id, &st.dt);
+    let table = table.borrow();
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
@@ -652,7 +655,7 @@ fn get_gtemp(
             true
         };
         if ok {
-            let mut row = LVec::with_capacity(ob.len()+vals.len());
+            let mut row = LVec::with_capacity(ob.len() + vals.len());
             for e in ob {
                 let v = e.eval_lr(run, &mut lr);
                 row.push(v);

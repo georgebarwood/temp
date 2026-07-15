@@ -120,15 +120,3 @@ pub struct SFunc {
     pub parm_types: GVec<Arc<DataType>>,
     pub block: GVec<GStatement>,
 }
-
-/// Local variable declaration.
-pub struct Loc<'a> {
-    pub name: &'a str,
-    pub datatype: Arc<DataType>,
-}
-
-/// Resolve Context ( for resolving names ).
-pub enum RContext<'a> {
-    STable(&'a STable, &'a RContext<'a>),
-    Local(&'a [Loc<'a>]),
-}

@@ -56,11 +56,16 @@ impl Operator {
                 Operator::Or => Value::Bool(*x || *y),
                 _ => todo!(),
             }
-        } else if let Value::String(x) = &x
-            && let Value::String(y) = &y
-        {
+        } else if let Value::String(x) = &x {
             match self {
-                Operator::Concat => concat(x, y),
+                Operator::Concat => {
+                    if let Value::String(y) = &y {
+                        concat(x, y)
+                    } else {
+                        let temp = val_to_str(y);
+                        concat(x, &temp)
+                    }
+                }
                 _ => todo!(),
             }
         } else {
@@ -76,4 +81,18 @@ fn concat(x: &str, y: &str) -> Value {
     s.push_str(y);
     let s = LRc::new(s);
     Value::String(s)
+}
+
+pub fn val_to_str(x: &Value) -> LString {
+    use std::fmt::Write;
+    let mut result = LString::new();
+    match x {
+        Value::String(s) => result.push_str(s),
+        Value::Int(x) => write!(result, "{}", x).unwrap(),
+        Value::Bool(x) => write!(result, "{}", x).unwrap(),
+        Value::Float(x) => write!(result, "{}", x.0).unwrap(),
+        // Value::Binary(x) => util::to_hex(&mut result, x),
+        _ => panic!(),
+    }
+    result
 }

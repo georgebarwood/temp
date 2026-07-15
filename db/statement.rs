@@ -224,7 +224,7 @@ pub enum Statement<'a> {
     DropTable(DropTable),
 }
 
-/// Similar to [Statement] but storeable and shareable.
+/// Similar to [Statement] but storeable and shareable, see [SFunc].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GStatement {
     /// Declare and initialise a local variable.
@@ -348,6 +348,7 @@ pub fn gblock(list: &[Statement]) -> GVec<GStatement> {
     block
 }
 
+/// Convert OrderBy to GOrderBy.
 pub fn gorder_by(list: &OrderBy) -> GOrderBy {
     if let Some((exps, descs)) = list {
         let mut result = GVec::with_capacity(exps.len());

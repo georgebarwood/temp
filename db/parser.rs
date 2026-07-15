@@ -4,6 +4,19 @@ pub fn tos(s: &[u8]) -> &str {
     str::from_utf8(s).unwrap()
 }
 
+/// Local variable declaration.
+struct Loc<'a> {
+    pub name: &'a str,
+    pub datatype: Arc<DataType>,
+}
+
+/// Resolve Context ( for resolving names ).
+enum RContext<'a> {
+    STable(&'a STable, &'a RContext<'a>),
+    Local(&'a [Loc<'a>]),
+}
+
+/// Parse SQL. There are two passes.
 pub struct Parser<'a> {
     token: Token,
     tr: TokenReader<'a>,
@@ -60,7 +73,7 @@ impl<'a> Parser<'a> {
     fn stat(&mut self) -> Result<Statement<'a>, E> {
         if let Token::Ident(x, y) = &self.token {
             let ident = &self.tr.input[*x..*y];
-            self.next_token()?;
+            self.next()?;
             self.statement(ident)
         } else {
             Err(E::new("Ident to start statment expected"))
@@ -68,13 +81,13 @@ impl<'a> Parser<'a> {
     }
 
     pub fn statements(&mut self) -> Result<LVec<Statement<'a>>, E> {
-        self.next_token()?;
+        self.next()?;
         let mut result = LVec::new();
         loop {
             match &self.token {
                 Token::Ident(x, y) => {
                     let ident = &self.tr.input[*x..*y];
-                    self.next_token()?;
+                    self.next()?;
                     let s = self.statement(ident)?;
                     result.push(s);
                 }
@@ -90,12 +103,12 @@ impl<'a> Parser<'a> {
         let len = self.locs.len();
         let mut result = LVec::new();
         if self.token == Token::LCurly {
-            self.next_token()?;
+            self.next()?;
             while self.token != Token::RCurly {
                 let stat = self.stat()?;
                 result.push(stat);
             }
-            self.next_token()?;
+            self.next()?;
         } else {
             let stat = self.stat()?;
             result.push(stat);
@@ -108,7 +121,7 @@ impl<'a> Parser<'a> {
         let name = self.read_ident()?;
 
         let mut dt = if self.token == Token::Colon {
-            self.next_token()?;
+            self.next()?;
             Some(Arc::new(self.datatype()?))
         } else {
             None
@@ -138,7 +151,7 @@ impl<'a> Parser<'a> {
     fn set(&mut self) -> Result<Statement<'a>, E> {
         let name = self.read_ident()?;
         let append = if self.token == Token::VBarEqual {
-            self.next_token()?;
+            self.next()?;
             true
         } else {
             self.expect_token(Token::Equal)?;
@@ -174,7 +187,7 @@ impl<'a> Parser<'a> {
         let exp = self.bool_exp()?;
         let block = self.block()?;
         let els = if self.is_ident(b"else") {
-            self.next_token()?;
+            self.next()?;
             Some(self.block()?)
         } else {
             None
@@ -192,16 +205,11 @@ impl<'a> Parser<'a> {
     }
 
     fn check_string_or_binary(&self, x: &DataType) -> Result<(), E> {
-        if self.pass == 1 {
+        if self.pass == 1 || is_string_or_binary(x) {
             Ok(())
         } else {
-            match x {
-                DataType::String(_) | DataType::Binary(_) => Ok(()),
-                _ => {
-                    let msg = format!("string or binary exepected got {:?}", x);
-                    Err(E::new(&msg))
-                }
-            }
+            let msg = format!("string or binary exepected got {:?}", x);
+            Err(E::new(&msg))
         }
     }
 
@@ -477,8 +485,9 @@ impl<'a> Parser<'a> {
                 let t1 = self.resolve(lhs, ctx, aos)?;
                 let t2 = self.resolve(rhs, ctx, aos)?;
 
-                if !t1.similar(t2) {
-                    // May want to do some conversion on rhs in future, e.g. int -> string.
+                if t1.similar(t2) || *op == Operator::Concat && is_string_or_binary(t1) {
+                    // Ok
+                } else {
                     return Err(E::new(&format!(
                         "Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
                         lhs, rhs, t1, t2
@@ -621,7 +630,7 @@ impl<'a> Parser<'a> {
             if op == Operator::None || op_prec < prec {
                 break;
             }
-            self.next_token()?;
+            self.next()?;
             let rhs = self.exp(op_prec)?;
             e = Exp::Binary(op, LBox::new(e), LBox::new(rhs));
         }
@@ -632,17 +641,17 @@ impl<'a> Parser<'a> {
     fn exp_primary(&mut self) -> Result<Exp<'a>, E> {
         match self.token {
             Token::Int(x) => {
-                self.next_token()?;
+                self.next()?;
                 Ok(Exp::Int(x))
             }
             Token::String(x, y) => {
                 let lit = &self.tr.input[x..y];
-                self.next_token()?;
+                self.next()?;
                 Ok(Exp::String(tos(lit)))
             }
             Token::Ident(x, y) => {
                 let name = &self.tr.input[x..y];
-                self.next_token()?;
+                self.next()?;
                 Ok(match name {
                     b"true" => Exp::Bool(true),
                     b"false" => Exp::Bool(false),
@@ -650,7 +659,7 @@ impl<'a> Parser<'a> {
                 })
             }
             Token::LBra => {
-                self.next_token()?;
+                self.next()?;
                 let e = self.exp(0)?;
                 self.expect_token(Token::RBra)?;
                 Ok(e)
@@ -756,7 +765,7 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::RBra)?;
 
         let ret = if self.token == Token::MinusGreater {
-            self.next_token()?;
+            self.next()?;
             self.datatype()?
         } else {
             DataType::Empty
@@ -880,7 +889,7 @@ impl<'a> Parser<'a> {
         match &self.token {
             Token::Ident(x, y) => {
                 let ident = &self.tr.input[*x..*y];
-                self.next_token()?;
+                self.next()?;
                 Ok(Some(tos(ident)))
             }
             _ => Ok(None),
@@ -891,7 +900,7 @@ impl<'a> Parser<'a> {
         match &self.token {
             Token::Ident(x, y) => {
                 let ident = &self.tr.input[*x..*y];
-                self.next_token()?;
+                self.next()?;
                 Ok(tos(ident))
             }
             _ => Err(E::new("Ident expected")),
@@ -900,7 +909,7 @@ impl<'a> Parser<'a> {
 
     fn expect_token(&mut self, token: Token) -> Result<(), E> {
         if self.token == token {
-            self.next_token()?;
+            self.next()?;
             return Ok(());
         }
         Err(E::new(&format!(
@@ -914,7 +923,7 @@ impl<'a> Parser<'a> {
         if let Token::Ident(x, y) = &self.token {
             let ident2 = &self.tr.input[*x..*y];
             if ident1 == ident2 {
-                self.next_token()?;
+                self.next()?;
                 return Ok(());
             }
         }
@@ -937,7 +946,7 @@ impl<'a> Parser<'a> {
 
     fn test_ident(&mut self, ident: &[u8]) -> Result<bool, E> {
         if self.is_ident(ident) {
-            self.next_token()?;
+            self.next()?;
             return Ok(true);
         }
         Ok(false)
@@ -945,13 +954,13 @@ impl<'a> Parser<'a> {
 
     fn test_token(&mut self, token: Token) -> Result<bool, E> {
         if self.token == token {
-            self.next_token()?;
+            self.next()?;
             return Ok(true);
         }
         Ok(false)
     }
 
-    fn next_token(&mut self) -> Result<(), E> {
+    fn next(&mut self) -> Result<(), E> {
         self.token = self.tr.next_token()?;
         // println!("token = {:?}", &self.token);
         Ok(())
@@ -990,4 +999,8 @@ fn local<'a>(locs: &'a [Loc], name: &str) -> Option<(usize, &'a DataType)> {
         }
     }
     None
+}
+
+fn is_string_or_binary(x: &DataType) -> bool {
+    matches!(x, DataType::String(_) | DataType::Binary(_))
 }
