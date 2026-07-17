@@ -42,7 +42,7 @@ impl<'a> Exp<'a> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -72,7 +72,7 @@ impl<'a> Exp<'a> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -103,7 +103,7 @@ impl<'a> Exp<'a> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -143,7 +143,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -172,7 +172,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -202,7 +202,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -352,7 +352,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -382,7 +382,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -412,7 +412,7 @@ impl GExp {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.funcs[*f];
+                let f = &run.dict.main.funcs[*f];
                 let def = f.ret.default_value();
                 run.stack.push(def);
 

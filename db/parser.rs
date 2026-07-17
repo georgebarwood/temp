@@ -513,11 +513,11 @@ impl<'a> Parser<'a> {
             }
             Exp::FnCallByName(sname, fname, args) => {
                 // Use self.dict to resolve function.
-                if let Some(sid) = self.dict.schemas.get(*sname)
-                    && let Some(nid) = self.dict.names.get(*fname)
-                    && let Some(fid) = self.dict.func_lookup.get(&(*sid, *nid))
+                if let Some(sid) = self.dict.main.schemas.get(*sname)
+                    && let Some(nid) = self.dict.main.names.get(*fname)
+                    && let Some(fid) = self.dict.main.func_lookup.get(&(*sid, *nid))
                 {
-                    let f = &self.dict.funcs[*fid];
+                    let f = &self.dict.main.funcs[*fid];
 
                     // Resolve the args, check types.
                     aos += 1; // Allows for result.
@@ -539,7 +539,7 @@ impl<'a> Parser<'a> {
 
                     &f.ret
                 } else {
-                    println!("func lookup = {:?}", self.dict.func_lookup);
+                    println!("func lookup = {:?}", self.dict.main.func_lookup);
                     return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
                 }
             }
@@ -933,7 +933,7 @@ impl<'a> Parser<'a> {
     // Functions that use self.dict to check things.
 
     fn check_schema(&self, s: &str) -> Result<i64, E> {
-        if let Some(id) = self.dict.schemas.get(s) {
+        if let Some(id) = self.dict.main.schemas.get(s) {
             Ok(*id)
         } else {
             Err(E::new(&format!("Schema [{}] not found", s)))
@@ -941,7 +941,7 @@ impl<'a> Parser<'a> {
     }
 
     fn check_tfname(&self, s: &str) -> Result<i64, E> {
-        if let Some(id) = self.dict.names.get(s) {
+        if let Some(id) = self.dict.main.names.get(s) {
             Ok(*id)
         } else {
             Err(E::new(&format!("Table [{}] not found", s)))
@@ -950,7 +950,7 @@ impl<'a> Parser<'a> {
 
     fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>, i64), E> {
         let nid = self.check_tfname(tname)?;
-        if let Some(table) = self.dict.tables.get(&(schema, nid)) {
+        if let Some(table) = self.dict.main.tables.get(&(schema, nid)) {
             Ok((table.clone(), nid))
         } else {
             Err(E::new("Table not found"))
@@ -959,7 +959,7 @@ impl<'a> Parser<'a> {
 
     fn check_function(&self, schema: i64, fname: &str) -> Result<(usize, i64), E> {
         let nid = self.check_tfname(fname)?;
-        if let Some(fid) = self.dict.func_lookup.get(&(schema, nid)) {
+        if let Some(fid) = self.dict.main.func_lookup.get(&(schema, nid)) {
             Ok((*fid, nid))
         } else {
             Err(E::new("Function not found"))

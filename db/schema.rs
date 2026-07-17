@@ -9,9 +9,19 @@ use std::collections::HashMap;
    or there must be no callers.
 */
 
+#[derive(Clone, Default)]
+pub struct Dict
+{  
+    pub main: DictMain,
+    pub info: DictInfo,
+
+    pub schema_names: GVec<GString>,
+    pub table_names: GVec<(i64, GString)>,
+}
+
 /// Dictionary to look up schema, tables, functions etc.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Dict {
+pub struct DictMain {
     /// Map from string to schema id.
     pub schemas: HashMap<GString, i64>,
     /// Map from string to name id.
@@ -29,13 +39,12 @@ pub struct Dict {
 
 /// Extra info, such as parameter and local variable names for functions.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct InfoDict {
-    pub schema_names: GVec<GString>,
-    pub table_names: GVec<(i64, GString)>,
+pub struct DictInfo {
     pub funcs: GVec<SFunc<YesString>>,
+    loaded: bool,
 }
 
-impl Dict {
+impl DictMain {
     pub fn new() -> Self {
         Self {
             last_table_id: DICT_ID as i64,
@@ -73,10 +82,29 @@ impl Dict {
         postcard::from_bytes(&b[8..]).unwrap()
     }
 
+    /// Retain only nids that are still in use.
+    fn cleanup(&mut self) {
+        let mut ok = HashSet::default();
+        for (_, nid) in self.tables.keys() {
+            ok.insert(nid);
+        }
+        for (_, nid) in self.func_lookup.keys() {
+            ok.insert(nid);
+        }
+        self.names.retain(|_, nid| ok.contains(nid));
+    }
+}
+
+impl Dict {
+    pub fn new() -> Self
+    {
+        Self{ main: DictMain::new(), ..Default::default() }
+    }
+
     /// Save dict to sys store.
     pub fn save_to_sys_store(&self, ps: &mut PageSet) {
         let id = crate::DICT_ID;
-        let bytes = self.to_bytes_id(id);
+        let bytes = self.main.to_bytes_id(id);
 
         // println!("Dict::save_to_sys_store, new dict size={} bytes.", bytes.len() );
         // println!("Dict::Save_to_sys_store, new dict={:?}.", self);
@@ -94,26 +122,16 @@ impl Dict {
         let key = IdVKey::new(crate::DICT_ID);
         if let Some(mut sdata) = sys_store.get(&key, ps) {
             let bytes = sdata.bytes();
-            let mut dict = Dict::from_bytes_id(&bytes);
+            let mut main = DictMain::from_bytes_id(&bytes);
 
-            dict.cleanup();
+            main.cleanup();
+
+            let dict = Dict{ main, ..Default::default() };
 
             Arc::new(dict)
         } else {
             panic!()
         }
-    }
-
-    /// Retain only nids that are still in use.
-    fn cleanup(&mut self) {
-        let mut ok = HashSet::default();
-        for (_, nid) in self.tables.keys() {
-            ok.insert(nid);
-        }
-        for (_, nid) in self.func_lookup.keys() {
-            ok.insert(nid);
-        }
-        self.names.retain(|_, nid| ok.contains(nid));
     }
 }
 
