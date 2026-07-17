@@ -1,5 +1,4 @@
 use crate::*;
-use pstd::{BoxA, StringA, VecA, alloc::Allocator};
 use serde::*;
 
 /// Position of string in source.
@@ -148,7 +147,7 @@ impl<A: Allocator + Default> Exp<A> {
         match exp {
             Bool(x) => Bool(*x),
             Int(x) => Int(*x),
-            SrcString(x) => String(StringA::from(x.str(src))),  
+            SrcString(x) => String(StringA::from(x.str(src))),
             String(x) => String(StringA::from(x.as_str())),
             Col(x) => Col(*x),
             Local(x) => Local(*x),
@@ -161,7 +160,7 @@ impl<A: Allocator + Default> Exp<A> {
                 let args = gvals(args, src);
                 FnCall(*fid, args)
             }
-            Name(_) | FnCallByName(_, _, _) => panic!()
+            Name(_) | FnCallByName(_, _, _) => panic!(),
         }
     }
 }

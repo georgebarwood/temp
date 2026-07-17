@@ -1,7 +1,7 @@
 use crate::*;
 
 pub fn test() {
-    let sql : [&[u8]; 15] = [
+    let _sql : [&[u8]; 15] = [
         b"schema dbo",
         b"table dbo.xxx(Name string,Age int,Height float,Email string)",
         b"insert into dbo.xxx(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
@@ -22,7 +22,7 @@ pub fn test() {
         b"let s='' for n = Name from dbo.cust order by Name desc set s |= n select s",
     ];
 
-    let _sql: [&[u8]; 4] = [
+    let sql: [&[u8]; 4] = [
         b"schema test",
         b"table test.users (name string, age int)",
         b"let i = 8192
@@ -70,6 +70,8 @@ pub fn test() {
     }
 
     println!();
+    //println!("Perm::info = {:?}", pstd::localalloc::Perm::info());
+    //println!();
 
     global.lock().unwrap().commit(ps, dict, dict_changed);
 

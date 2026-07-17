@@ -1,56 +1,135 @@
 use crate::*;
-use datatype::DataType;
-use pstd::{VecA, alloc::Allocator};
 use serde::*;
 
-/// CREATE SCHEMA statement.
+/// Statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateSchema {
-    pub sname: StrPos,
+pub enum Statement<A: Allocator + Default, S: XString> {
+    /// Declare and initialise a local variable.
+    Let(Let<A, S>),
+    /// Declare and initialise a local variable (position in source).
+    SrcLet(SrcLet<A>),
+    /// Assign a local variable.
+    Set(Set<A>),
+    /// Append to a local string or binary variable.
+    Append(Append<A>),
+    /// While loop.
+    While(While<A, S>),
+    /// Conditional evalaution.
+    If(If<A, S>),
+    /// Insert into table.
+    Insert(Insert<A>),
+    /// Update table rows. Where condition is not optional, use "where true" to update all rows.
+    Update(Update<A>),
+    /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
+    Delete(Delete<A>),
+    /// Output values.
+    Select(Select<A>),
+    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
+    For(For<A, S>),
+    /// Create Schema.
+    CreateSchema(CreateSchema),
+    /// Create Table.
+    CreateTable(CreateTable),
+    /// Rename Table.
+    RenameTable(RenameTable),
+    /// Create Function.
+    CreateFn(CreateFn<A>),
+    /// Rename Function.
+    RenameFn(RenameFn),
+    /// Drop Table.
+    DropTable(DropTable),
 }
 
-/// CREATE TABLE statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateTable {
-    pub schema_id: i64,
-    pub tname: StrPos,
-    pub col_defs: Arc<DataType>,
-}
-
-/// RENAME TABLE statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenameTable {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
-    pub new_schema_id: i64,
-    pub new_tname: StrPos,
-}
-
-/// CREATE FN statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateFn<A: Allocator + Default> {
-    pub schema_id: i64,
-    pub fname: StrPos,
-    pub ret: Arc<DataType>,
-    pub parms: VecA<(StrPos, Arc<DataType>),A>,
-    pub block: VecA<Statement<A, YesString>,A>,
-}
-
-/// RENAME FN statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RenameFn {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
-    pub new_schema_id: i64,
-    pub new_fname: StrPos,
-}
-
-/// DROP TABLE statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DropTable {
-    pub schema_id: i64,
-    pub name_id: i64,
-    pub table: Arc<STable>,
+impl<A, S> Statement<A, S>
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    fn from(stat: &LStatement, src: &[u8]) -> Self {
+        match stat {
+            Statement::SrcLet(x) => {
+                let varname = x.varname.str(src);
+                Statement::Let(Let {
+                    varname: S::from_str(varname),
+                    exp: Exp::from(&x.exp, src),
+                })
+            }
+            Statement::Let(x) => Statement::Let(Let {
+                varname: S::from_str(x.varname.str()),
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::Set(x) => Statement::Set(Set {
+                i: x.i,
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::Append(x) => Statement::Append(Append {
+                i: x.i,
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::While(x) => {
+                let exp = Exp::from(&x.exp, src);
+                let block = gblock(&x.block, src);
+                Statement::While(While { exp, block })
+            }
+            Statement::If(x) => {
+                let exp = Exp::from(&x.exp, src);
+                let block = gblock(&x.block, src);
+                let els = x.els.as_ref().map(|els| gblock(els, src));
+                Statement::If(If { exp, block, els })
+            }
+            Statement::Insert(x) => {
+                let table = x.table.clone();
+                let cols = VecA::from(&*x.cols);
+                let vals = gvals(&x.vals, src);
+                Statement::Insert(Insert { table, cols, vals })
+            }
+            Statement::Select(x) => {
+                let vals = gvals(&x.vals, src);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
+                let order_by = gorder_by(&x.order_by, src);
+                Statement::Select(Select {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                })
+            }
+            Statement::For(x) => {
+                let vals = gvals(&x.vals, src);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
+                let order_by = gorder_by(&x.order_by, src);
+                let block = gblock(&x.block, src);
+                Statement::For(For {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                    block,
+                })
+            }
+            Statement::Update(x) => {
+                let table = x.table.clone();
+                let wher = Exp::from(&x.wher, src);
+                let mut assigns = VecA::new();
+                for (i, e) in &x.assigns {
+                    assigns.push((*i, Exp::from(e, src)));
+                }
+                Statement::Update(Update {
+                    table,
+                    assigns,
+                    wher,
+                })
+            }
+            Statement::Delete(x) => {
+                let table = x.table.clone();
+                let wher = Exp::from(&x.wher, src);
+                Statement::Delete(Delete { table, wher })
+            }
+            _ => panic!(),
+        }
+    }
 }
 
 /// LET statement.
@@ -191,11 +270,13 @@ impl<A: Allocator + Default> Insert<A> {
 
         table.insert(&row, run.ps);
 
+        /*
         println!(
             "Insert exec table record count={} row={:?}",
             table.record_count(),
             row
         );
+        */
     }
 }
 
@@ -359,135 +440,54 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
     }
 }
 
-/// Statement.
+/// CREATE SCHEMA statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Statement<A: Allocator + Default, S: XString> {
-    /// Declare and initialise a local variable.
-    SrcLet(SrcLet<A>),
-    /// Declare and initialise a local variable.
-    Let(Let<A, S>),
-    /// Assign a local variable.
-    Set(Set<A>),
-    /// Append to a local string or binary variable.
-    Append(Append<A>),
-    /// While loop.
-    While(While<A, S>),
-    /// Conditional evalaution.
-    If(If<A, S>),
-    /// Insert into table.
-    Insert(Insert<A>),
-    /// Update table rows. Where condition is not optional, use "where true" to update all rows.
-    Update(Update<A>),
-    /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
-    Delete(Delete<A>),
-    /// Output values.
-    Select(Select<A>),
-    /// Loop through table, local variables are assigned to expressions evaluated from table rows.
-    For(For<A, S>),
-    /// Create Schema.
-    CreateSchema(CreateSchema),
-    /// Create Table.
-    CreateTable(CreateTable),
-    /// Rename Table.
-    RenameTable(RenameTable),
-    /// Create Function.
-    CreateFn(CreateFn<A>),
-    /// Rename Function.
-    RenameFn(RenameFn),
-    /// Drop Table.
-    DropTable(DropTable),
+pub struct CreateSchema {
+    pub sname: StrPos,
 }
 
-impl<A, S> Statement<A, S>
-where
-    A: Allocator + Default,
-    S: XString,
-{
-    fn from(stat: &LStatement, src: &[u8]) -> Self {
-        match stat {
-            Statement::SrcLet(x) => {
-                let varname = x.varname.str(src);
-                Statement::Let(Let {
-                    varname: S::from_str(varname),
-                    exp: Exp::from(&x.exp, src),
-                })
-            }
-            Statement::Let(x) => Statement::Let(Let {
-                varname: S::from_str(x.varname.str()),
-                exp: Exp::from(&x.exp, src),
-            }),
-            Statement::Set(x) => Statement::Set(Set {
-                i: x.i,
-                exp: Exp::from(&x.exp, src),
-            }),
-            Statement::Append(x) => Statement::Append(Append {
-                i: x.i,
-                exp: Exp::from(&x.exp, src),
-            }),
-            Statement::While(x) => {
-                let exp = Exp::from(&x.exp, src);
-                let block = gblock(&x.block, src);
-                Statement::While(While { exp, block })
-            }
-            Statement::If(x) => {
-                let exp = Exp::from(&x.exp, src);
-                let block = gblock(&x.block, src);
-                let els = x.els.as_ref().map(|els| gblock(els, src));
-                Statement::If(If { exp, block, els })
-            }
-            Statement::Insert(x) => {
-                let table = x.table.clone();
-                let cols = VecA::from(&*x.cols);
-                let vals = gvals(&x.vals, src);
-                Statement::Insert(Insert { table, cols, vals })
-            }
-            Statement::Select(x) => {
-                let vals = gvals(&x.vals, src);
-                let from = x.from.clone();
-                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
-                let order_by = gorder_by(&x.order_by, src);
-                Statement::Select(Select {
-                    vals,
-                    from,
-                    wher,
-                    order_by,
-                })
-            }
-            Statement::For(x) => {
-                let vals = gvals(&x.vals, src);
-                let from = x.from.clone();
-                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
-                let order_by = gorder_by(&x.order_by, src);
-                let block = gblock(&x.block, src);
-                Statement::For(For {
-                    vals,
-                    from,
-                    wher,
-                    order_by,
-                    block,
-                })
-            }
-            Statement::Update(x) => {
-                let table = x.table.clone();
-                let wher = Exp::from(&x.wher, src);
-                let mut assigns = VecA::new();
-                for (i, e) in &x.assigns {
-                    assigns.push((*i, Exp::from(e, src)));
-                }
-                Statement::Update(Update {
-                    table,
-                    assigns,
-                    wher,
-                })
-            }
-            Statement::Delete(x) => {
-                let table = x.table.clone();
-                let wher = Exp::from(&x.wher, src);
-                Statement::Delete(Delete { table, wher })
-            }
-            _ => panic!(),
-        }
-    }
+/// CREATE TABLE statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTable {
+    pub schema_id: i64,
+    pub tname: StrPos,
+    pub col_defs: Arc<DataType>,
+}
+
+/// RENAME TABLE statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameTable {
+    pub old_schema_id: i64,
+    pub old_nid: i64,
+    pub new_schema_id: i64,
+    pub new_tname: StrPos,
+}
+
+/// CREATE FN statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFn<A: Allocator + Default> {
+    pub schema_id: i64,
+    pub fname: StrPos,
+    pub ret: Arc<DataType>,
+    pub parms: VecA<(StrPos, Arc<DataType>), A>,
+    pub block: VecA<Statement<A, YesString>, A>,
+}
+
+/// RENAME FN statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameFn {
+    pub old_schema_id: i64,
+    pub old_nid: i64,
+    pub new_schema_id: i64,
+    pub new_fname: StrPos,
+}
+
+/// DROP TABLE statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DropTable {
+    pub schema_id: i64,
+    pub name_id: i64,
+    pub table: Arc<STable>,
 }
 
 pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
@@ -623,11 +623,13 @@ where
 }
 
 use std::fmt::Debug;
+/// Trait for string that can be a dummy (NoString) or not (YesString).
 pub trait XString {
     fn str(&self) -> &str;
     fn from_str(s: &str) -> Self;
 }
 
+/// String that stores extra info such as local variable or parameter names.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YesString {
     s: GString,
@@ -644,6 +646,7 @@ impl XString for YesString {
     }
 }
 
+/// Dummy string for MainDict, local variable names not stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoString {}
 

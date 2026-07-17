@@ -9,6 +9,7 @@ use std::collections::HashMap;
    or there must be no callers.
 */
 
+/// Dictionary to look up schema, tables, functions etc.
 #[derive(Clone, Default)]
 pub struct Dict {
     pub main: DictMain,
@@ -18,7 +19,7 @@ pub struct Dict {
     pub table_names: GVec<(i64, GString)>,
 }
 
-/// Dictionary to look up schema, tables, functions etc.
+/// Main dictionary, run-time copy.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DictMain {
     /// Map from string to schema id.

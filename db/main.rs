@@ -78,6 +78,7 @@
 use page_store::*;
 use std::sync::Mutex;
 use tablestg::*;
+use datatype::DataType;
 
 /// SQL(-like) parsing. [Parser]
 mod parser;
@@ -113,6 +114,8 @@ use exec::*;
 
 /// Test
 mod test;
+
+use pstd::{BoxA, StringA, VecA, alloc::Allocator};
 
 fn main() {
     test::test();
