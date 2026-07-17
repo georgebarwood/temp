@@ -6,6 +6,7 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
+    pub source: &'a [u8],
     output: &'a mut LVec<u8>, // Maybe could generalise this in future.
 }
 
@@ -48,13 +49,14 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
                 if parser.schema_updates {
                     // println!("statements={:#?}", &slist);
                     let md = Arc::make_mut(&mut temp_dict);
-                    execute_schema_updates(pass, &slist, md, ps);
+                    execute_schema_updates(pass, &slist, source, md, ps);
                     update_dict = true;
                 } else if pass == 2 {
                     let mut run = Run {
                         stack: LVec::new(),
                         dict: parser.dict,
                         ps,
+                        source,
                         output,
                     };
                     execute_block(&slist, &mut run);
@@ -70,16 +72,23 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
     update_dict
 }
 
-fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &mut PageSet) {
+fn execute_schema_updates(
+    pass: u8,
+    slist: &[LStatement],
+    src: &[u8],
+    dict: &mut Dict,
+    ps: &mut PageSet,
+) {
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         match s {
             Statement::CreateSchema(cs) => {
                 if pass == 2 {
                     let schema_id = dict.main.new_schema_id();
-                    let s = GString::from(cs.sname);
+                    let sname = cs.sname.str(src);
+                    let s = GString::from(sname);
                     dict.main.schemas.insert(s, schema_id);
-                    println!("Schema {} created", &cs.sname);
+                    println!("Schema {} created", sname);
                 }
             }
 
@@ -91,31 +100,39 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                         dt: x.col_defs.clone(),
                     };
                     println!("Table Created {:?}", &table);
-                    let nid = dict.main.new_name_id(x.tname);
+                    let tname = x.tname.str(src);
+                    let nid = dict.main.new_name_id(tname);
                     dict.main.tables.insert((x.schema_id, nid), Arc::new(table));
                 }
             }
 
             Statement::RenameTable(x) => {
                 if pass == 1 {
-                    let t = dict.main.tables.remove(&(x.old_schema_id, x.old_nid)).unwrap();
-                    let new_nid = dict.main.new_name_id(x.new_tname);
+                    let t = dict
+                        .main
+                        .tables
+                        .remove(&(x.old_schema_id, x.old_nid))
+                        .unwrap();
+                    let new_tname = x.new_tname.str(src);
+                    let new_nid = dict.main.new_name_id(new_tname);
                     dict.main.tables.insert((x.new_schema_id, new_nid), t);
                 }
             }
 
             Statement::CreateFn(cf) => {
+                let fname = cf.fname.str(src);
                 if pass == 1 {
                     let func_id = dict.main.funcs.len();
-                    let nid = dict.main.new_name_id(cf.fname);
+                    let nid = dict.main.new_name_id(fname);
                     let block = GVec::new(); // Dummy block on pass 1
                     let mut parms = GVec::new();
                     for (name, typ) in &cf.parms {
+                        let name = name.str(src);
                         parms.push((NoString::from_str(name), typ.clone()));
                     }
                     let func = SFunc::<NoString> {
                         schema_id: cf.schema_id,
-                        fname: NoString::from_str(cf.fname),
+                        fname: NoString::from_str(fname),
 
                         ret: cf.ret.clone(),
                         parms,
@@ -126,19 +143,22 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                     // ToDo: update info dict as well.
                 } else {
                     // Set the function block.
-                    let nid = dict.main.names.get(cf.fname).unwrap();
+                    let nid = dict.main.names.get(fname).unwrap();
                     let fid = dict.main.func_lookup.get(&(cf.schema_id, *nid)).unwrap();
                     let f = &mut dict.main.funcs[*fid];
-                    f.block = gblock(&cf.block);
+                    f.block = gblock(&cf.block, src);
                 }
             }
 
             Statement::RenameFn(x) => {
                 if pass == 1 {
-                    let f = dict.main.func_lookup
+                    let f = dict
+                        .main
+                        .func_lookup
                         .remove(&(x.old_schema_id, x.old_nid))
                         .unwrap();
-                    let new_nid = dict.main.new_name_id(x.new_fname);
+                    let new_fname = x.new_fname.str(src);
+                    let new_nid = dict.main.new_name_id(new_fname);
                     dict.main.func_lookup.insert((x.new_schema_id, new_nid), f);
                 }
             }

@@ -6,7 +6,7 @@ pub fn tos(s: &[u8]) -> &str {
 
 /// Local variable declaration.
 struct Loc<'a> {
-    pub name: &'a str,
+    pub name: &'a [u8],
     pub datatype: Arc<DataType>,
 }
 
@@ -41,14 +41,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn pass(&mut self, pass: u8) -> Result<LVec<Statement<'a>>, E> {
+    pub fn pass(&mut self, pass: u8) -> Result<LVec<LStatement>, E> {
         self.pass = pass;
         self.tr.pos = 0;
         self.locs.clear();
         self.statements()
     }
 
-    fn statement(&mut self, ident: &[u8]) -> Result<Statement<'a>, E> {
+    fn statement(&mut self, ident: &[u8]) -> Result<LStatement, E> {
         let s = match ident {
             b"let" => self.p_let(),
             b"set" => self.set(),
@@ -71,7 +71,7 @@ impl<'a> Parser<'a> {
         Ok(s)
     }
 
-    fn stat(&mut self) -> Result<Statement<'a>, E> {
+    fn stat(&mut self) -> Result<LStatement, E> {
         if let Token::Ident(x, y) = &self.token {
             let ident = &self.tr.input[*x..*y];
             self.next()?;
@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn statements(&mut self) -> Result<LVec<Statement<'a>>, E> {
+    pub fn statements(&mut self) -> Result<LVec<LStatement>, E> {
         self.next()?;
         let mut result = LVec::new();
         loop {
@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn block(&mut self) -> Result<LVec<Statement<'a>>, E> {
+    fn block(&mut self) -> Result<LVec<LStatement>, E> {
         let len = self.locs.len();
         let mut result = LVec::new();
         if self.token == Token::LCurly {
@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn p_let(&mut self) -> Result<Statement<'a>, E> {
+    fn p_let(&mut self) -> Result<LStatement, E> {
         let name = self.read_ident()?;
 
         let mut dt = if self.token == Token::Colon {
@@ -142,14 +142,14 @@ impl<'a> Parser<'a> {
         }
 
         self.locs.push(Loc {
-            name,
+            name: self.str(&name),
             datatype: dt.unwrap(),
         });
 
-        Ok(Statement::Let(Let { varname: name, exp }))
+        Ok(Statement::SrcLet(SrcLet { varname: name, exp }))
     }
 
-    fn set(&mut self) -> Result<Statement<'a>, E> {
+    fn set(&mut self) -> Result<LStatement, E> {
         let name = self.read_ident()?;
         let append = if self.token == Token::VBarEqual {
             self.next()?;
@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
             false
         };
         let mut exp = self.exp(0)?;
-        if let Some((i, vdt)) = local(&self.locs, name) {
+        if let Some((i, vdt)) = self.local(&self.locs, &name) {
             if self.pass == 2 {
                 let rctx = RContext::Local(&self.locs);
                 let edt = self.resolve(&mut exp, &rctx, 0)?;
@@ -178,13 +178,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn p_while(&mut self) -> Result<Statement<'a>, E> {
+    fn p_while(&mut self) -> Result<LStatement, E> {
         let exp = self.bool_exp()?;
         let block = self.block()?;
         Ok(Statement::While(While { exp, block }))
     }
 
-    fn p_if(&mut self) -> Result<Statement<'a>, E> {
+    fn p_if(&mut self) -> Result<LStatement, E> {
         let exp = self.bool_exp()?;
         let block = self.block()?;
         let els = if self.is_ident(b"else") {
@@ -214,7 +214,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn p_for(&mut self) -> Result<Statement<'a>, E> {
+    fn p_for(&mut self) -> Result<LStatement, E> {
         let mut vals = LVec::new();
         let mut idents = LVec::new();
         loop {
@@ -239,7 +239,10 @@ impl<'a> Parser<'a> {
             let tctx = RContext::STable(&from, &lctx);
             let dt = self.resolve(val, &tctx, 0)?;
             let dt = Arc::new(dt.clone());
-            self.locs.push(Loc { name, datatype: dt });
+            self.locs.push(Loc {
+                name: self.str(&name),
+                datatype: dt,
+            });
         }
 
         let wher = if self.test_ident(b"where")? {
@@ -263,26 +266,26 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn rename(&mut self) -> Result<Statement<'a>, E> {
+    fn rename(&mut self) -> Result<LStatement, E> {
         let ident = self.read_ident()?;
-        match ident {
-            "table" => self.rename_table(),
-            "fn" => self.rename_fn(),
+        match self.str(&ident) {
+            b"table" => self.rename_table(),
+            b"fn" => self.rename_fn(),
             // "schema" => self.drop_schema(),
             _ => Err(E::new("Expected TABLE, SCHEMA....")),
         }
     }
 
-    fn drop(&mut self) -> Result<Statement<'a>, E> {
+    fn drop(&mut self) -> Result<LStatement, E> {
         let ident = self.read_ident()?;
-        match ident {
-            "table" => self.drop_table(),
+        match self.str(&ident) {
+            b"table" => self.drop_table(),
             // "schema" => self.drop_schema(),
             _ => Err(E::new("Expected TABLE, SCHEMA....")),
         }
     }
 
-    fn update(&mut self) -> Result<Statement<'a>, E> {
+    fn update(&mut self) -> Result<LStatement, E> {
         let (table, _, _) = self.table()?;
         self.expect_ident(b"set")?;
         let assigns = self.assigns(&table)?;
@@ -299,7 +302,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn delete(&mut self) -> Result<Statement<'a>, E> {
+    fn delete(&mut self) -> Result<LStatement, E> {
         self.expect_ident(b"from")?;
         let (table, _, _) = self.table()?;
         self.expect_ident(b"where")?;
@@ -311,7 +314,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize, Exp<'a>)>, E> {
+    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize, Exp<Local>)>, E> {
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
             if let Some(col_id) = table.dt.lookup_col(ident) {
@@ -333,7 +336,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn insert(&mut self) -> Result<Statement<'a>, E> {
+    fn insert(&mut self) -> Result<LStatement, E> {
         self.expect_ident(b"into")?;
         let (table, _, _) = self.table()?;
         let cols = self.name_list(&table)?;
@@ -373,7 +376,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn select(&mut self) -> Result<Statement<'a>, E> {
+    fn select(&mut self) -> Result<LStatement, E> {
         let mut vals = self.exp_list()?;
 
         let result = if self.test_ident(b"from")? {
@@ -413,7 +416,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Select(result))
     }
 
-    fn order_by(&mut self, t: &STable) -> Result<OrderBy<'a>, E> {
+    fn order_by(&mut self, t: &STable) -> Result<LOrderBy, E> {
         if self.test_ident(b"order")? {
             self.expect_ident(b"by")?;
             let mut exps = LVec::new();
@@ -445,7 +448,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn resolve_names(&self, vals: &mut [Exp<'a>], ctx: &RContext) -> Result<(), E> {
+    fn resolve_names(&self, vals: &mut [Exp<Local>], ctx: &RContext) -> Result<(), E> {
         for val in vals {
             let _dt = self.resolve(val, ctx, 0)?;
         }
@@ -457,7 +460,7 @@ impl<'a> Parser<'a> {
     /// aos = Arguments on Stack which increase distance to local variables.
     fn resolve<'b>(
         &self,
-        e: &mut Exp<'a>,
+        e: &mut Exp<Local>,
         ctx: &'b RContext,
         mut aos: usize,
     ) -> Result<&'b DataType, E>
@@ -470,10 +473,10 @@ impl<'a> Parser<'a> {
         let dt = match e {
             Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
-            Exp::String(_) => &DataType::String(0),
+            Exp::String(_) | Exp::SrcString(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
                 RContext::STable(t, nxt) => {
-                    if let Some((col, dt)) = t.name_to_col(name) {
+                    if let Some((col, dt)) = t.name_to_col(tos(self.str(name))) {
                         *e = Exp::Col(col);
                         dt
                     } else {
@@ -481,12 +484,12 @@ impl<'a> Parser<'a> {
                     }
                 }
                 RContext::Local(locs) => {
-                    if let Some((i, typ)) = local(locs, name) {
+                    if let Some((i, typ)) = self.local(locs, name) {
                         // println!("name={} aos={}", name, aos);
                         *e = Exp::Local(i + aos);
                         typ
                     } else {
-                        let e = &format!("Name not found : {:?}", name);
+                        let e = &format!("Name not found : {:?}", tos(self.str(name)));
                         return Err(E::new(e));
                     }
                 }
@@ -513,8 +516,11 @@ impl<'a> Parser<'a> {
             }
             Exp::FnCallByName(sname, fname, args) => {
                 // Use self.dict to resolve function.
-                if let Some(sid) = self.dict.main.schemas.get(*sname)
-                    && let Some(nid) = self.dict.main.names.get(*fname)
+                let sname = tos(self.str(sname));
+                let fname = tos(self.str(fname));
+
+                if let Some(sid) = self.dict.main.schemas.get(sname)
+                    && let Some(nid) = self.dict.main.names.get(fname)
                     && let Some(fid) = self.dict.main.func_lookup.get(&(*sid, *nid))
                 {
                     let f = &self.dict.main.funcs[*fid];
@@ -549,7 +555,7 @@ impl<'a> Parser<'a> {
         Ok(dt)
     }
 
-    fn bool_exp(&mut self) -> Result<Exp<'a>, E> {
+    fn bool_exp(&mut self) -> Result<LExp, E> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let rctx = RContext::Local(&self.locs);
@@ -561,7 +567,7 @@ impl<'a> Parser<'a> {
         Ok(exp)
     }
 
-    fn bool_exp_table(&mut self, t: &STable) -> Result<Exp<'a>, E> {
+    fn bool_exp_table(&mut self, t: &STable) -> Result<LExp, E> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
@@ -574,7 +580,7 @@ impl<'a> Parser<'a> {
         Ok(exp)
     }
 
-    fn exp_list(&mut self) -> Result<LVec<Exp<'a>>, E> {
+    fn exp_list(&mut self) -> Result<LVec<LExp>, E> {
         let mut result = LVec::new();
         while self.token != Token::RBra {
             let exp = self.exp(0)?;
@@ -634,7 +640,7 @@ impl<'a> Parser<'a> {
         (op, prec)
     }
 
-    fn exp(&mut self, prec: u8) -> Result<Exp<'a>, E> {
+    fn exp(&mut self, prec: u8) -> Result<LExp, E> {
         let mut e = self.exp_primary()?;
         loop {
             let (op, op_prec) = self.op_and_prec();
@@ -649,24 +655,24 @@ impl<'a> Parser<'a> {
         Ok(e)
     }
 
-    fn exp_primary(&mut self) -> Result<Exp<'a>, E> {
+    fn exp_primary(&mut self) -> Result<LExp, E> {
         match self.token {
             Token::Int(x) => {
                 self.next()?;
                 Ok(Exp::Int(x))
             }
             Token::String(x, y) => {
-                let lit = &self.tr.input[x..y];
+                let lit = StrPos { start: x, end: y };
                 self.next()?;
-                Ok(Exp::String(tos(lit)))
+                Ok(Exp::SrcString(lit))
             }
             Token::Ident(x, y) => {
-                let name = &self.tr.input[x..y];
+                let name = StrPos { start: x, end: y };
                 self.next()?;
-                Ok(match name {
+                Ok(match self.str(&name) {
                     b"true" => Exp::Bool(true),
                     b"false" => Exp::Bool(false),
-                    _ => self.name_exp(tos(name))?,
+                    _ => self.name_exp(name)?,
                 })
             }
             Token::LBra => {
@@ -680,7 +686,7 @@ impl<'a> Parser<'a> {
     }
 
     // Function call or variable reference.
-    fn name_exp(&mut self, name: &'a str) -> Result<Exp<'a>, E> {
+    fn name_exp(&mut self, name: StrPos) -> Result<LExp, E> {
         let result = if self.test_token(Token::Dot)? {
             let schema = name;
             let fname = self.read_ident()?;
@@ -714,25 +720,25 @@ impl<'a> Parser<'a> {
 
     fn table(&mut self) -> Result<(Arc<STable>, i64, i64), E> {
         let schema = self.read_ident()?;
-        let sid = self.check_schema(schema)?;
+        let sid = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table, nid) = self.check_table(sid, tname)?;
+        let (table, nid) = self.check_table(sid, &tname)?;
         Ok((table, sid, nid))
     }
 
     fn function(&mut self) -> Result<(usize, i64, i64), E> {
         let schema = self.read_ident()?;
-        let sid = self.check_schema(schema)?;
+        let sid = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let fname = self.read_ident()?;
-        let (func, nid) = self.check_function(sid, fname)?;
+        let (func, nid) = self.check_function(sid, &fname)?;
         Ok((func, sid, nid))
     }
 
-    fn create_schema(&mut self) -> Result<Statement<'a>, E> {
+    fn create_schema(&mut self) -> Result<LStatement, E> {
         let sname = self.read_ident()?;
-        if self.pass == 1 && self.check_schema(sname).is_ok() {
+        if self.pass == 1 && self.check_schema(&sname).is_ok() {
             return Err(E::new("Schema already exists"));
         }
         let result = CreateSchema { sname };
@@ -741,7 +747,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn rename_table(&mut self) -> Result<Statement<'a>, E> {
+    fn rename_table(&mut self) -> Result<LStatement, E> {
         let (old_schema_id, old_nid) = {
             let t = self.table();
             if self.pass == 2 {
@@ -754,10 +760,10 @@ impl<'a> Parser<'a> {
 
         self.expect_ident(b"to")?;
         let new_schema = self.read_ident()?;
-        let new_schema_id = self.check_schema(new_schema)?;
+        let new_schema_id = self.check_schema(&new_schema)?;
         self.expect_token(Token::Dot)?;
         let new_tname = self.read_ident()?;
-        if self.pass == 1 && self.check_table(new_schema_id, new_tname).is_ok() {
+        if self.pass == 1 && self.check_table(new_schema_id, &new_tname).is_ok() {
             return Err(E::new("Table already exists"));
         }
         let result = RenameTable {
@@ -771,12 +777,12 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn create_table(&mut self) -> Result<Statement<'a>, E> {
+    fn create_table(&mut self) -> Result<LStatement, E> {
         let schema = self.read_ident()?;
-        let schema_id = self.check_schema(schema)?;
+        let schema_id = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        if self.pass == 1 && self.check_table(schema_id, tname).is_ok() {
+        if self.pass == 1 && self.check_table(schema_id, &tname).is_ok() {
             return Err(E::new("Table already exists"));
         }
         let col_defs = Arc::new(self.col_defs()?);
@@ -791,14 +797,14 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn create_fn(&mut self) -> Result<Statement<'a>, E> {
+    fn create_fn(&mut self) -> Result<LStatement, E> {
         // create fn schema.name ( param1 type1, param2 type2... ) -> rtyp as tatement
         let schema = self.read_ident()?;
-        let schema_id = self.check_schema(schema)?;
+        let schema_id = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let fname = self.read_ident()?;
 
-        if self.pass == 1 && self.check_function(schema_id, fname).is_ok() {
+        if self.pass == 1 && self.check_function(schema_id, &fname).is_ok() {
             return Err(E::new("Function already exists"));
         }
 
@@ -824,13 +830,13 @@ impl<'a> Parser<'a> {
 
         let save = self.locs.len();
         self.locs.push(Loc {
-            name: "result",
+            name: b"result",
             datatype: ret.clone(),
         });
 
         for (name, typ) in &parms {
             self.locs.push(Loc {
-                name,
+                name: self.str(name),
                 datatype: typ.clone(),
             });
         }
@@ -851,7 +857,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn rename_fn(&mut self) -> Result<Statement<'a>, E> {
+    fn rename_fn(&mut self) -> Result<LStatement, E> {
         let (old_schema_id, old_nid) = {
             let t = self.function();
             if self.pass == 2 {
@@ -864,10 +870,10 @@ impl<'a> Parser<'a> {
 
         self.expect_ident(b"to")?;
         let new_schema = self.read_ident()?;
-        let new_schema_id = self.check_schema(new_schema)?;
+        let new_schema_id = self.check_schema(&new_schema)?;
         self.expect_token(Token::Dot)?;
         let new_fname = self.read_ident()?;
-        if self.pass == 1 && self.check_function(new_schema_id, new_fname).is_ok() {
+        if self.pass == 1 && self.check_function(new_schema_id, &new_fname).is_ok() {
             return Err(E::new("Function already exists"));
         }
         let result = RenameFn {
@@ -881,7 +887,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn drop_table(&mut self) -> Result<Statement<'a>, E> {
+    fn drop_table(&mut self) -> Result<LStatement, E> {
         let (table, schema_id, name_id) = self.table()?;
         let result = DropTable {
             table,
@@ -921,10 +927,10 @@ impl<'a> Parser<'a> {
 
     fn datatype(&mut self) -> Result<DataType, E> {
         let tname = self.read_ident()?;
-        let dt: DataType = match tname {
-            "int" => DataType::Int,
-            "float" => DataType::Float,
-            "string" => DataType::String(50),
+        let dt: DataType = match self.str(&tname) {
+            b"int" => DataType::Int,
+            b"float" => DataType::Float,
+            b"string" => DataType::String(50),
             _ => todo!(),
         };
         Ok(dt)
@@ -932,7 +938,8 @@ impl<'a> Parser<'a> {
 
     // Functions that use self.dict to check things.
 
-    fn check_schema(&self, s: &str) -> Result<i64, E> {
+    fn check_schema(&self, s: &StrPos) -> Result<i64, E> {
+        let s = tos(self.str(s));
         if let Some(id) = self.dict.main.schemas.get(s) {
             Ok(*id)
         } else {
@@ -940,7 +947,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_tfname(&self, s: &str) -> Result<i64, E> {
+    fn check_tfname(&self, s: &StrPos) -> Result<i64, E> {
+        let s = tos(self.str(s));
         if let Some(id) = self.dict.main.names.get(s) {
             Ok(*id)
         } else {
@@ -948,7 +956,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &str) -> Result<(Arc<STable>, i64), E> {
+    fn check_table(&self, schema: i64, tname: &StrPos) -> Result<(Arc<STable>, i64), E> {
         let nid = self.check_tfname(tname)?;
         if let Some(table) = self.dict.main.tables.get(&(schema, nid)) {
             Ok((table.clone(), nid))
@@ -957,7 +965,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_function(&self, schema: i64, fname: &str) -> Result<(usize, i64), E> {
+    fn check_function(&self, schema: i64, fname: &StrPos) -> Result<(usize, i64), E> {
         let nid = self.check_tfname(fname)?;
         if let Some(fid) = self.dict.main.func_lookup.get(&(schema, nid)) {
             Ok((*fid, nid))
@@ -979,12 +987,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_ident(&mut self) -> Result<&'a str, E> {
+    fn read_ident(&mut self) -> Result<StrPos, E> {
         match &self.token {
             Token::Ident(x, y) => {
-                let ident = &self.tr.input[*x..*y];
+                let result = StrPos { start: *x, end: *y };
                 self.next()?;
-                Ok(tos(ident))
+                Ok(result)
             }
             _ => Err(E::new("Ident expected")),
         }
@@ -1072,16 +1080,24 @@ impl<'a> Parser<'a> {
             Ok(())
         }
     }
-}
 
-/// Get index (reverse order) and datatype of latest local with specified name.
-fn local<'a>(locs: &'a [Loc], name: &str) -> Option<(usize, &'a DataType)> {
-    for (i, loc) in locs.iter().rev().enumerate() {
-        if loc.name == name {
-            return Some((i, &loc.datatype));
+    /// Get index (reverse order) and datatype of latest local with specified name.
+    fn local(&self, locs: &'a [Loc], name: &StrPos) -> Option<(usize, &'a DataType)> {
+        let name = self.str(name);
+
+        for (i, loc) in locs.iter().rev().enumerate() {
+            if loc.name == name {
+                return Some((i, &loc.datatype));
+            }
         }
+        None
     }
-    None
+
+    /// Get &[u8] from &StrPos.
+    fn str(&self, name: &StrPos) -> &'a [u8] {
+        let src = &self.tr.input;
+        &src[name.start..name.end]
+    }
 }
 
 fn is_string_or_binary(x: &DataType) -> bool {

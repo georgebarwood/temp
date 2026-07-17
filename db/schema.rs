@@ -10,8 +10,7 @@ use std::collections::HashMap;
 */
 
 #[derive(Clone, Default)]
-pub struct Dict
-{  
+pub struct Dict {
     pub main: DictMain,
     pub info: DictInfo,
 
@@ -96,9 +95,11 @@ impl DictMain {
 }
 
 impl Dict {
-    pub fn new() -> Self
-    {
-        Self{ main: DictMain::new(), ..Default::default() }
+    pub fn new() -> Self {
+        Self {
+            main: DictMain::new(),
+            ..Default::default()
+        }
     }
 
     /// Save dict to sys store.
@@ -126,7 +127,12 @@ impl Dict {
 
             main.cleanup();
 
-            let dict = Dict{ main, ..Default::default() };
+            let _xx = Arc::new(main.clone());
+
+            let dict = Dict {
+                main,
+                ..Default::default()
+            };
 
             Arc::new(dict)
         } else {
@@ -160,5 +166,5 @@ where
     /// result datatype
     pub ret: Arc<DataType>,
     pub parms: GVec<(S, Arc<DataType>)>,
-    pub block: GVec<GStatement<S>>,
+    pub block: GVec<Statement<Perm, S>>,
 }

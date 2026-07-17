@@ -1,50 +1,52 @@
 use crate::*;
 use datatype::DataType;
+use pstd::{VecA, alloc::Allocator};
+use serde::*;
 
 /// CREATE SCHEMA statement.
-#[derive(Debug)]
-pub struct CreateSchema<'a> {
-    pub sname: &'a str,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateSchema {
+    pub sname: StrPos,
 }
 
 /// CREATE TABLE statement.
-#[derive(Debug)]
-pub struct CreateTable<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTable {
     pub schema_id: i64,
-    pub tname: &'a str,
+    pub tname: StrPos,
     pub col_defs: Arc<DataType>,
 }
 
 /// RENAME TABLE statement.
-#[derive(Debug)]
-pub struct RenameTable<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameTable {
     pub old_schema_id: i64,
     pub old_nid: i64,
     pub new_schema_id: i64,
-    pub new_tname: &'a str,
+    pub new_tname: StrPos,
 }
 
 /// CREATE FN statement.
-#[derive(Debug)]
-pub struct CreateFn<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateFn<A: Allocator + Default> {
     pub schema_id: i64,
-    pub fname: &'a str,
+    pub fname: StrPos,
     pub ret: Arc<DataType>,
-    pub parms: LVec<(&'a str, Arc<DataType>)>,
-    pub block: LVec<Statement<'a>>,
+    pub parms: VecA<(StrPos, Arc<DataType>),A>,
+    pub block: VecA<Statement<A, YesString>,A>,
 }
 
 /// RENAME FN statement.
-#[derive(Debug)]
-pub struct RenameFn<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameFn {
     pub old_schema_id: i64,
     pub old_nid: i64,
     pub new_schema_id: i64,
-    pub new_fname: &'a str,
+    pub new_fname: StrPos,
 }
 
 /// DROP TABLE statement.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropTable {
     pub schema_id: i64,
     pub name_id: i64,
@@ -52,13 +54,27 @@ pub struct DropTable {
 }
 
 /// LET statement.
-#[derive(Debug)]
-pub struct Let<'a> {
-    pub varname: &'a str,
-    pub exp: Exp<'a>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SrcLet<A: Allocator + Default> {
+    pub varname: StrPos,
+    pub exp: Exp<A>,
 }
 
-impl<'a> Let<'a> {
+impl<A: Allocator + Default> SrcLet<A> {
+    pub fn exec(&self, run: &mut Run) {
+        let v = self.exp.eval(run);
+        run.stack.push(v);
+    }
+}
+
+/// LET statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Let<A: Allocator + Default, S: XString> {
+    pub varname: S,
+    pub exp: Exp<A>,
+}
+
+impl<A: Allocator + Default, S: XString> Let<A, S> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         run.stack.push(v);
@@ -66,13 +82,13 @@ impl<'a> Let<'a> {
 }
 
 /// SET statement.
-#[derive(Debug)]
-pub struct Set<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Set<A: Allocator + Default> {
     pub i: usize,
-    pub exp: Exp<'a>,
+    pub exp: Exp<A>,
 }
 
-impl<'a> Set<'a> {
+impl<A: Allocator + Default> Set<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         let ix = run.stack.len() - 1 - self.i;
@@ -81,13 +97,13 @@ impl<'a> Set<'a> {
 }
 
 /// APPEND ( |= ) statement.
-#[derive(Debug)]
-pub struct Append<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Append<A: Allocator + Default> {
     pub i: usize,
-    pub exp: Exp<'a>,
+    pub exp: Exp<A>,
 }
 
-impl<'a> Append<'a> {
+impl<A: Allocator + Default> Append<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         let ix = run.stack.len() - 1 - self.i;
@@ -96,13 +112,13 @@ impl<'a> Append<'a> {
 }
 
 /// WHILE statement.
-#[derive(Debug)]
-pub struct While<'a> {
-    pub exp: Exp<'a>,
-    pub block: LVec<Statement<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct While<A: Allocator + Default, S: XString> {
+    pub exp: Exp<A>,
+    pub block: VecA<Statement<A, S>, A>,
 }
 
-impl<'a> While<'a> {
+impl<A: Allocator + Default, S: XString> While<A, S> {
     pub fn exec(&self, run: &mut Run) {
         while self.exp.eval(run).bool() {
             execute_block(&self.block, run);
@@ -111,14 +127,14 @@ impl<'a> While<'a> {
 }
 
 /// IF statement.
-#[derive(Debug)]
-pub struct If<'a> {
-    pub exp: Exp<'a>,
-    pub block: LVec<Statement<'a>>,
-    pub els: Option<LVec<Statement<'a>>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct If<A: Allocator + Default, S: XString> {
+    pub exp: Exp<A>,
+    pub block: VecA<Statement<A, S>, A>,
+    pub els: Option<VecA<Statement<A, S>, A>>,
 }
 
-impl<'a> If<'a> {
+impl<A: Allocator + Default, S: XString> If<A, S> {
     pub fn exec(&self, run: &mut Run) {
         if self.exp.eval(run).bool() {
             execute_block(&self.block, run);
@@ -129,14 +145,14 @@ impl<'a> If<'a> {
 }
 
 /// INSERT statement.
-#[derive(Debug)]
-pub struct Insert<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Insert<A: Allocator + Default> {
     pub table: Arc<STable>,
-    pub cols: LVec<usize>,
-    pub vals: LVec<Exp<'a>>,
+    pub cols: VecA<usize, A>,
+    pub vals: VecA<Exp<A>, A>,
 }
 
-impl<'a> Insert<'a> {
+impl<A: Allocator + Default> Insert<A> {
     pub fn exec(&self, run: &mut Run) {
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
@@ -184,14 +200,14 @@ impl<'a> Insert<'a> {
 }
 
 /// UPDATE statement.
-#[derive(Debug)]
-pub struct Update<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Update<A: Allocator + Default> {
     pub table: Arc<STable>,
-    pub assigns: LVec<(usize, Exp<'a>)>, // col num, Exp
-    pub wher: Exp<'a>,
+    pub assigns: VecA<(usize, Exp<A>), A>, // col num, Exp
+    pub wher: Exp<A>,
 }
 
-impl<'a> Update<'a> {
+impl<A: Allocator + Default> Update<A> {
     pub fn exec(&self, run: &mut Run) {
         let t = run.ps.load_table(self.table.id, &self.table.dt);
         let ids = ids(&t, &self.wher, run);
@@ -215,13 +231,13 @@ impl<'a> Update<'a> {
 }
 
 /// DELETE statement.
-#[derive(Debug)]
-pub struct Delete<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Delete<A: Allocator + Default> {
     pub table: Arc<STable>,
-    pub wher: Exp<'a>,
+    pub wher: Exp<A>,
 }
 
-impl<'a> Delete<'a> {
+impl<A: Allocator + Default> Delete<A> {
     pub fn exec(&self, run: &mut Run) {
         let t = run.ps.load_table(self.table.id, &self.table.dt);
         let ids = ids(&t, &self.wher, run);
@@ -232,18 +248,18 @@ impl<'a> Delete<'a> {
     }
 }
 
-pub type OrderBy<'a> = Option<(LVec<Exp<'a>>, LVec<bool>)>;
+pub type OrderBy<A> = Option<(VecA<Exp<A>, A>, VecA<bool, A>)>;
 
 /// SELECT statement.
-#[derive(Debug)]
-pub struct Select<'a> {
-    pub vals: LVec<Exp<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Select<A: Allocator + Default> {
+    pub vals: VecA<Exp<A>, A>,
     pub from: Option<Arc<STable>>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
+    pub wher: Option<Exp<A>>,
+    pub order_by: OrderBy<A>,
 }
 
-impl<'a> Select<'a> {
+impl<A: Allocator + Default> Select<A> {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run)
@@ -288,16 +304,16 @@ impl<'a> Select<'a> {
 }
 
 /// FOR statement.
-#[derive(Debug)]
-pub struct For<'a> {
-    pub vals: LVec<Exp<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct For<A: Allocator + Default, S: XString> {
+    pub vals: VecA<Exp<A>, A>,
     pub from: Arc<STable>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
-    pub block: LVec<Statement<'a>>,
+    pub wher: Option<Exp<A>>,
+    pub order_by: OrderBy<A>,
+    pub block: VecA<Statement<A, S>, A>,
 }
 
-impl<'a> For<'a> {
+impl<A: Allocator + Default, S: XString> For<A, S> {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run);
@@ -344,47 +360,166 @@ impl<'a> For<'a> {
 }
 
 /// Statement.
-#[derive(Debug)]
-pub enum Statement<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Statement<A: Allocator + Default, S: XString> {
     /// Declare and initialise a local variable.
-    Let(Let<'a>),
+    SrcLet(SrcLet<A>),
+    /// Declare and initialise a local variable.
+    Let(Let<A, S>),
     /// Assign a local variable.
-    Set(Set<'a>),
+    Set(Set<A>),
     /// Append to a local string or binary variable.
-    Append(Append<'a>),
+    Append(Append<A>),
     /// While loop.
-    While(While<'a>),
+    While(While<A, S>),
     /// Conditional evalaution.
-    If(If<'a>),
+    If(If<A, S>),
     /// Insert into table.
-    Insert(Insert<'a>),
+    Insert(Insert<A>),
     /// Update table rows. Where condition is not optional, use "where true" to update all rows.
-    Update(Update<'a>),
+    Update(Update<A>),
     /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
-    Delete(Delete<'a>),
+    Delete(Delete<A>),
     /// Output values.
-    Select(Select<'a>),
+    Select(Select<A>),
     /// Loop through table, local variables are assigned to expressions evaluated from table rows.
-    For(For<'a>),
+    For(For<A, S>),
     /// Create Schema.
-    CreateSchema(CreateSchema<'a>),
+    CreateSchema(CreateSchema),
     /// Create Table.
-    CreateTable(CreateTable<'a>),
+    CreateTable(CreateTable),
     /// Rename Table.
-    RenameTable(RenameTable<'a>),
+    RenameTable(RenameTable),
     /// Create Function.
-    CreateFn(CreateFn<'a>),
+    CreateFn(CreateFn<A>),
     /// Rename Function.
-    RenameFn(RenameFn<'a>),
+    RenameFn(RenameFn),
     /// Drop Table.
     DropTable(DropTable),
 }
 
-pub fn execute_block(slist: &[Statement], run: &mut Run) {
+impl<A, S> Statement<A, S>
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    fn from(stat: &LStatement, src: &[u8]) -> Self {
+        match stat {
+            Statement::SrcLet(x) => {
+                let varname = x.varname.str(src);
+                Statement::Let(Let {
+                    varname: S::from_str(varname),
+                    exp: Exp::from(&x.exp, src),
+                })
+            }
+            Statement::Let(x) => Statement::Let(Let {
+                varname: S::from_str(x.varname.str()),
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::Set(x) => Statement::Set(Set {
+                i: x.i,
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::Append(x) => Statement::Append(Append {
+                i: x.i,
+                exp: Exp::from(&x.exp, src),
+            }),
+            Statement::While(x) => {
+                let exp = Exp::from(&x.exp, src);
+                let block = gblock(&x.block, src);
+                Statement::While(While { exp, block })
+            }
+            Statement::If(x) => {
+                let exp = Exp::from(&x.exp, src);
+                let block = gblock(&x.block, src);
+                let els = x.els.as_ref().map(|els| gblock(els, src));
+                Statement::If(If { exp, block, els })
+            }
+            Statement::Insert(x) => {
+                let table = x.table.clone();
+                let cols = VecA::from(&*x.cols);
+                let vals = gvals(&x.vals, src);
+                Statement::Insert(Insert { table, cols, vals })
+            }
+            Statement::Select(x) => {
+                let vals = gvals(&x.vals, src);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
+                let order_by = gorder_by(&x.order_by, src);
+                Statement::Select(Select {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                })
+            }
+            Statement::For(x) => {
+                let vals = gvals(&x.vals, src);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
+                let order_by = gorder_by(&x.order_by, src);
+                let block = gblock(&x.block, src);
+                Statement::For(For {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                    block,
+                })
+            }
+            Statement::Update(x) => {
+                let table = x.table.clone();
+                let wher = Exp::from(&x.wher, src);
+                let mut assigns = VecA::new();
+                for (i, e) in &x.assigns {
+                    assigns.push((*i, Exp::from(e, src)));
+                }
+                Statement::Update(Update {
+                    table,
+                    assigns,
+                    wher,
+                })
+            }
+            Statement::Delete(x) => {
+                let table = x.table.clone();
+                let wher = Exp::from(&x.wher, src);
+                Statement::Delete(Delete { table, wher })
+            }
+            _ => panic!(),
+        }
+    }
+}
+
+pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    let mut block = VecA::with_capacity(list.len());
+    for s in list {
+        block.push(Statement::from(s, src));
+    }
+    block
+}
+
+pub fn execute_fn<S>(f: &SFunc<S>, run: &mut Run)
+where
+    S: XString,
+{
+    // println!("execute_fn f={:?}", f);
+    execute_block(&f.block, run);
+}
+
+pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run)
+where
+    A: Allocator + Default,
+    S: XString,
+{
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
         use Statement::*;
         match s {
+            SrcLet(x) => x.exec(run),
             Let(x) => x.exec(run),
             Set(x) => x.exec(run),
             Append(x) => x.exec(run),
@@ -403,7 +538,10 @@ pub fn execute_block(slist: &[Statement], run: &mut Run) {
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids(t: &RTable, wher: &Exp, run: &mut Run) -> LVec<i64> {
+fn ids<A>(t: &RTable, wher: &Exp<A>, run: &mut Run) -> LVec<i64>
+where
+    A: Allocator + Default,
+{
     let mut result = LVec::new();
     let table = t.borrow();
     let mut iter = table.iter(run.ps);
@@ -417,13 +555,43 @@ fn ids(t: &RTable, wher: &Exp, run: &mut Run) -> LVec<i64> {
     result
 }
 
-fn get_temp(
+pub fn gvals<A>(list: &[LExp], src: &[u8]) -> VecA<Exp<A>, A>
+where
+    A: Allocator + Default,
+{
+    let mut result = VecA::with_capacity(list.len());
+    for e in list {
+        result.push(Exp::from(e, src));
+    }
+    result
+}
+
+fn gorder_by<A>(list: &LOrderBy, src: &[u8]) -> OrderBy<A>
+where
+    A: Allocator + Default,
+{
+    if let Some((exps, descs)) = list {
+        let mut result = VecA::with_capacity(exps.len());
+        for e in exps {
+            result.push(Exp::from(e, src));
+        }
+        let descs = VecA::from(&**descs);
+        Some((result, descs))
+    } else {
+        None
+    }
+}
+
+fn get_temp<A>(
     st: &STable,
-    vals: &[Exp],
-    wher: &Option<Exp>,
-    order_by: &OrderBy,
+    vals: &[Exp<A>],
+    wher: &Option<Exp<A>>,
+    order_by: &OrderBy<A>,
     run: &mut Run,
-) -> LVec<LVec<Value>> {
+) -> LVec<LVec<Value>>
+where
+    A: Allocator + Default,
+{
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.ps.load_table(st.id, &st.dt);
     let table = table.borrow();
@@ -453,3 +621,41 @@ fn get_temp(
     temp.sort_by(|a, b| row_compare(a, b, desc));
     temp
 }
+
+use std::fmt::Debug;
+pub trait XString {
+    fn str(&self) -> &str;
+    fn from_str(s: &str) -> Self;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YesString {
+    s: GString,
+}
+
+impl XString for YesString {
+    fn str(&self) -> &str {
+        &self.s
+    }
+    fn from_str(s: &str) -> Self {
+        Self {
+            s: GString::from(s),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoString {}
+
+impl XString for NoString {
+    fn str(&self) -> &str {
+        ""
+    }
+    fn from_str(_s: &str) -> Self {
+        Self {}
+    }
+}
+
+pub type LStatement = Statement<Local, YesString>;
+pub type LOrderBy = OrderBy<Local>;
+pub type LExp = Exp<Local>;

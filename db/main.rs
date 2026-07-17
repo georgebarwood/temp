@@ -95,15 +95,11 @@ pub use schema::*;
 pub mod statement;
 use statement::*;
 
-/// [GStatement].
-pub mod gstatement;
-use gstatement::*;
-
 /// [Operator]s.
 mod operator;
 use operator::*;
 
-/// [Exp]ressions and [GExp].
+/// [Exp]ressions.
 pub mod exp;
 use exp::*;
 
