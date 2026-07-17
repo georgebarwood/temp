@@ -24,25 +24,6 @@ pub enum Exp<'a> {
     FnCall(usize, LVec<Exp<'a>>),
 }
 
-/// Parsed Expression (for shared stored functions).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum GExp {
-    /// Bool constant
-    Bool(bool),
-    /// Integer constant
-    Int(i64),
-    /// String literal
-    String(GString),
-    /// Column number
-    Col(usize),
-    /// Local variable.
-    Local(usize),
-    /// Binary expression.
-    Binary(Operator, GBox<GExp>, GBox<GExp>),
-    /// Function call (resolved).
-    FnCall(usize, GVec<GExp>),
-}
-
 impl<'a> Exp<'a> {
     pub fn eval(&self, run: &mut Run) -> Value {
         use Exp::*;
@@ -141,6 +122,8 @@ impl<'a> Exp<'a> {
         }
     }
 }
+
+/*
 
 impl GExp {
     pub fn eval(&self, run: &mut Run) -> Value {
@@ -252,20 +235,6 @@ impl GExp {
     }
 }
 
-use std::fmt::Display;
-use std::fmt::Formatter;
-impl <'a> Display for Exp<'a>
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> 
-    { 
-        match self {
-           Exp::Bool(x) => f.write_str( if *x {"true"} else {"false"} )?,
-           _ => f.write_str( "Some Expression ToDo" )?,
-        }
-        Ok(())
-    }
-}
-
 impl GExp {
     pub fn from(exp: &Exp) -> Self {
         match exp {
@@ -284,6 +253,181 @@ impl GExp {
                 GExp::FnCall(*fid, args)
             }
             Exp::Name(_) | Exp::FnCallByName(_, _, _) => panic!(),
+        }
+    }
+}
+
+use std::io::Write;
+
+/// Instructions push names onto stack of names, etc.
+pub struct N {
+    pub w: LVec<u8>,
+}
+
+impl GExp
+{
+    fn _show(&self, n: &mut N) -> Result<(), std::io::Error>
+    {
+        match self {
+           GExp::Bool(x) => write!(n.w, "{}", x)?,
+           GExp::Int(x) => write!(n.w, " {} ", x)?,
+           GExp::String(x) => write!(n.w, " {} ", x)?,
+           GExp::Local(_x) => /*GExp::Local(*x),*/ todo!(), // Lookup name from run.name_stack
+
+           GExp::FnCall(_fix, _args) =>
+           {
+               // Lookup name from drun.reverse_map.
+           }
+           _ => todo!(),
+        }
+        Ok(())
+    }
+}
+*/
+
+///////////////////////////////////
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GExp {
+    /// Bool constant
+    Bool(bool),
+    /// Integer constant
+    Int(i64),
+    /// String literal
+    String(GString),
+    /// Column number
+    Col(usize),
+    /// Local variable.
+    Local(usize),
+    /// Binary expression.
+    Binary(Operator, GBox<GExp>, GBox<GExp>),
+    /// Function call (resolved). Function id and args.
+    FnCall(usize, GVec<GExp>),
+}
+
+impl GExp {
+    /// Convert Exp to GExp.
+    pub fn from(exp: &Exp) -> GExp {
+        match exp {
+            Exp::Bool(x) => GExp::Bool(*x),
+            Exp::Int(x) => GExp::Int(*x),
+            Exp::String(x) => GExp::String(GString::from(*x)),
+            Exp::Col(x) => GExp::Col(*x),
+            Exp::Local(x) => GExp::Local(*x),
+            Exp::Binary(op, lhs, rhs) => {
+                let lhs = GBox::new(GExp::from(lhs));
+                let rhs = GBox::new(GExp::from(rhs));
+                GExp::Binary(*op, lhs, rhs)
+            }
+            Exp::FnCall(fid, args) => {
+                let args = Self::genvals(args);
+                GExp::FnCall(*fid, args)
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn genvals(list: &[Exp]) -> GVec<GExp> {
+        let mut result = GVec::with_capacity(list.len());
+        for e in list {
+            result.push(GExp::from(e));
+        }
+        result
+    }
+
+    pub fn eval(&self, run: &mut Run) -> Value {
+        use GExp::*;
+        match self {
+            Bool(x) => Value::Bool(*x),
+            Int(x) => Value::Int(*x),
+            String(x) => Value::String(LRc::new(LString::from(x.as_ref()))),
+            Local(x) => {
+                let ix = run.stack.len() - (x + 1);
+                run.stack[ix].clone()
+            }
+            Binary(op, x, y) => {
+                let x = x.eval(run);
+                let y = y.eval(run);
+                op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &run.dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval(run);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run);
+
+                run.stack.truncate(save);
+                run.stack.pop().unwrap() // Pop return value.
+            }
+            _ => panic!(),
+        }
+    }
+
+    pub fn eval_lr(&self, run: &mut Run, lr: &mut LazyRow) -> Value {
+        use GExp::*;
+        match self {
+            Col(x) => lr.item(*x, run.ps),
+            Binary(op, x, y) => {
+                let x = x.eval_lr(run, lr);
+                let y = y.eval_lr(run, lr);
+                op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &run.dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_lr(run, lr);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run);
+
+                run.stack.truncate(save);
+                run.stack.pop().unwrap() // Pop return value.
+            }
+            _ => self.eval(run),
+        }
+    }
+
+    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
+        use GExp::*;
+        match self {
+            Col(x) => vals[*x].clone(),
+            Binary(op, x, y) => {
+                let x = x.eval_vals(run, vals);
+                let y = y.eval_vals(run, vals);
+                op.eval(&x, &y)
+            }
+            FnCall(f, args) => {
+                // Push default value for result onto stack.
+                let f = &run.dict.funcs[*f];
+                let def = f.ret.default_value();
+                run.stack.push(def);
+
+                let save = run.stack.len();
+                for e in args {
+                    let v = e.eval_vals(run, vals);
+                    run.stack.push(v);
+                }
+                // Execute the function.
+                execute_fn(f, run);
+
+                run.stack.truncate(save);
+                run.stack.pop().unwrap() // Pop return value.
+            }
+            _ => self.eval(run),
         }
     }
 }

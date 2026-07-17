@@ -9,12 +9,11 @@ pub struct Run<'a> {
     output: &'a mut LVec<u8>, // Maybe could generalise this in future.
 }
 
-impl <'a> Run<'a> {
-    pub fn output( &mut self, v: &Value )
-    {
+impl<'a> Run<'a> {
+    pub fn output(&mut self, v: &Value) {
         match v {
             Value::String(v) => self.output.extend_from_slice(v.as_bytes()),
-            Value::Binary(v) => self.output.extend_from_slice(&v),
+            Value::Binary(v) => self.output.extend_from_slice(v),
             _ => {
                 let s = val_to_str(v);
                 self.output.extend_from_slice(s.as_bytes());
@@ -80,7 +79,7 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                     let schema_id = dict.new_schema_id();
                     let s = GString::from(cs.sname);
                     dict.schemas.insert(s, schema_id);
-                    println!("Schema {} created", cs.sname);
+                    println!("Schema {} created", &cs.sname);
                 }
             }
 
@@ -97,7 +96,6 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                 }
             }
 
-
             Statement::RenameTable(x) => {
                 if pass == 1 {
                     let t = dict.tables.remove(&(x.old_schema_id, x.old_nid)).unwrap();
@@ -111,17 +109,21 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
                     let func_id = dict.funcs.len();
                     let nid = dict.new_name_id(cf.fname);
                     let block = GVec::new(); // Dummy block on pass 1
-                    let mut parm_types = GVec::new();
-                    for (_name, typ) in &cf.args {
-                        parm_types.push(typ.clone());
+                    let mut parms = GVec::new();
+                    for (name, typ) in &cf.parms {
+                        parms.push((NoString::from_str(name), typ.clone()));
                     }
-                    let func = SFunc {
+                    let func = SFunc::<NoString> {
+                        schema_id: cf.schema_id,
+                        fname: NoString::from_str(cf.fname),
+
                         ret: cf.ret.clone(),
-                        parm_types,
+                        parms,
                         block,
                     };
                     dict.funcs.push(func);
                     dict.func_lookup.insert((cf.schema_id, nid), func_id);
+                    // ToDo: update info dict as well.
                 } else {
                     // Set the function block.
                     let nid = dict.names.get(cf.fname).unwrap();
@@ -133,7 +135,10 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
 
             Statement::RenameFn(x) => {
                 if pass == 1 {
-                    let f = dict.func_lookup.remove(&(x.old_schema_id, x.old_nid)).unwrap();
+                    let f = dict
+                        .func_lookup
+                        .remove(&(x.old_schema_id, x.old_nid))
+                        .unwrap();
                     let new_nid = dict.new_name_id(x.new_fname);
                     dict.func_lookup.insert((x.new_schema_id, new_nid), f);
                 }
@@ -151,557 +156,13 @@ fn execute_schema_updates(pass: u8, slist: &[Statement], dict: &mut Dict, ps: &m
     }
 }
 
-fn execute_block(slist: &[Statement], run: &mut Run) {
-    let slen = run.stack.len(); // At end restore stack to this length.
-    for s in slist {
-        use Statement::*;
-        match s {
-            Let(x) => exec_let(x, run),
-            Set(x) => exec_set(x, run),
-            Append(x) => exec_append(x, run),
-            While(x) => exec_while(x, run),
-            If(x) => exec_if(x, run),
-            Insert(x) => exec_insert(x, run),
-            Update(x) => exec_update(x, run),
-            Delete(x) => exec_delete(x, run),
-            Select(x) => exec_select(x, run),
-            For(x) => exec_for(x, run),
-            CreateSchema(_) | CreateTable(_) | RenameTable(_) 
-               | CreateFn(_) | RenameFn(_) | DropTable(_) => panic!(),
-        };
-    }
-    run.stack.truncate(slen); // pop local variables from stack.
-}
-
-fn exec_let(x: &Let, run: &mut Run) {
-    let v = x.exp.eval(run);
-    run.stack.push(v);
-}
-
-fn exec_set(x: &Set, run: &mut Run) {
-    let v = x.exp.eval(run);
-    let ix = run.stack.len() - 1 - x.i;
-    run.stack[ix] = v;
-}
-
-fn exec_append(x: &Append, run: &mut Run) {
-    let v = x.exp.eval(run);
-    let ix = run.stack.len() - 1 - x.i;
-    append(&mut run.stack[ix], &v);
-}
-
-fn exec_while(x: &While, run: &mut Run) {
-    while x.exp.eval(run).bool() {
-        execute_block(&x.block, run);
-    }
-}
-
-fn exec_if(x: &If, run: &mut Run) {
-    if x.exp.eval(run).bool() {
-        execute_block(&x.block, run);
-    } else if let Some(els) = &x.els {
-        execute_block(els, run);
-    }
-}
-
-fn exec_insert(ins: &Insert, run: &mut Run) {
-    // First evaluate the expressions.
-    let mut ee = LVec::with_capacity(ins.vals.len());
-    for e in &ins.vals {
-        ee.push(e.eval(run));
-    }
-    let t = &ins.table;
-    let t = run.ps.load_table(t.id, &t.dt);
-    let mut table = t.borrow_mut();
-
-    let mut row = table.datatype.default_value();
-
-    let list = row.list_mut();
-    let mrow = LRc::make_mut(list);
-
-    // Assign the columns, with the evaluated expressions.
-    for (i, e) in ee.into_iter().enumerate() {
-        let col = ins.cols[i];
-        mrow[col] = e;
-    }
-
-    let auto_id = !ins.cols.contains(&0);
-    let row_id = if auto_id {
-        let row_id = table.new_id();
-        mrow[0] = Value::Int(row_id); // Assign the id to the first element.
-        row_id
-    } else {
-        let row_id = mrow[0].int();
-        table.reserve_id(row_id);
-        row_id
-    };
-
-    if !auto_id {
-        table.remove(row_id, run.ps); // Remove any existing record before inserting.
-    }
-
-    table.insert(&row, run.ps);
-
-    /* println!(
-        "ins table record count={} row={:?}",
-        table.record_count(),
-        row
-    ); */
-}
-
-fn exec_update(upd: &Update, run: &mut Run) {
-    let t = run.ps.load_table(upd.table.id, &upd.table.dt);
-
-    let ids = ids(&t, &upd.wher, run);
-
-    let mut table = t.borrow_mut();
-    for id in &ids {
-        let mut row = table.fetch(*id, run.ps).unwrap();
-        let mut vals = LVec::with_capacity(upd.assigns.len());
-        {
-            for (_col, e) in &upd.assigns {
-                let v = e.eval_vals(run, row.list());
-                vals.push(v);
-            }
-        }
-        let mrow = LRc::make_mut(row.list_mut());
-        for (col, _e) in upd.assigns.iter().rev() {
-            mrow[*col] = vals.pop().unwrap();
-        }
-        table.update(*id, &row, run.ps);
-    }
-}
-
-fn exec_delete(del: &Delete, run: &mut Run) {
-    let t = run.ps.load_table(del.table.id, &del.table.dt);
-    let ids = ids(&t, &del.wher, run);
-    let mut table = t.borrow_mut();
-    for id in &ids {
-        table.remove(*id, run.ps);
-    }
-}
-
-fn exec_select(x: &Select, run: &mut Run) {
-    if x.order_by.is_some() {
-        exec_select_order_by(x, run)
-    } else if let Some(f) = &x.from {
-        let t = run.ps.load_table(f.id, &f.dt);
-        let table = t.borrow();
-
-        let mut iter = table.iter(run.ps);
-        while let Some(b) = iter.next_ref(run.ps) {
-            // print!("got a row :");
-            let mut lr = table.lazy_row(b);
-            let ok = if let Some(wher) = &x.wher {
-                wher.eval_lr(run, &mut lr).bool()
-            } else {
-                true
-            };
-
-            if ok {
-                for e in &x.vals {
-                    let v = e.eval_lr(run, &mut lr);
-                    run.output(&v);
-                }
-            }
-        }
-    } else {
-        // select with no from
-        for e in &x.vals {
-            let v = e.eval(run);
-            run.output(&v);
-        }
-    }
-}
-
-fn exec_select_order_by(x: &Select, run: &mut Run) {
-    let f = x.from.as_ref().unwrap();
-    let temp = get_temp(f, &x.vals, &x.wher, &x.order_by, run);
-
-    let n = x.order_by.as_ref().unwrap().0.len();
-    for row in &temp {
-        for v in &row[n..] {
-           run.output(v);
-        }
-    }
-}
-
-fn exec_for(x: &For, run: &mut Run) {
-    if x.order_by.is_some() {
-        exec_for_order_by(x, run);
-    } else {
-        let t = run.ps.load_table(x.from.id, &x.from.dt);
-        let table = t.borrow();
-        let mut iter = table.iter(run.ps);
-        while let Some(b) = iter.next_ref(run.ps) {
-            let mut lr = table.lazy_row(b);
-
-            let ok = if let Some(wher) = &x.wher {
-                let v = wher.eval_lr(run, &mut lr);
-                v.bool()
-            } else {
-                true
-            };
-
-            if ok {
-                let len = run.stack.len();
-                for e in &x.vals {
-                    let v = e.eval_lr(run, &mut lr);
-                    run.stack.push(v);
-                }
-                execute_block(&x.block, run);
-                run.stack.truncate(len);
-            }
-        }
-    }
-}
-
-fn exec_for_order_by(x: &For, run: &mut Run) {
-    let temp = get_temp(&x.from, &x.vals, &x.wher, &x.order_by, run);
-
-    let n = x.order_by.as_ref().unwrap().0.len();
-
-    for row in &temp {
-        let len = run.stack.len();
-        for v in &row[n..] {
-            run.stack.push(v.clone());
-        }
-        execute_block(&x.block, run);
-        run.stack.truncate(len);
-    }
-}
-
-/// Get a list of ids for records from table that satisfy where condition.
-fn ids(t: &RTable, wher: &Exp, run: &mut Run) -> LVec<i64> {
-    let mut result = LVec::new();
-    let table = t.borrow();
-    let mut iter = table.iter(run.ps);
-    while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
-        if wher.eval_lr(run, &mut lr).bool() {
-            let id = lr.item(0, run.ps).int();
-            result.push(id);
-        }
-    }
-    result
-}
-
-// Note: statements are GStatement rather than Statement, so need their own execution functions.
-pub fn execute_fn(f: &SFunc, run: &mut Run) {
-    // println!("execute_fn f={:?}", f);
-    execute_gblock(&f.block, run);
-}
-
-fn execute_gblock(slist: &[GStatement], run: &mut Run) {
-    let slen = run.stack.len(); // At end restore stack to this length.
-    for s in slist {
-        use GStatement::*;
-        match s {
-            Let(x) => exec_glet(x, run),
-            Set(x) => exec_gset(x, run),
-            Append(x) => exec_gappend(x, run),
-            While(x) => exec_gwhile(x, run),
-            If(x) => exec_gif(x, run),
-            Insert(x) => exec_ginsert(x, run),
-            Update(x) => exec_gupdate(x, run),
-            Delete(x) => exec_gdelete(x, run),
-            Select(x) => exec_gselect(x, run),
-            For(x) => exec_gfor(x, run),
-        };
-    }
-    run.stack.truncate(slen); // pop local variables from stack.
-}
-
-fn exec_glet(x: &GLet, run: &mut Run) {
-    let v = x.exp.eval(run);
-    run.stack.push(v);
-}
-
-fn exec_gset(x: &GSet, run: &mut Run) {
-    let v = x.exp.eval(run);
-    let ix = run.stack.len() - 1 - x.i;
-    run.stack[ix] = v;
-}
-
-fn exec_gappend(x: &GAppend, run: &mut Run) {
-    let v = x.exp.eval(run);
-    let ix = run.stack.len() - 1 - x.i;
-    append(&mut run.stack[ix], &v);
-}
-
-fn exec_gwhile(x: &GWhile, run: &mut Run) {
-    while x.exp.eval(run).bool() {
-        execute_gblock(&x.block, run);
-    }
-}
-
-fn exec_gif(x: &GIf, run: &mut Run) {
-    if x.exp.eval(run).bool() {
-        execute_gblock(&x.block, run);
-    } else if let Some(els) = &x.els {
-        execute_gblock(els, run);
-    }
-}
-
-fn exec_ginsert(ins: &GInsert, run: &mut Run) {
-    // First evaluate the expressions.
-    let mut ee = LVec::with_capacity(ins.vals.len());
-    for e in &ins.vals {
-        ee.push(e.eval(run));
-    }
-    let t = &ins.table;
-    let t = run.ps.load_table(t.id, &t.dt);
-    let mut table = t.borrow_mut();
-
-    let mut row = table.datatype.default_value();
-
-    let list = row.list_mut();
-    let mrow = LRc::make_mut(list);
-
-    // Assign the columns, with the evaluated expressions.
-    for (i, e) in ee.into_iter().enumerate() {
-        let col = ins.cols[i];
-        mrow[col] = e;
-    }
-
-    let auto_id = !ins.cols.contains(&0);
-    let row_id = if auto_id {
-        let row_id = table.new_id();
-        mrow[0] = Value::Int(row_id); // Assign the id to the first element.
-        row_id
-    } else {
-        let row_id = mrow[0].int();
-        table.reserve_id(row_id);
-        row_id
-    };
-
-    if !auto_id {
-        table.remove(row_id, run.ps); // Remove any existing record before inserting.
-    }
-
-    table.insert(&row, run.ps);
-
-    println!(
-        "ins table record count={} row={:?}",
-        table.record_count(),
-        row
-    );
-}
-
-fn exec_gupdate(upd: &GUpdate, run: &mut Run) {
-    let t = run.ps.load_table(upd.table.id, &upd.table.dt);
-    let ids = gids(&t, &upd.wher, run);
-    let mut table = t.borrow_mut();
-    for id in &ids {
-        let mut row = table.fetch(*id, run.ps).unwrap();
-        let mut vals = LVec::with_capacity(upd.assigns.len());
-        {
-            for (_col, e) in &upd.assigns {
-                let v = e.eval_vals(run, row.list());
-                vals.push(v);
-            }
-        }
-        let mrow = LRc::make_mut(row.list_mut());
-        for (col, _e) in upd.assigns.iter().rev() {
-            mrow[*col] = vals.pop().unwrap();
-        }
-        table.update(*id, &row, run.ps);
-    }
-}
-
-fn exec_gdelete(del: &GDelete, run: &mut Run) {
-    let t = run.ps.load_table(del.table.id, &del.table.dt);
-    let ids = gids(&t, &del.wher, run);
-    let mut table = t.borrow_mut();
-    for id in &ids {
-        table.remove(*id, run.ps);
-    }
-}
-
-fn exec_gselect(x: &GSelect, run: &mut Run) {
-    if x.order_by.is_some() {
-        exec_gselect_order_by(x, run)
-    } else if let Some(f) = &x.from {
-        let t = run.ps.load_table(f.id, &f.dt);
-        let table = t.borrow();
-        let mut iter = table.iter(run.ps);
-        while let Some(b) = iter.next_ref(run.ps) {
-            // print!("got a row :");
-            let mut lr = table.lazy_row(b);
-            let ok = if let Some(wher) = &x.wher {
-                wher.eval_lr(run, &mut lr).bool()
-            } else {
-                true
-            };
-            if ok {
-                for e in &x.vals {
-                    let v = e.eval_lr(run, &mut lr);
-                    run.output(&v);
-                }
-            }
-        }
-    } else {
-        // SELECT with no FROM
-        for e in &x.vals {
-            let v = e.eval(run);
-            run.output(&v);
-        }
-    }
-}
-
-fn exec_gselect_order_by(x: &GSelect, run: &mut Run) {
-    let f = x.from.as_ref().unwrap();
-    let temp = get_gtemp(f, &x.vals, &x.wher, &x.order_by, run);
-
-    let n = x.order_by.as_ref().unwrap().0.len();
-    for row in &temp {
-        for v in &row[n..] {
-           run.output(v);
-        }
-    }
-}
-
-fn exec_gfor(x: &GFor, run: &mut Run) {
-    if x.order_by.is_some() {
-        exec_gfor_order_by(x, run);
-    } else {
-        let t = run.ps.load_table(x.from.id, &x.from.dt);
-        let table = t.borrow();
-        let mut iter = table.iter(run.ps);
-        while let Some(b) = iter.next_ref(run.ps) {
-            let mut lr = table.lazy_row(b);
-
-            let ok = if let Some(wher) = &x.wher {
-                let v = wher.eval_lr(run, &mut lr);
-                v.bool()
-            } else {
-                true
-            };
-
-            if ok {
-                let len = run.stack.len();
-                for e in &x.vals {
-                    let v = e.eval_lr(run, &mut lr);
-                    run.stack.push(v);
-                }
-                execute_gblock(&x.block, run);
-                run.stack.truncate(len);
-            }
-        }
-    }
-}
-
-fn exec_gfor_order_by(x: &GFor, run: &mut Run) {
-    let temp = get_gtemp(&x.from, &x.vals, &x.wher, &x.order_by, run);
-
-    let n = x.order_by.as_ref().unwrap().0.len();
-
-    for row in &temp {
-        let len = run.stack.len();
-        for v in &row[n..] {
-            run.stack.push(v.clone());
-        }
-        execute_gblock(&x.block, run);
-        run.stack.truncate(len);
-    }
-}
-
-/// Get a list of ids for records from table that satisfy where condition.
-fn gids(t: &RTable, wher: &GExp, run: &mut Run) -> LVec<i64> {
-    let mut result = LVec::new();
-    let table = t.borrow();
-    let mut iter = table.iter(run.ps);
-    while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
-        if wher.eval_lr(run, &mut lr).bool() {
-            let id = lr.item(0, run.ps).int();
-            result.push(id);
-        }
-    }
-    result
-}
-
-fn append(x: &mut Value, y: &Value) {
+pub fn append(x: &mut Value, y: &Value) {
     // Could use get_mut + with_capacity instead of make_mut.
     match (x, y) {
         (Value::String(x), Value::String(y)) => LRc::make_mut(x).push_str(y),
         (Value::Binary(x), Value::Binary(y)) => LRc::make_mut(x).extend_from_slice(y),
         _ => panic!(),
     }
-}
-
-fn get_temp(
-    st: &STable,
-    vals: &[Exp],
-    wher: &Option<Exp>,
-    order_by: &OrderBy,
-    run: &mut Run,
-) -> LVec<LVec<Value>> {
-    let (ob, desc) = order_by.as_ref().unwrap();
-    let table = run.ps.load_table(st.id, &st.dt);
-    let table = table.borrow();
-    let mut iter = table.iter(run.ps);
-
-    let mut temp = LVec::new();
-    while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
-        let ok = if let Some(wher) = &wher {
-            wher.eval_lr(run, &mut lr).bool()
-        } else {
-            true
-        };
-        if ok {
-            let mut row = LVec::with_capacity(ob.len() + vals.len());
-            for e in ob {
-                let v = e.eval_lr(run, &mut lr);
-                row.push(v);
-            }
-            for e in vals {
-                let v = e.eval_lr(run, &mut lr);
-                row.push(v);
-            }
-            temp.push(row);
-        }
-    }
-    temp.sort_by(|a, b| row_compare(a, b, desc));
-    temp
-}
-
-fn get_gtemp(
-    st: &STable,
-    vals: &[GExp],
-    wher: &Option<GExp>,
-    order_by: &GOrderBy,
-    run: &mut Run,
-) -> LVec<LVec<Value>> {
-    let (ob, desc) = order_by.as_ref().unwrap();
-    let table = run.ps.load_table(st.id, &st.dt);
-    let table = table.borrow();
-    let mut iter = table.iter(run.ps);
-
-    let mut temp = LVec::new();
-    while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
-        let ok = if let Some(wher) = &wher {
-            wher.eval_lr(run, &mut lr).bool()
-        } else {
-            true
-        };
-        if ok {
-            let mut row = LVec::with_capacity(ob.len() + vals.len());
-            for e in ob {
-                let v = e.eval_lr(run, &mut lr);
-                row.push(v);
-            }
-            for e in vals {
-                let v = e.eval_lr(run, &mut lr);
-                row.push(v);
-            }
-            temp.push(row);
-        }
-    }
-    temp.sort_by(|a, b| row_compare(a, b, desc));
-    temp
 }
 
 use std::cmp::Ordering;

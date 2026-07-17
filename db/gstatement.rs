@@ -1,64 +1,14 @@
 use crate::*;
-use datatype::DataType;
-
-/// CREATE SCHEMA statement.
-#[derive(Debug)]
-pub struct CreateSchema<'a> {
-    pub sname: &'a str,
-}
-
-/// CREATE TABLE statement.
-#[derive(Debug)]
-pub struct CreateTable<'a> {
-    pub schema_id: i64,
-    pub tname: &'a str,
-    pub col_defs: Arc<DataType>,
-}
-
-/// RENAME TABLE statement.
-#[derive(Debug)]
-pub struct RenameTable<'a> {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
-    pub new_schema_id: i64,
-    pub new_tname: &'a str,
-}
-
-/// CREATE FN statement.
-#[derive(Debug)]
-pub struct CreateFn<'a> {
-    pub schema_id: i64,
-    pub fname: &'a str,
-    pub ret: Arc<DataType>,
-    pub parms: LVec<(&'a str, Arc<DataType>)>,
-    pub block: LVec<Statement<'a>>,
-}
-
-/// RENAME FN statement.
-#[derive(Debug)]
-pub struct RenameFn<'a> {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
-    pub new_schema_id: i64,
-    pub new_fname: &'a str,
-}
-
-/// DROP TABLE statement.
-#[derive(Debug)]
-pub struct DropTable {
-    pub schema_id: i64,
-    pub name_id: i64,
-    pub table: Arc<STable>,
-}
+use serde::*;
 
 /// LET statement.
-#[derive(Debug)]
-pub struct Let<'a> {
-    pub varname: &'a str,
-    pub exp: Exp<'a>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GLet<S: XString> {
+    pub varname: S, // Needed to be able to reconstruct source of stored function.
+    pub exp: GExp,
 }
 
-impl<'a> Let<'a> {
+impl<S: XString> GLet<S> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         run.stack.push(v);
@@ -66,13 +16,13 @@ impl<'a> Let<'a> {
 }
 
 /// SET statement.
-#[derive(Debug)]
-pub struct Set<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GSet {
     pub i: usize,
-    pub exp: Exp<'a>,
+    pub exp: GExp,
 }
 
-impl<'a> Set<'a> {
+impl GSet {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         let ix = run.stack.len() - 1 - self.i;
@@ -81,13 +31,13 @@ impl<'a> Set<'a> {
 }
 
 /// APPEND ( |= ) statement.
-#[derive(Debug)]
-pub struct Append<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GAppend {
     pub i: usize,
-    pub exp: Exp<'a>,
+    pub exp: GExp,
 }
 
-impl<'a> Append<'a> {
+impl GAppend {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         let ix = run.stack.len() - 1 - self.i;
@@ -96,47 +46,47 @@ impl<'a> Append<'a> {
 }
 
 /// WHILE statement.
-#[derive(Debug)]
-pub struct While<'a> {
-    pub exp: Exp<'a>,
-    pub block: LVec<Statement<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GWhile<S: XString> {
+    pub exp: GExp,
+    pub block: GVec<GStatement<S>>,
 }
 
-impl<'a> While<'a> {
+impl<S: XString> GWhile<S> {
     pub fn exec(&self, run: &mut Run) {
         while self.exp.eval(run).bool() {
-            execute_block(&self.block, run);
+            execute_gblock(&self.block, run);
         }
     }
 }
 
 /// IF statement.
-#[derive(Debug)]
-pub struct If<'a> {
-    pub exp: Exp<'a>,
-    pub block: LVec<Statement<'a>>,
-    pub els: Option<LVec<Statement<'a>>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GIf<S: XString> {
+    pub exp: GExp,
+    pub block: GVec<GStatement<S>>,
+    pub els: Option<GVec<GStatement<S>>>,
 }
 
-impl<'a> If<'a> {
+impl<S: XString> GIf<S> {
     pub fn exec(&self, run: &mut Run) {
         if self.exp.eval(run).bool() {
-            execute_block(&self.block, run);
+            execute_gblock(&self.block, run);
         } else if let Some(els) = &self.els {
-            execute_block(els, run);
+            execute_gblock(els, run);
         }
     }
 }
 
 /// INSERT statement.
-#[derive(Debug)]
-pub struct Insert<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GInsert {
     pub table: Arc<STable>,
-    pub cols: LVec<usize>,
-    pub vals: LVec<Exp<'a>>,
+    pub cols: GVec<usize>,
+    pub vals: GVec<GExp>,
 }
 
-impl<'a> Insert<'a> {
+impl GInsert {
     pub fn exec(&self, run: &mut Run) {
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
@@ -176,7 +126,7 @@ impl<'a> Insert<'a> {
         table.insert(&row, run.ps);
 
         println!(
-            "Insert exec table record count={} row={:?}",
+            "GInsert exec table record count={} row={:?}",
             table.record_count(),
             row
         );
@@ -184,17 +134,17 @@ impl<'a> Insert<'a> {
 }
 
 /// UPDATE statement.
-#[derive(Debug)]
-pub struct Update<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GUpdate {
     pub table: Arc<STable>,
-    pub assigns: LVec<(usize, Exp<'a>)>, // col num, Exp
-    pub wher: Exp<'a>,
+    pub assigns: GVec<(usize, GExp)>, // col num, Exp
+    pub wher: GExp,
 }
 
-impl<'a> Update<'a> {
+impl GUpdate {
     pub fn exec(&self, run: &mut Run) {
         let t = run.ps.load_table(self.table.id, &self.table.dt);
-        let ids = ids(&t, &self.wher, run);
+        let ids = gids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
         for id in &ids {
             let mut row = table.fetch(*id, run.ps).unwrap();
@@ -215,16 +165,16 @@ impl<'a> Update<'a> {
 }
 
 /// DELETE statement.
-#[derive(Debug)]
-pub struct Delete<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GDelete {
     pub table: Arc<STable>,
-    pub wher: Exp<'a>,
+    pub wher: GExp,
 }
 
-impl<'a> Delete<'a> {
+impl GDelete {
     pub fn exec(&self, run: &mut Run) {
         let t = run.ps.load_table(self.table.id, &self.table.dt);
-        let ids = ids(&t, &self.wher, run);
+        let ids = gids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
         for id in &ids {
             table.remove(*id, run.ps);
@@ -232,18 +182,18 @@ impl<'a> Delete<'a> {
     }
 }
 
-pub type OrderBy<'a> = Option<(LVec<Exp<'a>>, LVec<bool>)>;
+pub type GOrderBy = Option<(GVec<GExp>, GVec<bool>)>;
 
 /// SELECT statement.
-#[derive(Debug)]
-pub struct Select<'a> {
-    pub vals: LVec<Exp<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GSelect {
+    pub vals: GVec<GExp>,
     pub from: Option<Arc<STable>>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
+    pub wher: Option<GExp>,
+    pub order_by: GOrderBy,
 }
 
-impl<'a> Select<'a> {
+impl GSelect {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run)
@@ -276,7 +226,7 @@ impl<'a> Select<'a> {
     }
     pub fn exec_order_by(&self, run: &mut Run) {
         let f = self.from.as_ref().unwrap();
-        let temp = get_temp(f, &self.vals, &self.wher, &self.order_by, run);
+        let temp = get_gtemp(f, &self.vals, &self.wher, &self.order_by, run);
 
         let n = self.order_by.as_ref().unwrap().0.len();
         for row in &temp {
@@ -288,16 +238,16 @@ impl<'a> Select<'a> {
 }
 
 /// FOR statement.
-#[derive(Debug)]
-pub struct For<'a> {
-    pub vals: LVec<Exp<'a>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GFor<S: XString> {
+    pub vals: GVec<GExp>,
     pub from: Arc<STable>,
-    pub wher: Option<Exp<'a>>,
-    pub order_by: OrderBy<'a>,
-    pub block: LVec<Statement<'a>>,
+    pub wher: Option<GExp>,
+    pub order_by: GOrderBy,
+    pub block: GVec<GStatement<S>>,
 }
 
-impl<'a> For<'a> {
+impl<S: XString> GFor<S> {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run);
@@ -321,14 +271,14 @@ impl<'a> For<'a> {
                         let v = e.eval_lr(run, &mut lr);
                         run.stack.push(v);
                     }
-                    execute_block(&self.block, run);
+                    execute_gblock(&self.block, run);
                     run.stack.truncate(len);
                 }
             }
         }
     }
     pub fn exec_order_by(&self, run: &mut Run) {
-        let temp = get_temp(&self.from, &self.vals, &self.wher, &self.order_by, run);
+        let temp = get_gtemp(&self.from, &self.vals, &self.wher, &self.order_by, run);
 
         let n = self.order_by.as_ref().unwrap().0.len();
 
@@ -337,53 +287,136 @@ impl<'a> For<'a> {
             for v in &row[n..] {
                 run.stack.push(v.clone());
             }
-            execute_block(&self.block, run);
+            execute_gblock(&self.block, run);
             run.stack.truncate(len);
         }
     }
 }
 
-/// Statement.
-#[derive(Debug)]
-pub enum Statement<'a> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GStatement<S: XString> {
     /// Declare and initialise a local variable.
-    Let(Let<'a>),
+    Let(GLet<S>),
     /// Assign a local variable.
-    Set(Set<'a>),
+    Set(GSet),
     /// Append to a local string or binary variable.
-    Append(Append<'a>),
+    Append(GAppend),
     /// While loop.
-    While(While<'a>),
+    While(GWhile<S>),
     /// Conditional evalaution.
-    If(If<'a>),
+    If(GIf<S>),
     /// Insert into table.
-    Insert(Insert<'a>),
+    Insert(GInsert),
     /// Update table rows. Where condition is not optional, use "where true" to update all rows.
-    Update(Update<'a>),
+    Update(GUpdate),
     /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
-    Delete(Delete<'a>),
+    Delete(GDelete),
     /// Output values.
-    Select(Select<'a>),
+    Select(GSelect),
     /// Loop through table, local variables are assigned to expressions evaluated from table rows.
-    For(For<'a>),
-    /// Create Schema.
-    CreateSchema(CreateSchema<'a>),
-    /// Create Table.
-    CreateTable(CreateTable<'a>),
-    /// Rename Table.
-    RenameTable(RenameTable<'a>),
-    /// Create Function.
-    CreateFn(CreateFn<'a>),
-    /// Rename Function.
-    RenameFn(RenameFn<'a>),
-    /// Drop Table.
-    DropTable(DropTable),
+    For(GFor<S>),
 }
 
-pub fn execute_block(slist: &[Statement], run: &mut Run) {
+impl<S> GStatement<S>
+where
+    S: XString,
+{
+    /// Convert ....todo....
+    pub fn from(stat: &Statement) -> GStatement<S> {
+        match stat {
+            Statement::Let(x) => GStatement::Let(GLet {
+                varname: S::from_str(x.varname),
+                exp: GExp::from(&x.exp),
+            }),
+            Statement::Set(x) => GStatement::Set(GSet {
+                i: x.i,
+                exp: GExp::from(&x.exp),
+            }),
+            Statement::Append(x) => GStatement::Append(GAppend {
+                i: x.i,
+                exp: GExp::from(&x.exp),
+            }),
+            Statement::While(x) => {
+                let exp = GExp::from(&x.exp);
+                let block = gblock(&x.block);
+                GStatement::While(GWhile { exp, block })
+            }
+            Statement::If(x) => {
+                let exp = GExp::from(&x.exp);
+                let block = gblock(&x.block);
+                let els = x.els.as_ref().map(|els| gblock(els));
+                GStatement::If(GIf { exp, block, els })
+            }
+            Statement::Insert(x) => {
+                let table = x.table.clone();
+                let cols = GVec::from(&*x.cols);
+                let vals = gvals(&x.vals);
+                GStatement::Insert(GInsert { table, cols, vals })
+            }
+            Statement::Select(x) => {
+                let vals = gvals(&x.vals);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| GExp::from(wher));
+                let order_by = gorder_by(&x.order_by);
+                GStatement::Select(GSelect {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                })
+            }
+            Statement::For(x) => {
+                let vals = gvals(&x.vals);
+                let from = x.from.clone();
+                let wher = x.wher.as_ref().map(|wher| GExp::from(wher));
+                let order_by = gorder_by(&x.order_by);
+                let block = gblock(&x.block);
+                GStatement::For(GFor {
+                    vals,
+                    from,
+                    wher,
+                    order_by,
+                    block,
+                })
+            }
+            Statement::Update(x) => {
+                let table = x.table.clone();
+                let wher = GExp::from(&x.wher);
+                let mut assigns = GVec::new();
+                for (i, e) in &x.assigns {
+                    assigns.push((*i, GExp::from(e)));
+                }
+                GStatement::Update(GUpdate {
+                    table,
+                    assigns,
+                    wher,
+                })
+            }
+            Statement::Delete(x) => {
+                let table = x.table.clone();
+                let wher = GExp::from(&x.wher);
+                GStatement::Delete(GDelete { table, wher })
+            }
+            _ => panic!(),
+        }
+    }
+}
+
+pub fn execute_fn<S>(f: &SFunc<S>, run: &mut Run)
+where
+    S: XString,
+{
+    // println!("execute_fn f={:?}", f);
+    execute_gblock(&f.block, run);
+}
+
+fn execute_gblock<S>(slist: &[GStatement<S>], run: &mut Run)
+where
+    S: XString,
+{
     let slen = run.stack.len(); // At end restore stack to this length.
     for s in slist {
-        use Statement::*;
+        use GStatement::*;
         match s {
             Let(x) => x.exec(run),
             Set(x) => x.exec(run),
@@ -395,15 +428,13 @@ pub fn execute_block(slist: &[Statement], run: &mut Run) {
             Delete(x) => x.exec(run),
             Select(x) => x.exec(run),
             For(x) => x.exec(run),
-            CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
-            | DropTable(_) => panic!(),
         };
     }
     run.stack.truncate(slen); // pop local variables from stack.
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids(t: &RTable, wher: &Exp, run: &mut Run) -> LVec<i64> {
+fn gids(t: &RTable, wher: &GExp, run: &mut Run) -> LVec<i64> {
     let mut result = LVec::new();
     let table = t.borrow();
     let mut iter = table.iter(run.ps);
@@ -417,11 +448,43 @@ fn ids(t: &RTable, wher: &Exp, run: &mut Run) -> LVec<i64> {
     result
 }
 
-fn get_temp(
+fn gvals(list: &[Exp]) -> GVec<GExp> {
+    let mut result = GVec::with_capacity(list.len());
+    for e in list {
+        result.push(GExp::from(e));
+    }
+    result
+}
+
+pub fn gblock<S>(list: &[Statement]) -> GVec<GStatement<S>>
+where
+    S: XString,
+{
+    let mut block = GVec::with_capacity(list.len());
+    for s in list {
+        block.push(GStatement::from(s));
+    }
+    block
+}
+
+fn gorder_by(list: &OrderBy) -> GOrderBy {
+    if let Some((exps, descs)) = list {
+        let mut result = GVec::with_capacity(exps.len());
+        for e in exps {
+            result.push(GExp::from(e));
+        }
+        let descs = GVec::from(&**descs);
+        Some((result, descs))
+    } else {
+        None
+    }
+}
+
+fn get_gtemp(
     st: &STable,
-    vals: &[Exp],
-    wher: &Option<Exp>,
-    order_by: &OrderBy,
+    vals: &[GExp],
+    wher: &Option<GExp>,
+    order_by: &GOrderBy,
     run: &mut Run,
 ) -> LVec<LVec<Value>> {
     let (ob, desc) = order_by.as_ref().unwrap();
@@ -452,4 +515,41 @@ fn get_temp(
     }
     temp.sort_by(|a, b| row_compare(a, b, desc));
     temp
+}
+
+pub type FStatement = GStatement<NoString>;
+pub type FXStatement = GStatement<YesString>;
+
+use std::fmt::Debug;
+pub trait XString {
+    fn str(&self) -> &str;
+    fn from_str(s: &str) -> Self;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct YesString {
+    s: GString,
+}
+
+impl XString for YesString {
+    fn str(&self) -> &str {
+        &self.s
+    }
+    fn from_str(s: &str) -> Self {
+        Self {
+            s: GString::from(s),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoString {}
+
+impl XString for NoString {
+    fn str(&self) -> &str {
+        ""
+    }
+    fn from_str(_s: &str) -> Self {
+        Self {}
+    }
 }

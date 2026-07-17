@@ -1,6 +1,6 @@
 use crate::*;
 
-pub fn test() {    
+pub fn test() {
     let sql : [&[u8]; 15] = [
         b"schema dbo",
         b"table dbo.xxx(Name string,Age int,Height float,Email string)",
@@ -22,7 +22,7 @@ pub fn test() {
         b"let s='' for n = Name from dbo.cust order by Name desc set s |= n select s",
     ];
 
-    let _sql : [&[u8]; 4] = [
+    let _sql: [&[u8]; 4] = [
         b"schema test",
         b"table test.users (name string, age int)",
         b"let i = 8192
@@ -62,11 +62,15 @@ pub fn test() {
         if go(s, &mut dict, ps, &mut output) {
             dict_changed = true;
         }
-        println!("elapsed micros={} output={}", start.elapsed().as_micros(), tos(&output));
+        println!(
+            "elapsed micros={} output={}",
+            start.elapsed().as_micros(),
+            tos(&output)
+        );
     }
 
     println!();
-    
+
     global.lock().unwrap().commit(ps, dict, dict_changed);
 
     global.lock().unwrap().shutdown();

@@ -1,5 +1,8 @@
 /* What next plan...
 
+   Maybe keep two copies of schema, one for execution, the other "source",
+   with function local variable names and comments etc.
+
    rename fn x to y
    alter fn -- allowed provided number and types of args, and ret type, does not change.
    rename table x to y
@@ -18,7 +21,7 @@
       Part 3 : look for more complex WHERE conditions, then same as Part 2.
 
    Check function bodies do not have schema update statements.
-     
+
    |= (DONE)
    Auto-conversion of ints to strings. DONE
    User-defined types. Could start with tuples, e.g. (int,int)
@@ -86,18 +89,22 @@ use token::*;
 
 /// [Dict]ionary of schemas, tables, functions. [STable], [SFunc].
 mod schema;
-use schema::*;
+pub use schema::*;
 
-/// [Statement] and [GStatement].
-mod statement;
+/// [Statement].
+pub mod statement;
 use statement::*;
+
+/// [GStatement].
+pub mod gstatement;
+use gstatement::*;
 
 /// [Operator]s.
 mod operator;
 use operator::*;
 
 /// [Exp]ressions and [GExp].
-mod exp;
+pub mod exp;
 use exp::*;
 
 /// Global state [GSS], initialisation.

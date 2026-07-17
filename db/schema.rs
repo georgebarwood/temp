@@ -20,11 +20,19 @@ pub struct Dict {
     pub tables: HashMap<(i64, i64), Arc<STable>>,
     /// Map from (schema id, name id) to index into funcs.
     pub func_lookup: HashMap<(i64, i64), usize>,
-    /// List of stored functions.
-    pub funcs: GVec<SFunc>,
+    /// List of stored functions (no display datat)
+    pub funcs: GVec<SFunc<NoString>>,
     last_schema_id: i64,
     last_name_id: i64,
     last_table_id: i64,
+}
+
+/// Extra info, such as parameter and local variable names for functions.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct InfoDict {
+    pub schema_names: GVec<GString>,
+    pub table_names: GVec<(i64, GString)>,
+    pub funcs: GVec<SFunc<YesString>>,
 }
 
 impl Dict {
@@ -54,8 +62,6 @@ impl Dict {
 
     /// Serialize as bytes, with pre-pended id.
     fn to_bytes_id(&self, id: u64) -> LVec<u8> {
-        // Should first prepare self.funcs for serialisation.
-
         let mut result = LVec::new();
         result.extend_from_slice(&id.to_le_bytes());
         postcard::to_io(self, &mut result).unwrap();
@@ -88,14 +94,26 @@ impl Dict {
         let key = IdVKey::new(crate::DICT_ID);
         if let Some(mut sdata) = sys_store.get(&key, ps) {
             let bytes = sdata.bytes();
-            let dict = Dict::from_bytes_id(&bytes);
+            let mut dict = Dict::from_bytes_id(&bytes);
 
-            // Here should resolve any calls in funcs.
+            dict.cleanup();
 
             Arc::new(dict)
         } else {
             panic!()
         }
+    }
+
+    /// Retain only nids that are still in use.
+    fn cleanup(&mut self) {
+        let mut ok = HashSet::default();
+        for (_, nid) in self.tables.keys() {
+            ok.insert(nid);
+        }
+        for (_, nid) in self.func_lookup.keys() {
+            ok.insert(nid);
+        }
+        self.names.retain(|_, nid| ok.contains(nid));
     }
 }
 
@@ -114,9 +132,15 @@ impl STable {
 
 /// Schema Stored Function - result DataType, Param types and Statements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SFunc {
+pub struct SFunc<S>
+where
+    S: XString,
+{
+    pub schema_id: i64,
+    pub fname: S,
+
     /// result datatype
     pub ret: Arc<DataType>,
-    pub parm_types: GVec<Arc<DataType>>,
-    pub block: GVec<GStatement>,
+    pub parms: GVec<(S, Arc<DataType>)>,
+    pub block: GVec<GStatement<S>>,
 }

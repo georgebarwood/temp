@@ -146,7 +146,7 @@ impl<'a> Parser<'a> {
             datatype: dt.unwrap(),
         });
 
-        Ok(Statement::Let(Let { exp }))
+        Ok(Statement::Let(Let { varname: name, exp }))
     }
 
     fn set(&mut self) -> Result<Statement<'a>, E> {
@@ -524,7 +524,7 @@ impl<'a> Parser<'a> {
                     for (i, e) in (&mut *args).into_iter().enumerate() {
                         let t = self.resolve(e, ctx, aos)?;
                         aos += 1;
-                        let pt = &f.parm_types[i];
+                        let pt = &f.parms[i].1;
                         if !pt.similar(t) {
                             return Err(E::new(&format!(
                                 "Function call parameter type mismatch t={:?} pt={:?}",
@@ -741,18 +741,17 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-
     fn rename_table(&mut self) -> Result<Statement<'a>, E> {
-        let (old_schema_id,old_nid) = 
-        {
-           let t = self.table();
-           if self.pass == 2 { (0,0) }
-           else {
-             let (_,x,y) = t?;
-             (x, y)
-           }
+        let (old_schema_id, old_nid) = {
+            let t = self.table();
+            if self.pass == 2 {
+                (0, 0)
+            } else {
+                let (_, x, y) = t?;
+                (x, y)
+            }
         };
-        
+
         self.expect_ident(b"to")?;
         let new_schema = self.read_ident()?;
         let new_schema_id = self.check_schema(new_schema)?;
@@ -804,11 +803,11 @@ impl<'a> Parser<'a> {
         }
 
         self.expect_token(Token::LBra)?;
-        let mut args = LVec::new();
+        let mut parms = LVec::new();
         while self.token != Token::RBra {
             let ident = self.read_ident()?;
             let typ = self.datatype()?;
-            args.push((ident, Arc::new(typ)));
+            parms.push((ident, Arc::new(typ)));
             if !self.test_token(Token::Comma)? {
                 break;
             }
@@ -828,9 +827,12 @@ impl<'a> Parser<'a> {
             name: "result",
             datatype: ret.clone(),
         });
-        for (name, typ) in &args {
-            let datatype = typ.clone();
-            self.locs.push(Loc { name, datatype });
+
+        for (name, typ) in &parms {
+            self.locs.push(Loc {
+                name,
+                datatype: typ.clone(),
+            });
         }
 
         let block = self.block()?;
@@ -839,7 +841,7 @@ impl<'a> Parser<'a> {
         let result = CreateFn {
             schema_id,
             fname,
-            args,
+            parms,
             ret,
             block,
         };
@@ -850,16 +852,16 @@ impl<'a> Parser<'a> {
     }
 
     fn rename_fn(&mut self) -> Result<Statement<'a>, E> {
-        let (old_schema_id,old_nid) = 
-        {
-           let t = self.function();
-           if self.pass == 2 { (0,0) }
-           else {
-             let (_,x,y) = t?;
-             (x, y)
-           }
+        let (old_schema_id, old_nid) = {
+            let t = self.function();
+            if self.pass == 2 {
+                (0, 0)
+            } else {
+                let (_, x, y) = t?;
+                (x, y)
+            }
         };
-        
+
         self.expect_ident(b"to")?;
         let new_schema = self.read_ident()?;
         let new_schema_id = self.check_schema(new_schema)?;
@@ -878,7 +880,6 @@ impl<'a> Parser<'a> {
         self.schema_updates = true;
         Ok(result)
     }
-
 
     fn drop_table(&mut self) -> Result<Statement<'a>, E> {
         let (table, schema_id, name_id) = self.table()?;
