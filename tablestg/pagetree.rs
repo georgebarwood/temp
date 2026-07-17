@@ -8,7 +8,7 @@ struct ParentPage {
 impl ParentPage {
     fn new() -> Self {
         Self {
-            data: Arc::new(Vec::new()),
+            data: Arc::new(PVec::new()),
         }
     }
 

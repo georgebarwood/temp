@@ -84,7 +84,7 @@ const PAGE_SIZE: u64 = 3952;
 
 // Basic data types.
 
-pub use atom_file::{Arc, Data};
+pub use atom_file::{Arc, Data, PVec, pvec};
 
 pub use pstd::localalloc::{Local, Perm};
 

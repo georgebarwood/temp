@@ -94,8 +94,8 @@ impl<'a> Reader<'a> {
     /// Returns a new Vec of specified size with same records but compacted.
     /// Size must be sufficient to hold records.
     /// This is quite a fast operation as no hashing is needed.
-    pub fn rebuild(&self, size: usize) -> Vec<u8> {
-        let mut result = vec![0; size];
+    pub fn rebuild(&self, size: usize) -> PVec<u8> {
+        let mut result = pvec![0; size];
         let mut w = Writer::new(&mut result);
         let mut pos = Pos::start();
         while let Some((off, len)) = self.iter_next(&mut pos) {

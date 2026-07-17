@@ -1,6 +1,6 @@
 use crate::{
     DataType, IdVKey, LVec, LazyItem, MSPX, PData, PageSet, SPX, VBuckMap, VBuckMapInfo,
-    VBuckMapIter, VKey, Value, table::TableInner,
+    VBuckMapIter, VKey, Value, table::TableInner, PVec
 };
 use std::hash::{Hash, Hasher};
 
@@ -326,12 +326,15 @@ impl Store {
     /// Save Store as bytes. Returns none if Store is unchanged.
     ///
     /// This is used to save sys_store to page 1.
-    pub fn save_to_bytes(&mut self) -> Option<Vec<u8>> {
+    pub fn save_to_bytes(&mut self) -> Option<PVec<u8>> {
         if !self.main.changed {
             return None;
         }
         self.main.changed = false;
-        Some(postcard::to_stdvec(self).unwrap())
+
+        let mut result = PVec::new();
+        postcard::to_io(self, &mut result).unwrap();
+        Some(result)
     }
 
     /// Load Store from bytes.
