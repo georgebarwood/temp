@@ -11,6 +11,7 @@ pub struct Run<'a> {
 }
 
 impl<'a> Run<'a> {
+    /// Output Value.
     pub fn output(&mut self, v: &Value) {
         match v {
             Value::String(v) => self.output.extend_from_slice(v.as_bytes()),
@@ -20,6 +21,15 @@ impl<'a> Run<'a> {
                 self.output.extend_from_slice(s.as_bytes());
             }
         }
+    }
+    
+    /// Get Function and push default value for result onto stack.
+    pub fn call_init(&mut self, f: usize) -> &'a SFunc<NoString>
+    {
+         let f = self.dict.func(f);
+         let def = f.ret.default_value();
+         self.stack.push(def);
+         f
     }
 }
 
@@ -81,51 +91,39 @@ fn execute_schema_updates(
 ) {
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
-        match s {
-            Statement::CreateSchema(x) => {
-                if pass == 1 {
+        if pass == 1 || matches!(s, Statement::CreateFn(_)) {
+            match s {
+                Statement::CreateSchema(x) => {
                     let sname = x.sname.str(src);
                     dict.create_schema(sname);
                     println!("Schema '{}' created", sname);
                 }
-            }
 
-            Statement::CreateTable(x) => {
-                if pass == 1 {
+                Statement::CreateTable(x) => {
                     let tname = x.tname.str(src);
-                    dict.create_table( x.schema_id, tname, x.col_defs.clone() );
+                    dict.create_table(x.schema_id, tname, x.col_defs.clone());
                     println!("Table '{}' created", tname);
                 }
-            }
 
-            Statement::RenameTable(x) => {
-                if pass == 1 {
-                    dict.rename_table( x, src);
+                Statement::RenameTable(x) => dict.rename_table(x, src),
+
+                Statement::CreateFn(x) => {
+                    if pass == 1 {
+                        dict.create_fn(x, src);
+                    } else {
+                        dict.set_fn_block(x, src);
+                    }
                 }
-            }
 
-            Statement::CreateFn(x) => {
-                if pass == 1 {
-                    dict.create_fn( x, src );
-                } else {
-                    dict.set_fn_block( x, src );
-                }
-            }
+                Statement::RenameFn(x) => dict.rename_fn(x, src),
 
-            Statement::RenameFn(x) => {
-                if pass == 1 {
-                    dict.rename_fn( x, src );
-                }
-            }
-
-            Statement::DropTable(x) => {
-                if pass == 1 {
+                Statement::DropTable(x) => {
                     dict.drop_table(x);
                     // Remove record from sys_schema using x.table_id and ps.
                     Table::drop(x.table.id, x.table.dt.clone(), ps);
                 }
+                _ => panic!(),
             }
-            _ => todo!(),
         }
     }
 }

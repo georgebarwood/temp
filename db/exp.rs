@@ -60,19 +60,13 @@ impl<A: Allocator + Default> Exp<A> {
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
-                // Push default value for result onto stack.
-                let f = &run.dict.func(*f);
-                let def = f.ret.default_value();
-                run.stack.push(def);
-
+                let f  = run.call_init(*f);
                 let save = run.stack.len();
                 for e in args {
                     let v = e.eval(run);
                     run.stack.push(v);
                 }
-                // Execute the function.
-                execute_fn(f, run);
-
+                execute_block(&f.block, run);
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
@@ -90,20 +84,13 @@ impl<A: Allocator + Default> Exp<A> {
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
-                // Push default value for result onto stack.
-                let f = &run.dict.func(*f);
-                let def = f.ret.default_value();
-                run.stack.push(def);
-
+                let f  = run.call_init(*f);
                 let save = run.stack.len();
                 for e in args {
                     let v = e.eval_lr(run, lr);
-                    // println!("func arg={:?}", v);
                     run.stack.push(v);
                 }
-                // Execute the function.
-                execute_fn(f, run);
-
+                execute_block(&f.block, run);
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
@@ -121,19 +108,13 @@ impl<A: Allocator + Default> Exp<A> {
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
-                // Push default value for result onto stack.
-                let f = &run.dict.func(*f);
-                let def = f.ret.default_value();
-                run.stack.push(def);
-
+                let f  = run.call_init(*f);
                 let save = run.stack.len();
                 for e in args {
                     let v = e.eval_vals(run, vals);
                     run.stack.push(v);
                 }
-                // Execute the function.
-                execute_fn(f, run);
-
+                execute_block(&f.block, run);
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }

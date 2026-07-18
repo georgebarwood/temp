@@ -3,9 +3,6 @@ use crate::*;
 /// Page number of page where info for sys_store is saved.
 pub const SYS_STORE_PAGE: u64 = 1;
 
-/// Id of record in sys_store that stores [Dict].
-pub const DICT_ID: u64 = 1;
-
 /// Global shared state.
 pub struct GSS {
     spd: Arc<SharedPagedData>,

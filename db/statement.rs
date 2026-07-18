@@ -329,6 +329,7 @@ impl<A: Allocator + Default> Delete<A> {
     }
 }
 
+/// Order By.
 pub type OrderBy<A> = Option<(VecA<Exp<A>, A>, VecA<bool, A>)>;
 
 /// SELECT statement.
@@ -490,26 +491,7 @@ pub struct DropTable {
     pub table: Arc<STable>,
 }
 
-pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
-where
-    A: Allocator + Default,
-    S: XString,
-{
-    let mut block = VecA::with_capacity(list.len());
-    for s in list {
-        block.push(Statement::from(s, src));
-    }
-    block
-}
-
-pub fn execute_fn<S>(f: &SFunc<S>, run: &mut Run)
-where
-    S: XString,
-{
-    // println!("execute_fn f={:?}", f);
-    execute_block(&f.block, run);
-}
-
+/// Execute list of statements.
 pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run)
 where
     A: Allocator + Default,
@@ -555,6 +537,7 @@ where
     result
 }
 
+/// Convert list of local expressions to new allocator.
 pub fn gvals<A>(list: &[LExp], src: &[u8]) -> VecA<Exp<A>, A>
 where
     A: Allocator + Default,
@@ -566,6 +549,21 @@ where
     result
 }
 
+/// Convert list of local statements to new allocator.
+pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    let mut block = VecA::with_capacity(list.len());
+    for s in list {
+        block.push(Statement::from(s, src));
+    }
+    block
+}
+
+
+/// Convert local Order By to new allocator.
 fn gorder_by<A>(list: &LOrderBy, src: &[u8]) -> OrderBy<A>
 where
     A: Allocator + Default,
@@ -582,6 +580,7 @@ where
     }
 }
 
+/// Get filtered, sorted temporary table.
 fn get_temp<A>(
     st: &STable,
     vals: &[Exp<A>],

@@ -75,10 +75,10 @@
    Just after restore, modify nodes from integers to Arcs.
 */
 
+use datatype::DataType;
 use page_store::*;
 use std::sync::Mutex;
 use tablestg::*;
-use datatype::DataType;
 
 /// SQL(-like) parsing. [Parser]
 mod parser;
