@@ -61,7 +61,7 @@ impl<A: Allocator + Default> Exp<A> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.main.funcs[*f];
+                let f = &run.dict.func(*f);
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -91,7 +91,7 @@ impl<A: Allocator + Default> Exp<A> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.main.funcs[*f];
+                let f = &run.dict.func(*f);
                 let def = f.ret.default_value();
                 run.stack.push(def);
 
@@ -122,7 +122,7 @@ impl<A: Allocator + Default> Exp<A> {
             }
             FnCall(f, args) => {
                 // Push default value for result onto stack.
-                let f = &run.dict.main.funcs[*f];
+                let f = &run.dict.func(*f);
                 let def = f.ret.default_value();
                 run.stack.push(def);
 

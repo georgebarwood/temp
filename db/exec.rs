@@ -82,92 +82,47 @@ fn execute_schema_updates(
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         match s {
-            Statement::CreateSchema(cs) => {
-                if pass == 2 {
-                    let schema_id = dict.main.new_schema_id();
-                    let sname = cs.sname.str(src);
-                    let s = GString::from(sname);
-                    dict.main.schemas.insert(s, schema_id);
-                    println!("Schema {} created", sname);
+            Statement::CreateSchema(x) => {
+                if pass == 1 {
+                    let sname = x.sname.str(src);
+                    dict.create_schema(sname);
+                    println!("Schema '{}' created", sname);
                 }
             }
 
             Statement::CreateTable(x) => {
                 if pass == 1 {
-                    let id = dict.main.new_table_id();
-                    let table = STable {
-                        id,
-                        dt: x.col_defs.clone(),
-                    };
-                    println!("Table Created {:?}", &table);
                     let tname = x.tname.str(src);
-                    let nid = dict.main.new_name_id(tname);
-                    dict.main.tables.insert((x.schema_id, nid), Arc::new(table));
+                    dict.create_table( x.schema_id, tname, x.col_defs.clone() );
+                    println!("Table '{}' created", tname);
                 }
             }
 
             Statement::RenameTable(x) => {
                 if pass == 1 {
-                    let t = dict
-                        .main
-                        .tables
-                        .remove(&(x.old_schema_id, x.old_nid))
-                        .unwrap();
-                    let new_tname = x.new_tname.str(src);
-                    let new_nid = dict.main.new_name_id(new_tname);
-                    dict.main.tables.insert((x.new_schema_id, new_nid), t);
+                    dict.rename_table( x, src);
                 }
             }
 
-            Statement::CreateFn(cf) => {
-                let fname = cf.fname.str(src);
+            Statement::CreateFn(x) => {
                 if pass == 1 {
-                    let func_id = dict.main.funcs.len();
-                    let nid = dict.main.new_name_id(fname);
-                    let block = GVec::new(); // Dummy block on pass 1
-                    let mut parms = GVec::new();
-                    for (name, typ) in &cf.parms {
-                        let name = name.str(src);
-                        parms.push((NoString::from_str(name), typ.clone()));
-                    }
-                    let func = SFunc::<NoString> {
-                        schema_id: cf.schema_id,
-                        fname: NoString::from_str(fname),
-
-                        ret: cf.ret.clone(),
-                        parms,
-                        block,
-                    };
-                    dict.main.funcs.push(func);
-                    dict.main.func_lookup.insert((cf.schema_id, nid), func_id);
-                    // ToDo: update info dict as well.
+                    dict.create_fn( x, src );
                 } else {
-                    // Set the function block.
-                    let nid = dict.main.names.get(fname).unwrap();
-                    let fid = dict.main.func_lookup.get(&(cf.schema_id, *nid)).unwrap();
-                    let f = &mut dict.main.funcs[*fid];
-                    f.block = gblock(&cf.block, src);
+                    dict.set_fn_block( x, src );
                 }
             }
 
             Statement::RenameFn(x) => {
                 if pass == 1 {
-                    let f = dict
-                        .main
-                        .func_lookup
-                        .remove(&(x.old_schema_id, x.old_nid))
-                        .unwrap();
-                    let new_fname = x.new_fname.str(src);
-                    let new_nid = dict.main.new_name_id(new_fname);
-                    dict.main.func_lookup.insert((x.new_schema_id, new_nid), f);
+                    dict.rename_fn( x, src );
                 }
             }
 
-            Statement::DropTable(dt) => {
+            Statement::DropTable(x) => {
                 if pass == 1 {
-                    dict.main.tables.remove(&(dt.schema_id, dt.name_id));
-                    // Remove record from sys_schema using dt.table_id and ps.
-                    Table::drop(dt.table.id, dt.table.dt.clone(), ps);
+                    dict.drop_table(x);
+                    // Remove record from sys_schema using x.table_id and ps.
+                    Table::drop(x.table.id, x.table.dt.clone(), ps);
                 }
             }
             _ => todo!(),
