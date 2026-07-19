@@ -22,14 +22,13 @@ impl<'a> Run<'a> {
             }
         }
     }
-    
+
     /// Get Function and push default value for result onto stack.
-    pub fn call_init(&mut self, f: usize) -> &'a SFunc<NoString>
-    {
-         let f = self.dict.func(f);
-         let def = f.ret.default_value();
-         self.stack.push(def);
-         f
+    pub fn call_init(&mut self, f: usize) -> &'a SFunc<NoString> {
+        let f = self.dict.func(f);
+        let def = f.ret.default_value();
+        self.stack.push(def);
+        f
     }
 }
 

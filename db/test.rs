@@ -1,7 +1,15 @@
 use crate::*;
 
 pub fn test() {
-    let sql : [&[u8]; 15] = [
+    let sql: [&[u8]; 6] = [
+        b"select sys.Len('hello')",
+        b"schema dbo",
+        b"table dbo.cust( Name string )",
+        b"insert into dbo.cust(Name) values('Freddy')",
+        b"fn dbo.Test(x int, y string) -> string { select Name, sys.Len(Name) from dbo.cust }",
+        b"select sys.Fn_text('dbo','Test')",
+    ];
+    let _sql : [&[u8]; 17] = [
         b"schema dbo",
         b"table dbo.xxx(Name string,Age int,Height float,Email string)",
         b"insert into dbo.xxx(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
@@ -20,6 +28,8 @@ pub fn test() {
         b"let x=5 select ' Id=' | Id | ' Name=' | Name | ' Age=' | Age | ' test=' | dbo.test(Age,x) 
             from dbo.cust order by Name, Id desc",
         b"let s='' for n = Name from dbo.cust order by Name desc set s |= n select s",
+        b"fn dbo.yy(z int)->int set  result = 2 * dbo.test(z, 10)",
+        b"select dbo.yy(100)",
     ];
 
     let _sql: [&[u8]; 4] = [
@@ -63,7 +73,7 @@ pub fn test() {
             dict_changed = true;
         }
         println!(
-            "elapsed micros={} output={}",
+            "elapsed micros={} output=\n{}",
             start.elapsed().as_micros(),
             tos(&output)
         );

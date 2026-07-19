@@ -170,7 +170,7 @@ impl<'a> TokenReader<'a> {
         loop {
             let c = self.cc();
             match c {
-                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => {}
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'_' => {}
                 _ => break,
             }
             self.getc();

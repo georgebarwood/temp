@@ -1,5 +1,33 @@
 /* What next plan...
 
+Have "system tables", but they are not part of the system, they are created and managed by SQL code.
+
+So on initialisation we do
+
+create schema sys
+create table sys.schema( Name string )
+
+create table sys.table( Schema int, Name string )
+create table sys.function( Schema int, Name string )
+
+These tables allow user interface to keep track of names of "system" objects,
+but they are not part of the actual system, which operates independently of these tables.
+
+Have built-in functions that allow text for named object to be retrieved, e.g.
+
+sys.function_text( "schema name", "function name" ) gets function definition.
+sys.table_text( "schema name", "table name" ) gets table definition ( datatype ).
+
+
+
+
+
+
+
+
+
+===================
+
    Maybe keep two copies of schema, one for execution, the other "source",
    with function local variable names and comments etc.
 
@@ -96,7 +124,7 @@ pub use schema::*;
 pub mod statement;
 use statement::*;
 
-/// [Operator]s.
+/// [Operator]s and [Builtin] functions.
 mod operator;
 use operator::*;
 

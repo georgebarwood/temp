@@ -548,6 +548,26 @@ impl<'a> Parser<'a> {
                     return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
                 }
             }
+            Exp::CallBuiltin(builtin, args) => {
+                // Resolve the args, check the types.
+                let arg_types = builtin.arg_types();
+                if arg_types.len() != args.len() {
+                    return Err(E::new("Wrong number of call args"));
+                }
+                for (i, e) in (&mut *args).into_iter().enumerate() {
+                    let et = self.resolve(e, ctx, aos)?;
+                    aos += 1;
+
+                    let pt = &arg_types[i];
+                    if !pt.similar(et) {
+                        return Err(E::new(&format!(
+                            "Sys call parameter type mismatch et={:?} pt={:?}",
+                            et, pt
+                        )));
+                    }
+                }
+                builtin.result_type()
+            }
             Exp::Col(_) => panic!(),
             _ => todo!(),
         };
@@ -661,12 +681,12 @@ impl<'a> Parser<'a> {
                 Ok(Exp::Int(x))
             }
             Token::String(x, y) => {
-                let lit = StrPos { start: x, end: y };
+                let lit = SrcPos { start: x, end: y };
                 self.next()?;
                 Ok(Exp::SrcString(lit))
             }
             Token::Ident(x, y) => {
-                let name = StrPos { start: x, end: y };
+                let name = SrcPos { start: x, end: y };
                 self.next()?;
                 Ok(match self.str(&name) {
                     b"true" => Exp::Bool(true),
@@ -685,7 +705,7 @@ impl<'a> Parser<'a> {
     }
 
     // Function call or variable reference.
-    fn name_exp(&mut self, name: StrPos) -> Result<LExp, E> {
+    fn name_exp(&mut self, name: SrcPos) -> Result<LExp, E> {
         let result = if self.test_token(Token::Dot)? {
             let schema = name;
             let fname = self.read_ident()?;
@@ -693,7 +713,13 @@ impl<'a> Parser<'a> {
             self.expect_token(Token::LBra)?;
             let args = self.exp_list()?;
             self.expect_token(Token::RBra)?;
-            Exp::FnCallByName(schema, fname, args)
+            if self.str(&schema) == b"sys" {
+                let builtin = Builtin::new(self.str(&fname))?;
+                // ToDo : check the arg types using builtin.arg_types().
+                Exp::CallBuiltin(builtin, args)
+            } else {
+                Exp::FnCallByName(schema, fname, args)
+            }
         } else {
             Exp::Name(name)
         };
@@ -929,7 +955,7 @@ impl<'a> Parser<'a> {
         let dt: DataType = match self.str(&tname) {
             b"int" => DataType::Int,
             b"float" => DataType::Float,
-            b"string" => DataType::String(50),
+            b"string" => DataType::String(0),
             _ => todo!(),
         };
         Ok(dt)
@@ -937,7 +963,7 @@ impl<'a> Parser<'a> {
 
     // Functions that use self.dict to check things.
 
-    fn check_schema(&self, sname: &StrPos) -> Result<i64, E> {
+    fn check_schema(&self, sname: &SrcPos) -> Result<i64, E> {
         let sname = tos(self.str(sname));
         if let Some(id) = self.dict.schema_id(sname) {
             Ok(*id)
@@ -946,7 +972,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_tfname(&self, s: &StrPos) -> Result<i64, E> {
+    fn check_tfname(&self, s: &SrcPos) -> Result<i64, E> {
         let s = tos(self.str(s));
         if let Some(id) = self.dict.name_id(s) {
             Ok(*id)
@@ -955,7 +981,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &StrPos) -> Result<(Arc<STable>, i64), E> {
+    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(Arc<STable>, i64), E> {
         let nid = self.check_tfname(tname)?;
         if let Some(table) = self.dict.table(&(schema, nid)) {
             Ok((table.clone(), nid))
@@ -964,7 +990,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_function(&self, schema: i64, fname: &StrPos) -> Result<(usize, i64), E> {
+    fn check_function(&self, schema: i64, fname: &SrcPos) -> Result<(usize, i64), E> {
         let nid = self.check_tfname(fname)?;
         if let Some(fid) = self.dict.func_index(&(schema, nid)) {
             Ok((*fid, nid))
@@ -986,10 +1012,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn read_ident(&mut self) -> Result<StrPos, E> {
+    fn read_ident(&mut self) -> Result<SrcPos, E> {
         match &self.token {
             Token::Ident(x, y) => {
-                let result = StrPos { start: *x, end: *y };
+                let result = SrcPos { start: *x, end: *y };
                 self.next()?;
                 Ok(result)
             }
@@ -1071,17 +1097,20 @@ impl<'a> Parser<'a> {
     }
 
     fn check_schema_updates(&mut self) -> Result<(), E> {
-        if self.non_schema_statements && self.schema_updates {
-            Err(E::new(
-                "cannot have both schema updates and other statements",
-            ))
-        } else {
-            Ok(())
-        }
+        /*
+            if self.non_schema_statements && self.schema_updates {
+                Err(E::new(
+                    "cannot have both schema updates and other statements",
+                ))
+            } else {
+                Ok(())
+            }
+        */
+        Ok(())
     }
 
     /// Get index (reverse order) and datatype of latest local with specified name.
-    fn local(&self, locs: &'a [Loc], name: &StrPos) -> Option<(usize, &'a DataType)> {
+    fn local(&self, locs: &'a [Loc], name: &SrcPos) -> Option<(usize, &'a DataType)> {
         let name = self.str(name);
 
         for (i, loc) in locs.iter().rev().enumerate() {
@@ -1092,8 +1121,8 @@ impl<'a> Parser<'a> {
         None
     }
 
-    /// Get &[u8] from &StrPos.
-    fn str(&self, name: &StrPos) -> &'a [u8] {
+    /// Get &[u8] from &SrcPos.
+    fn str(&self, name: &SrcPos) -> &'a [u8] {
         let src = &self.tr.input;
         &src[name.start..name.end]
     }
