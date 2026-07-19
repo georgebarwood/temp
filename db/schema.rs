@@ -3,6 +3,7 @@ use datatype::DataType;
 
 use serde::*;
 use std::collections::HashMap;
+use std::fmt::Write;
 
 /* Need to check when deleting a function that it has no callers.
    Also if a function is updated, either the signature must be the same,
@@ -363,12 +364,8 @@ impl<S: XString> SFunc<S> {
 
         std::mem::take(&mut sr.output)
     }
-}
 
-use std::fmt::Write;
-
-impl<S: XString> SFunc<S> {
-    pub fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
+    fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
         sr.names.push("result");
 
         sr.output.push_str("fn ");
@@ -416,7 +413,6 @@ pub fn write_block<'a, A: Allocator + Default, S: XString>(
     Ok(())
 }
 
-use std::fmt::Debug;
 /// Trait for string that can be a dummy ([NoString]) or not ([YesString]), or source position ([SrcPos]).
 pub trait XString {
     fn str(&self) -> &str {
