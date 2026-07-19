@@ -196,7 +196,7 @@ impl Dict {
 
     /// Rename Table.
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
-        let new_tname = x.new_tname.str(src);
+        let new_tname = x.new_tname.sstr(src);
         let new_nid = self.new_name_id(new_tname);
         let t = self
             .main
@@ -213,12 +213,12 @@ impl Dict {
 
     /// Create Function.
     pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
-        let fname = x.fname.str(src);
+        let fname = x.fname.sstr(src);
         let func_id = self.main.funcs.len();
         let nid = self.new_name_id(fname);
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
-            let name = name.str(src);
+            let name = name.sstr(src);
             parms.push((NoString::from_str(name), typ.clone()));
         }
         let func = SFunc::<NoString> {
@@ -234,7 +234,7 @@ impl Dict {
 
     /// Set Function block.
     pub fn set_fn_block(&mut self, x: &CreateFn<Local>, src: &[u8]) {
-        let fname = x.fname.str(src);
+        let fname = x.fname.sstr(src);
         let nid = self.main.names.get(fname).unwrap();
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
         let f = &mut self.main.funcs[*fid];
@@ -242,7 +242,7 @@ impl Dict {
 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
-            let name = name.str(src);
+            let name = name.sstr(src);
             parms.push((YesString::from_str(name), typ.clone()));
         }
         let info_func = SFunc::<YesString> {
@@ -262,7 +262,7 @@ impl Dict {
             .func_lookup
             .remove(&(x.old_schema_id, x.old_nid))
             .unwrap();
-        let new_fname = x.new_fname.str(src);
+        let new_fname = x.new_fname.sstr(src);
         let new_nid = self.new_name_id(new_fname);
         self.main.func_lookup.insert((x.new_schema_id, new_nid), f);
 
@@ -281,7 +281,7 @@ impl Dict {
         let bytes = self.info.to_bytes_id(id);
         Self::save(id, &bytes, ps);
 
-        println!("Dict::Save_to_sys_store, saved info={:?}.", self.info);
+        // println!("Dict::Save_to_sys_store, saved info={:?}.", self.info);
     }
 
     /// Load dict from sys store ( eventually may want to delay info load until it is needed ).
@@ -390,9 +390,9 @@ impl<S: XString> SFunc<S> {
     }
 }
 
-fn write_block<'a, S: XString>(
+pub fn write_block<'a, A: Allocator + Default, S: XString>(
     sr: &mut SRun<'a>,
-    block: &'a GVec<Statement<Perm, S>>,
+    block: &'a VecA<Statement<A, S>, A>,
 ) -> Result<(), std::fmt::Error> {
     let save = sr.names.len();
 
@@ -417,9 +417,14 @@ fn write_block<'a, S: XString>(
 }
 
 use std::fmt::Debug;
-/// Trait for string that can be a dummy (NoString) or not (YesString).
+/// Trait for string that can be a dummy ([NoString]) or not ([YesString]), or source position ([SrcPos]).
 pub trait XString {
-    fn str(&self) -> &str;
+    fn str(&self) -> &str {
+        ""
+    }
+    fn sstr<'a>(&self, _src: &'a [u8]) -> &'a str {
+        ""
+    }
     fn from_str(s: &str) -> Self;
 }
 
@@ -445,15 +450,12 @@ impl XString for YesString {
 pub struct NoString {}
 
 impl XString for NoString {
-    fn str(&self) -> &str {
-        ""
-    }
     fn from_str(_s: &str) -> Self {
         Self {}
     }
 }
 
-pub type LStatement = Statement<Local, YesString>;
+pub type LStatement = Statement<Local, SrcPos>;
 pub type LOrderBy = OrderBy<Local>;
 pub type LExp = Exp<Local>;
 

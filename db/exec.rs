@@ -93,13 +93,13 @@ fn execute_schema_updates(
         if pass == 1 || matches!(s, Statement::CreateFn(_)) {
             match s {
                 Statement::CreateSchema(x) => {
-                    let sname = x.sname.str(src);
+                    let sname = x.sname.sstr(src);
                     dict.create_schema(sname);
                     println!("Schema '{}' created", sname);
                 }
 
                 Statement::CreateTable(x) => {
-                    let tname = x.tname.str(src);
+                    let tname = x.tname.sstr(src);
                     dict.create_table(x.schema_id, tname, x.col_defs.clone());
                     println!("Table '{}' created", tname);
                 }

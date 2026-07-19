@@ -7,8 +7,6 @@ pub enum Statement<A: Allocator + Default, S: XString> {
     /// Declare and initialise a local variable.
     Let(Let<A, S>),
     /// Declare and initialise a local variable (position in source).
-    SrcLet(SrcLet<A>),
-    /// Assign a local variable.
     Set(Set<A>),
     /// Append to a local string or binary variable.
     Append(Append<A>),
@@ -62,10 +60,69 @@ where
                 sr.output.push_str(" = ");
                 x.exp.show(sr)?;
             }
+            Append(x) => {
+                sr.output.push_str("set ");
+                sr.write_name(x.i);
+
+                sr.output.push_str(" |= ");
+                x.exp.show(sr)?;
+            }
+            While(x) => {
+                sr.output.push_str("while ");
+                x.exp.show(sr)?;
+                write_block(sr, &x.block)?;
+            }
+            If(x) => {
+                sr.output.push_str("if ");
+                x.exp.show(sr)?;
+                write_block(sr, &x.block)?;
+                if let Some(b) = &x.els {
+                    sr.output.push_str(" else ");
+                    write_block(sr, b)?;
+                }
+            }
+            Insert(x) => {
+                sr.output.push_str("insert into ");
+                sr.table = Some(x.table.clone());
+                sr.write_table_name();
+                sr.output.push_str("(");
+                for i in &x.cols {
+                    sr.write_col_name(*i);
+                }
+                sr.output.push_str(") values (");
+                sr.table = None; // Optional
+                for e in &x.vals {
+                    e.show(sr)?;
+                }
+                sr.output.push_str(")");
+            }
+            Update(x) => {
+                sr.output.push_str("update ");
+                sr.table = Some(x.table.clone());
+                sr.write_table_name();
+                sr.output.push_str(" set ");
+                for (i, (c, e)) in x.assigns.iter().enumerate() {
+                    if i != 0 {
+                        sr.output.push_str(", ");
+                    }
+                    sr.write_col_name(*c);
+                    sr.output.push_str(" = ");
+                    e.show(sr)?;
+                }
+                sr.output.push_str(" where ");
+                x.wher.show(sr)?;
+            }
+            Delete(x) => {
+                sr.output.push_str("delete from ");
+                sr.table = Some(x.table.clone());
+                sr.write_table_name();
+                sr.output.push_str(" where ");
+                x.wher.show(sr)?;
+            }
             Select(x) => {
                 sr.output.push_str("select ");
                 sr.table = x.from.clone();
-                for (i, e) in (&x.vals).into_iter().enumerate() {
+                for (i, e) in x.vals.iter().enumerate() {
                     if i != 0 {
                         sr.output.push_str(", ");
                     }
@@ -74,30 +131,55 @@ where
                 if x.from.is_some() {
                     sr.output.push_str(" from ");
                     sr.write_table_name();
+                    if let Some(w) = &x.wher {
+                        sr.output.push_str(" where ");
+                        w.show(sr)?;
+                    }
                 }
+            }
+            For(x) => {
+                let save = sr.names.len();
+                sr.output.push_str("for ");
+                sr.table = Some(x.from.clone());
+                for (name, val) in &x.lets {
+                    let name = name.str();
+                    sr.names.push(name);
+                    sr.output.push_str(name);
+                    sr.output.push_str(" = ");
+                    val.show(sr)?;
+                }
+                sr.output.push_str(" from ");
+                sr.write_table_name();
+                if let Some(w) = &x.wher {
+                    sr.output.push_str(" where ");
+                    w.show(sr)?;
+                }
+                Self::show_order_by(&x.order_by, sr)?;
+                write_block(sr, &x.block)?;
+                sr.names.truncate(save);
             }
             _ => todo!(),
         }
         Ok(())
     }
-}
 
-impl<A, S> Statement<A, S>
-where
-    A: Allocator + Default,
-    S: XString,
-{
+    fn show_order_by(ob: &OrderBy<A>, sr: &mut SRun) -> Result<(), std::fmt::Error> {
+        if let Some((list, desc)) = ob {
+            sr.output.push_str(" order by ");
+            for (i, e) in list.iter().enumerate() {
+                e.show(sr)?;
+                if desc[i] {
+                    sr.output.push_str(" desc ");
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn from(stat: &LStatement, src: &[u8]) -> Self {
         match stat {
-            Statement::SrcLet(x) => {
-                let varname = x.varname.str(src);
-                Statement::Let(Let {
-                    varname: S::from_str(varname),
-                    exp: Exp::from(&x.exp, src),
-                })
-            }
             Statement::Let(x) => Statement::Let(Let {
-                varname: S::from_str(x.varname.str()),
+                varname: S::from_str(x.varname.sstr(src)),
                 exp: Exp::from(&x.exp, src),
             }),
             Statement::Set(x) => Statement::Set(Set {
@@ -138,13 +220,13 @@ where
                 })
             }
             Statement::For(x) => {
-                let vals = gvals(&x.vals, src);
+                let lets = glets(&x.lets, src);
                 let from = x.from.clone();
                 let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
                 let order_by = gorder_by(&x.order_by, src);
                 let block = gblock(&x.block, src);
                 Statement::For(For {
-                    vals,
+                    lets,
                     from,
                     wher,
                     order_by,
@@ -171,20 +253,6 @@ where
             }
             _ => panic!(),
         }
-    }
-}
-
-/// LET statement.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SrcLet<A: Allocator + Default> {
-    pub varname: SrcPos,
-    pub exp: Exp<A>,
-}
-
-impl<A: Allocator + Default> SrcLet<A> {
-    pub fn exec(&self, run: &mut Run) {
-        let v = self.exp.eval(run);
-        run.stack.push(v);
     }
 }
 
@@ -430,7 +498,7 @@ impl<A: Allocator + Default> Select<A> {
 /// FOR statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct For<A: Allocator + Default, S: XString> {
-    pub vals: VecA<Exp<A>, A>,
+    pub lets: VecA<(S, Exp<A>), A>,
     pub from: Arc<STable>,
     pub wher: Option<Exp<A>>,
     pub order_by: OrderBy<A>,
@@ -457,7 +525,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
 
                 if ok {
                     let len = run.stack.len();
-                    for e in &self.vals {
+                    for (_, e) in &self.lets {
                         let v = e.eval_rc(run, &mut lr);
                         run.stack.push(v);
                     }
@@ -468,7 +536,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
         }
     }
     pub fn exec_order_by(&self, run: &mut Run) {
-        let temp = get_temp(&self.from, &self.vals, &self.wher, &self.order_by, run);
+        let temp = get_for_temp(&self.from, &self.lets, &self.wher, &self.order_by, run);
 
         let n = self.order_by.as_ref().unwrap().0.len();
 
@@ -513,7 +581,7 @@ pub struct CreateFn<A: Allocator + Default> {
     pub fname: SrcPos,
     pub ret: Arc<DataType>,
     pub parms: VecA<(SrcPos, Arc<DataType>), A>,
-    pub block: VecA<Statement<A, YesString>, A>,
+    pub block: VecA<Statement<A, SrcPos>, A>,
 }
 
 /// RENAME FN statement.
@@ -543,7 +611,6 @@ where
     for s in slist {
         use Statement::*;
         match s {
-            SrcLet(x) => x.exec(run),
             Let(x) => x.exec(run),
             Set(x) => x.exec(run),
             Append(x) => x.exec(run),
@@ -591,6 +658,21 @@ where
     result
 }
 
+/// Convert list of bindings to new allocatpr.
+pub fn glets<A, S>(list: &[(SrcPos, LExp)], src: &[u8]) -> VecA<(S, Exp<A>), A>
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    let mut result = VecA::with_capacity(list.len());
+    for (name, e) in list {
+        let name = name.sstr(src);
+        let name = S::from_str(name);
+        result.push((name, Exp::from(e, src)));
+    }
+    result
+}
+
 /// Convert list of local statements to new allocator.
 pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
 where
@@ -619,6 +701,47 @@ where
     } else {
         None
     }
+}
+
+/// Get filtered, sorted temporary table.
+fn get_for_temp<A, S>(
+    st: &STable,
+    lets: &[(S, Exp<A>)],
+    wher: &Option<Exp<A>>,
+    order_by: &OrderBy<A>,
+    run: &mut Run,
+) -> LVec<LVec<Value>>
+where
+    A: Allocator + Default,
+{
+    let (ob, desc) = order_by.as_ref().unwrap();
+    let table = run.ps.load_table(st.id, &st.dt);
+    let table = table.borrow();
+    let mut iter = table.iter(run.ps);
+
+    let mut temp = LVec::new();
+    while let Some(b) = iter.next_ref(run.ps) {
+        let mut lr = table.lazy_row(b);
+        let ok = if let Some(wher) = &wher {
+            wher.eval_rc(run, &mut lr).bool()
+        } else {
+            true
+        };
+        if ok {
+            let mut row = LVec::with_capacity(ob.len() + lets.len());
+            for e in ob {
+                let v = e.eval_rc(run, &mut lr);
+                row.push(v);
+            }
+            for (_, e) in lets {
+                let v = e.eval_rc(run, &mut lr);
+                row.push(v);
+            }
+            temp.push(row);
+        }
+    }
+    temp.sort_by(|a, b| row_compare(a, b, desc));
+    temp
 }
 
 /// Get filtered, sorted temporary table.

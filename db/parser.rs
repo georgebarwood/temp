@@ -146,7 +146,7 @@ impl<'a> Parser<'a> {
             datatype: dt.unwrap(),
         });
 
-        Ok(Statement::SrcLet(SrcLet { varname: name, exp }))
+        Ok(Statement::Let(Let { varname: name, exp }))
     }
 
     fn set(&mut self) -> Result<LStatement, E> {
@@ -215,13 +215,13 @@ impl<'a> Parser<'a> {
     }
 
     fn p_for(&mut self) -> Result<LStatement, E> {
-        let mut vals = LVec::new();
+        let mut lets = LVec::new();
         let mut idents = LVec::new();
         loop {
             let ident = self.read_ident()?;
             self.expect_token(Token::Equal)?;
             let exp = self.exp(0)?;
-            vals.push(exp);
+            lets.push((ident, exp));
             idents.push(ident);
             if !self.test_token(Token::Comma)? {
                 break;
@@ -233,14 +233,13 @@ impl<'a> Parser<'a> {
         let len = self.locs.len();
 
         // Resolve names, push idents and typs onto local bindings.
-        for (i, name) in idents.into_iter().enumerate() {
-            let val = &mut vals[i];
+        for (name, val) in &mut lets {
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(&from, &lctx);
             let dt = self.resolve(val, &tctx, 0)?;
             let dt = Arc::new(dt.clone());
             self.locs.push(Loc {
-                name: self.str(&name),
+                name: self.str(name),
                 datatype: dt,
             });
         }
@@ -258,7 +257,7 @@ impl<'a> Parser<'a> {
         self.locs.truncate(len);
 
         Ok(Statement::For(For {
-            vals,
+            lets,
             from,
             wher,
             order_by,

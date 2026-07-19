@@ -2,15 +2,18 @@ use crate::*;
 use serde::*;
 
 /// Position of string in source.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SrcPos {
     pub start: usize,
     pub end: usize,
 }
 
-impl SrcPos {
-    pub fn str<'a>(&self, src: &'a [u8]) -> &'a str {
+impl XString for SrcPos {
+    fn sstr<'a>(&self, src: &'a [u8]) -> &'a str {
         tos(&src[self.start..self.end])
+    }
+    fn from_str(_s: &str) -> Self {
+        panic!()
     }
 }
 
@@ -128,7 +131,7 @@ impl<A: Allocator + Default> Exp<A> {
             Bool(x) => Value::Bool(*x),
             Int(x) => Value::Int(*x),
             SrcString(x) => {
-                let s = x.str(run.source);
+                let s = x.sstr(run.source);
                 Value::String(LRc::new(LString::from(s)))
             }
             String(x) => Value::String(LRc::new(LString::from(x.as_ref()))),
@@ -181,7 +184,7 @@ impl<A: Allocator + Default> Exp<A> {
         match exp {
             Bool(x) => Bool(*x),
             Int(x) => Int(*x),
-            SrcString(x) => String(StringA::from(x.str(src))),
+            SrcString(x) => String(StringA::from(x.sstr(src))),
             String(x) => String(StringA::from(x.as_str())),
             Local(x) => Local(*x),
             Col(x) => Col(*x),
