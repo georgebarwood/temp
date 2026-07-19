@@ -323,6 +323,14 @@ impl DataType {
         }
     }
 
+    /// Get datatype of item specified by ix. DataType must be Struct.
+    pub fn name_struct(&self, ix: usize) -> &str {
+        match self {
+            DataType::Struct(fields) => &fields[ix].0,
+            _ => panic!(),
+        }
+    }
+
     /// Find column with specified name.
     pub fn name_to_col(&self, name: &str) -> Option<(usize,&DataType)> {
         match self {
@@ -902,4 +910,25 @@ pub fn read_float(buf: &[u8], ix: &mut usize) -> F64 {
 
 pub fn tos(s: &[u8]) -> &str {
     str::from_utf8(s).unwrap()
+}
+
+use std::fmt::Display;
+use std::fmt::Formatter;
+impl Display for DataType
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> { 
+        use DataType::*;
+        match self
+        {
+            Int => f.write_str("int")?,
+            String(x) => {
+                f.write_str("string")?;
+                if *x > 0 { 
+                    write!( f, "({})", x )?;
+                }
+            }
+            _ => todo!(),
+        }
+        Ok(())
+    }
 }

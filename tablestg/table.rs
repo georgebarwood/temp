@@ -259,6 +259,11 @@ impl<'a> OwnedLazyRow<'a> {
     }
 }
 
+pub trait RowContext
+{
+   fn item(&mut self, i: usize, ps: &mut PageSet) -> Value;
+}
+
 /// LazyRow allows a subset of columns to be fetched, see [Table::lazy_row].
 #[derive(Debug)]
 pub struct LazyRow<'a> {
@@ -267,10 +272,10 @@ pub struct LazyRow<'a> {
     items: LVec<LazyItem>,
 }
 
-impl<'a> LazyRow<'a> {
+impl<'a> RowContext for LazyRow<'a> {
     /// Get specified item from row.
     /// A copy is kept, which is cloned if the same item is fetched again.
-    pub fn item(&mut self, item: usize, ps: &mut PageSet) -> Value {
+    fn item(&mut self, item: usize, ps: &mut PageSet) -> Value {
         let x = &mut self.items[item];
         match x {
             LazyItem::Value(v) => v.clone(),
@@ -284,7 +289,9 @@ impl<'a> LazyRow<'a> {
             }
         }
     }
+}
 
+impl<'a> LazyRow<'a> {
     /// Get offset for item ( which must not have been fetched by item ).
     pub fn item_ref(&mut self, item: usize) -> &[u8] {
         let x = &mut self.items[item];

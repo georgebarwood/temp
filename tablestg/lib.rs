@@ -44,7 +44,7 @@
 
 /// [Table] stores [Value]s which have a specific [DataType].
 pub mod table;
-pub use table::{LazyRow, Table, RTable};
+pub use table::{LazyRow, Table, RTable, RowContext};
 
 /// Generic [Value]s.
 pub mod value;
