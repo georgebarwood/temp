@@ -6,13 +6,13 @@ pub fn test() {
         b"schema dbo",
         b"table dbo.cust( Name string )",
         b"insert into dbo.cust(Name) values('Freddy')",
-        b"fn dbo.Test(x int, y string) -> string { 
+        b"fn dbo.test(x int, y string) -> string { 
            let z = ( x - 2 ) * 3
            set y |= 'ok'
            while z > 5 { set z = z - 1 }
            if z = 0 { set z = 1 } else { set z = 2 }
            insert into dbo.cust(Name) values('Marilyn')
-           update dbo.cust set Name = Name | 'x' where Id < 6
+           update dbo.cust set Name = Name | 'x' where Id < 6 and Id > 1
            delete from dbo.cust where Id > 100
            select Id, ' ', Name, ' ', sys.len(Name), ' ' from dbo.cust where Id < 20 order by Id
            for n = Name from dbo.cust order by Name { set z = 55 }
@@ -20,8 +20,8 @@ pub fn test() {
            set result = sys.replace( result, 'e', 'ee' )
            set result = sys.substr( result, 1, 5 )
         }",
-        b"select sys.fn_text('dbo','Test')",
-        b"select dbo.Test(1,'')",
+        b"select sys.fn_text('dbo','test')",
+        b"select dbo.test(1,'')",
     ];
     let _sql2 : [&[u8]; 17] = [
         b"schema dbo",
