@@ -189,7 +189,7 @@ impl Store {
                 _ => panic!(),
             }
 
-            if let Some(klen) = key.len() /*&& false*/ { // Disabled until matching get code is done, see ToDo comment below.
+            if let Some(klen) = key.len() {
                 assert!(klen <= len);
                 if 1 + 8 + code as usize + klen < 256 {
                     // Store key bytes in x, makes rehash and ok more efficient.
