@@ -59,26 +59,26 @@ impl Extra {
     }
     /// Fetch len bytes of chunk data ( including any data stored in x ).
     fn chunks(&self, x: &[u8], len: usize, ps: &mut PageSet) -> LVec<u8> {
-        let mut done = 0;
         let mut result = LVec::with_capacity(len);
 
         let code = x[0];
         let over = 1 + 8 + code as usize; // Number of non user-data bytes stored in x.
         let local = x.len() - over; // Number of user_data bytes stored in x.
+
         if local > 0 {
             result.extend_from_slice(&x[over..over + local]);
-            done += local;
         }
 
-        if done < len {
+        if local < len {
             let id = u64::from_le_bytes(x[1..9].try_into().unwrap());
-            self.do_fetch_chunks(id, len, &mut result, ps);
+            self.do_fetch_chunks(id, len-local, &mut result, ps);
         }
         result
     }
     /// Fetch all chunk data.
     fn fetch_chunks(&self, x: &[u8], ps: &mut PageSet) -> LVec<u8> {
         let (_, len, _) = self.parse_x(x);
+        
         self.chunks(x, len, ps)
     }
     /// Returns chunk start id, length of user data and non-chunk length.
@@ -155,11 +155,9 @@ impl Store {
 
     /// Insert user_data, must not be a duplicate key ( but this is not checked ).
     pub fn insert<K: VKey>(&mut self, key: &K, user_data: &[u8], ps: &mut PageSet) {
+        
         let len = user_data.len();
         let mut x = LVec::with_capacity(256);
-
-        // println!("Store::insert len={} key={:?}", len, key);
-
         if len < 255 {
             x.push(1); // Small record.
             x.extend_from_slice(user_data);
@@ -191,13 +189,14 @@ impl Store {
                 _ => panic!(),
             }
 
-            if let Some(klen) = key.len() {
+            if let Some(klen) = key.len() /*&& false*/ { // Disabled until matching get code is done, see ToDo comment below.
                 assert!(klen <= len);
                 if 1 + 8 + code as usize + klen < 256 {
                     // Store key bytes in x, makes rehash and ok more efficient.
                     x.extend_from_slice(&user_data[0..klen]);
                     assert!(x.len() < 256);
                     done += klen;
+                    println!("klen={}", klen);
                 }
             }
             self.store(&user_data[done..], ps);
@@ -221,14 +220,12 @@ impl Store {
 
     /// Get data for specified key, returns SData, or None if key not found.
     pub fn get<K: VKey>(&self, key: &K, ps: &mut PageSet) -> Option<SData> {
-        // println!("Store::get key={:?}", key);
-
         let mut m = VBuckMap::restore(self.main.vbm, ps);
         let key = StoreKey { key, store: self };
         if let Some((pdata, off, len)) = m.get(&key) {
             if pdata.borrow().data[off] == 1 {
                 return Some(SData::Small(pdata, off + 1, len - 1));
-            } else {
+            } else {  
                 let v = self
                     .extra
                     .fetch_chunks(&pdata.borrow().data[off..off + len], ps);
