@@ -2,7 +2,7 @@ use crate::*;
 
 pub fn test() {
     let _sql1: [&[u8]; 7] = [
-        b"select sys.Len('hello')",
+        b"select sys.len('hello')",
         b"schema dbo",
         b"table dbo.cust( Name string )",
         b"insert into dbo.cust(Name) values('Freddy')",
@@ -14,13 +14,13 @@ pub fn test() {
            insert into dbo.cust(Name) values('Marilyn')
            update dbo.cust set Name = Name | 'x' where Id < 6
            delete from dbo.cust where Id > 100
-           select Id, ' ', Name, ' ', sys.Len(Name), ' ' from dbo.cust where Id < 20 order by Id
+           select Id, ' ', Name, ' ', sys.len(Name), ' ' from dbo.cust where Id < 20 order by Id
            for n = Name from dbo.cust order by Name { set z = 55 }
            set result='George' 
-           set result = sys.Replace( result, 'e', 'ee' )
-           set result = sys.Substr( result, 1, 5 )
+           set result = sys.replace( result, 'e', 'ee' )
+           set result = sys.substr( result, 1, 5 )
         }",
-        b"select sys.FnText('dbo','Test')",
+        b"select sys.fn_text('dbo','Test')",
         b"select dbo.Test(1,'')",
     ];
     let _sql2 : [&[u8]; 17] = [

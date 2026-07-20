@@ -105,14 +105,15 @@ make into lib, web server
 
 use datatype::DataType;
 use page_store::*;
+use pstd::{BoxA, StringA, VecA, alloc::Allocator};
 use std::sync::Mutex;
 use tablestg::*;
 
-/// SQL(-like) parsing. [Parser]
+/// SQL(-like) parsing. [`Parser`]
 mod parser;
 use parser::*;
 
-/// [TokenReader] reads [Token]s from a byte string.
+/// [`TokenReader`] reads [`Token`]s from a byte string.
 mod token;
 use token::*;
 
@@ -120,23 +121,23 @@ use token::*;
 mod schema;
 pub use schema::*;
 
-/// [Statement].
+/// [`Statement`].
 pub mod statement;
 use statement::*;
 
-/// [Operator].
+/// [`Operator`].
 mod operator;
 use operator::*;
 
-/// [Builtin] functions.
+/// [`Builtin`] functions.
 mod builtin;
 use builtin::*;
 
-/// [Exp]ressions.
+/// [`Exp`]ressions.
 pub mod exp;
 use exp::*;
 
-/// Global state [GSS], initialisation.
+/// Global state [`GSS`], initialisation.
 pub mod global;
 use global::*;
 
@@ -144,10 +145,8 @@ use global::*;
 mod exec;
 use exec::*;
 
-/// Test
+/// [test::test()]
 mod test;
-
-use pstd::{BoxA, StringA, VecA, alloc::Allocator};
 
 fn main() {
     test::test();

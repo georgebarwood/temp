@@ -2,15 +2,16 @@ use crate::*;
 use serde::*;
 
 /// Builtin functions
+#[allow(non_camel_case_types)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum Builtin {
-    Len,
-    Substr,
-    Replace,
-    Contains,
-    BinLen,
-    BinSubstr,
-    FnText,
+    len,
+    substr,
+    replace,
+    contains,
+    binlen,
+    binsubstr,
+    fn_text,
     // More to do...
 }
 
@@ -18,10 +19,10 @@ impl Builtin {
     pub fn new(name: &[u8]) -> Result<Self, E> {
         use Builtin::*;
         match name {
-            b"Len" => Ok(Len),
-            b"Substr" => Ok(Substr),
-            b"Replace" => Ok(Replace),
-            b"FnText" => Ok(FnText),
+            b"len" => Ok(len),
+            b"substr" => Ok(substr),
+            b"replace" => Ok(replace),
+            b"fn_text" => Ok(fn_text),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -30,12 +31,12 @@ impl Builtin {
         // Arguments are on stack
         use Builtin::*;
         match self {
-            Len => {
+            len => {
                 let s = run.stack.pop().unwrap();
                 Value::Int(s.string().len() as i64)
             }
-            Substr => {
-                let mut len = run.stack.pop().unwrap().int();
+            substr => {
+                let mut n = run.stack.pop().unwrap().int();
                 let mut start = run.stack.pop().unwrap().int();
                 let src = run.stack.pop().unwrap();
                 let src = src.string();
@@ -43,11 +44,11 @@ impl Builtin {
                     start = 0;
                 }
                 let start = start as usize;
-                if len < 0 {
-                    len = 0;
+                if n < 0 {
+                    n = 0;
                 }
-                let len = len as usize;
-                let mut end = start + len;
+                let n = n as usize;
+                let mut end = start + n;
                 if end > src.len() {
                     end = src.len();
                 }
@@ -55,14 +56,14 @@ impl Builtin {
                 let result = LString::from(result);
                 Value::String(LRc::new(result))
             }
-            Replace => {
+            replace => {
                 let with = run.stack.pop().unwrap();
                 let pat = run.stack.pop().unwrap();
                 let src = run.stack.pop().unwrap();
                 let result = src.string().replace(pat.string(), with.string());
                 Value::String(LRc::new(result))
             }
-            FnText => {
+            fn_text => {
                 let fname = run.stack.pop().unwrap();
                 let schema = run.stack.pop().unwrap();
 
@@ -83,10 +84,10 @@ impl Builtin {
     pub fn result_type(&self) -> &'static DataType {
         use Builtin::*;
         match self {
-            Len => &DataType::Int,
-            Substr => &DataType::String(0),
-            Replace => &DataType::String(0),
-            FnText => &DataType::String(0),
+            len => &DataType::Int,
+            substr => &DataType::String(0),
+            replace => &DataType::String(0),
+            fn_text => &DataType::String(0),
             _ => todo!(),
         }
     }
@@ -94,10 +95,10 @@ impl Builtin {
     pub fn arg_types(&self) -> &'static [DataType] {
         use Builtin::*;
         match self {
-            Len => &STR_1,
-            Substr => &STR_INT_INT,
-            Replace => &STR_3,
-            FnText => &STR_2,
+            len => &STR_1,
+            substr => &STR_INT_INT,
+            replace => &STR_3,
+            fn_text => &STR_2,
             _ => todo!(),
         }
     }
