@@ -196,7 +196,6 @@ impl Store {
                     x.extend_from_slice(&user_data[0..klen]);
                     assert!(x.len() < 256);
                     done += klen;
-                    println!("klen={}", klen);
                 }
             }
             self.store(&user_data[done..], ps);
