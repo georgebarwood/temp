@@ -135,6 +135,7 @@ where
                         sr.output.push_str(" where ");
                         w.show(sr)?;
                     }
+                    Self::show_order_by(&x.order_by, sr)?;
                 }
             }
             For(x) => {

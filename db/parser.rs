@@ -640,21 +640,7 @@ impl<'a> Parser<'a> {
             }
             _ => Operator::None,
         };
-        let prec: u8 = match op {
-            Operator::Concat => 1,
-            Operator::Or => 2,
-            Operator::And => 3,
-
-            Operator::Equal
-            | Operator::NotEqual
-            | Operator::Less
-            | Operator::Greater
-            | Operator::LessEqual
-            | Operator::GreaterEqual => 4,
-            Operator::Plus | Operator::Minus => 5,
-            Operator::Multiply | Operator::Divide | Operator::Remainder => 6,
-            Operator::None => 0,
-        };
+        let prec: u8 = op.precedence();
         (op, prec)
     }
 
@@ -662,7 +648,7 @@ impl<'a> Parser<'a> {
         let mut e = self.exp_primary()?;
         loop {
             let (op, op_prec) = self.op_and_prec();
-            if op == Operator::None || op_prec < prec {
+            if op == Operator::None || op_prec <= prec {
                 break;
             }
             self.next()?;

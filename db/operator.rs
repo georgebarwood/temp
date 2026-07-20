@@ -56,34 +56,55 @@ impl Operator {
             Equal | NotEqual | Greater | Less | GreaterEqual | LessEqual | And | Or
         )
     }
+
+    pub fn precedence(&self) -> u8 {
+        use Operator::*;
+        match self {
+            Concat => 1,
+            Or => 2,
+            And => 3,
+
+            Equal
+            | NotEqual
+            | Less
+            | Greater
+            | LessEqual
+            | GreaterEqual => 4,
+            Plus | Minus => 5,
+            Multiply | Divide | Remainder => 6,
+            None => 0,
+        }
+    }
+        
     pub fn eval(&self, x: &Value, y: &Value) -> Value {
+        use Operator::*;
         if let Value::Int(x) = &x
             && let Value::Int(y) = &y
         {
             match self {
-                Operator::Equal => Value::Bool(x == y),
-                Operator::NotEqual => Value::Bool(x != y),
-                Operator::Less => Value::Bool(x < y),
-                Operator::Greater => Value::Bool(x > y),
-                Operator::LessEqual => Value::Bool(x <= y),
-                Operator::GreaterEqual => Value::Bool(x >= y),
+                Equal => Value::Bool(x == y),
+                NotEqual => Value::Bool(x != y),
+                Less => Value::Bool(x < y),
+                Greater => Value::Bool(x > y),
+                LessEqual => Value::Bool(x <= y),
+                GreaterEqual => Value::Bool(x >= y),
 
-                Operator::Plus => Value::Int(x + y),
-                Operator::Minus => Value::Int(x - y),
-                Operator::Multiply => Value::Int(x * y),
-                Operator::Divide => Value::Int(x / y),
-                Operator::Remainder => Value::Int(x % y),
+                Plus => Value::Int(x + y),
+                Minus => Value::Int(x - y),
+                Multiply => Value::Int(x * y),
+                Divide => Value::Int(x / y),
+                Remainder => Value::Int(x % y),
                 _ => todo!(),
             }
         } else if let Value::Bool(x) = &x
             && let Value::Bool(y) = &y
         {
             match self {
-                Operator::And => Value::Bool(*x && *y),
-                Operator::Or => Value::Bool(*x || *y),
+                And => Value::Bool(*x && *y),
+                Or => Value::Bool(*x || *y),
                 _ => todo!(),
             }
-        } else if *self == Operator::Concat {
+        } else if *self == Concat {
             if let Value::String(x) = &x {
                 if let Value::String(y) = &y {
                     concat(x, y)

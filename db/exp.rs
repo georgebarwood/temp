@@ -63,66 +63,6 @@ pub enum Exp<A: Allocator + Default> {
     CallBuiltin(Builtin, VecA<Exp<A>, A>),
 }
 
-use std::fmt::Write;
-
-impl<A> Exp<A>
-where
-    A: Allocator + Default,
-{
-    /// Should have a precedence arg that determines if brackets are needed.
-    pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
-        use Exp::*;
-        match self {
-            Bool(x) => write!(&mut sr.output, "{}", x)?,
-            Int(x) => write!(&mut sr.output, "{}", x)?,
-            String(x) => {
-                sr.output.push_str("'");
-                sr.output.push_str(x);
-                sr.output.push_str("'");
-            }
-            Local(x) => {
-                sr.write_name(*x);
-            }
-            Col(x) => {
-                sr.write_col_name(*x);
-            }
-            Binary(op, x, y) => {
-                sr.output.push_str("(");
-                x.show(sr)?;
-                write!(&mut sr.output, " {} ", op)?;
-                y.show(sr)?;
-                sr.output.push_str(")");
-            }
-            FnCall(f, args) => {
-                sr.write_fn_name(*f);
-                Self::show_args(args, sr)?;
-            }
-            CallBuiltin(bi, args) => {
-                write!(&mut sr.output, "sys.{:?}", bi)?;
-                Self::show_args(args, sr)?;
-            }
-            _ => panic!(),
-        }
-        Ok(())
-    }
-
-    fn show_args(args: &[Exp<A>], sr: &mut SRun) -> Result<(), std::fmt::Error> {
-        sr.output.push('(');
-        let save = sr.aos;
-        sr.aos += 1;
-        for (i, e) in args.iter().enumerate() {
-            if i > 0 {
-                sr.output.push_str(", ");
-            }
-            e.show(sr)?;
-            sr.aos += 1;
-        }
-        sr.output.push(')');
-        sr.aos = save;
-        Ok(())
-    }
-}
-
 impl<A: Allocator + Default> Exp<A> {
     /// Evaluate the expression using specified Run and RowContext.
     pub fn eval_rc<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Value {
@@ -204,4 +144,68 @@ impl<A: Allocator + Default> Exp<A> {
             Name(_) | FnCallByName(_, _, _) => panic!(), // Names have been resolved by this point.
         }
     }
+
+    pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
+        self.show_prec(sr, 0, false)
+    }
+
+    /// Show with specified precedence.
+    fn show_prec(&self, sr: &mut SRun, pp: u8, right:bool) -> Result<(), std::fmt::Error> {
+        use Exp::*;
+        use std::fmt::Write;
+        match self {
+            Bool(x) => write!(&mut sr.output, "{}", x)?,
+            Int(x) => write!(&mut sr.output, "{}", x)?,
+            String(x) => {
+                sr.output.push_str("'");
+                sr.output.push_str(x);
+                sr.output.push_str("'");
+            }
+            Local(x) => {
+                sr.write_name(*x);
+            }
+            Col(x) => {
+                sr.write_col_name(*x);
+            }
+            Binary(op, x, y) => {
+                let p = op.precedence();
+                if p < pp || p == pp && right {
+                    sr.output.push_str("(");
+                }
+                x.show_prec(sr, p, false)?;
+                write!(&mut sr.output, " {} ", op)?;
+                y.show_prec(sr, p, true)?;
+                if p < pp || p == pp && right {
+                    sr.output.push_str(")");
+                }
+            }
+            FnCall(f, args) => {
+                sr.write_fn_name(*f);
+                Self::show_args(args, sr)?;
+            }
+            CallBuiltin(bi, args) => {
+                write!(&mut sr.output, "sys.{:?}", bi)?;
+                Self::show_args(args, sr)?;
+            }
+            _ => panic!(),
+        }
+        Ok(())
+    }
+
+    fn show_args(args: &[Exp<A>], sr: &mut SRun) -> Result<(), std::fmt::Error> {
+        sr.output.push('(');
+        let save = sr.aos;
+        sr.aos += 1;
+        for (i, e) in args.iter().enumerate() {
+            if i > 0 {
+                sr.output.push_str(", ");
+            }
+            e.show(sr)?;
+            sr.aos += 1;
+        }
+        sr.output.push(')');
+        sr.aos = save;
+        Ok(())
+    }
+
 }

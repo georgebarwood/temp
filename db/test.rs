@@ -1,27 +1,27 @@
 use crate::*;
 
 pub fn test() {
-    let sql: [&[u8]; 7] = [
+    let _sql1: [&[u8]; 7] = [
         b"select sys.Len('hello')",
         b"schema dbo",
         b"table dbo.cust( Name string )",
         b"insert into dbo.cust(Name) values('Freddy')",
         b"fn dbo.Test(x int, y string) -> string { 
-           let z = 2*x 
+           let z = ( x - 2 ) * 3
            set y |= 'ok'
            while z > 5 { set z = z - 1 }
            if z = 0 { set z = 1 } else { set z = 2 }
            insert into dbo.cust(Name) values('Marilyn')
            update dbo.cust set Name = Name | 'x' where Id < 6
            delete from dbo.cust where Id > 100
-           select Id, ' ', Name, ' ', sys.Len(Name), ' ' from dbo.cust where Id < 20
+           select Id, ' ', Name, ' ', sys.Len(Name), ' ' from dbo.cust where Id < 20 order by Id
            for n = Name from dbo.cust order by Name { set z = 55 }
            set result='George' 
         }",
         b"select sys.Fn_text('dbo','Test')",
         b"select dbo.Test(1,'')",
     ];
-    let _sql : [&[u8]; 17] = [
+    let _sql2 : [&[u8]; 17] = [
         b"schema dbo",
         b"table dbo.xxx(Name string,Age int,Height float,Email string)",
         b"insert into dbo.xxx(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
@@ -44,13 +44,15 @@ pub fn test() {
         b"select dbo.yy(100)",
     ];
 
-    let _sql: [&[u8]; 4] = [
+    let _sql3: [&[u8]; 4] = [
         b"schema test",
         b"table test.users (name string, age int)",
         b"let i = 8192
           while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
         b"let total=0 for x = age from test.users set total = total + x select total",
     ];
+
+    let sql = _sql1;
 
     let (is_new, spd) = get_spd();
 
