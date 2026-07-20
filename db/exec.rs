@@ -6,7 +6,7 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
-    pub source: &'a [u8],
+    pub source: &'a [u8],     // For string constants when executing batch.
     output: &'a mut LVec<u8>, // Maybe could generalise this in future.
 }
 
@@ -127,6 +127,7 @@ fn execute_schema_updates(
     }
 }
 
+/// Append to String or Binary Value.
 pub fn append(x: &mut Value, y: &Value) {
     // Could use get_mut + with_capacity instead of make_mut.
     match (x, y) {
@@ -136,9 +137,9 @@ pub fn append(x: &mut Value, y: &Value) {
     }
 }
 
-use std::cmp::Ordering;
 /// Compare table rows.
-pub fn row_compare(a: &[Value], b: &[Value], desc: &[bool]) -> Ordering {
+pub fn row_compare(a: &[Value], b: &[Value], desc: &[bool]) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
     let mut ix = 0;
     loop {
         let cmp = a[ix].cmp(&b[ix]);

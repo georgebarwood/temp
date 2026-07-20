@@ -1,7 +1,7 @@
 use crate::*;
 
 /// Page number of page where info for sys_store is saved.
-pub const SYS_STORE_PAGE: u64 = 1;
+const SYS_STORE_PAGE: u64 = 1;
 
 /// Global shared state.
 pub struct GSS {
@@ -10,15 +10,26 @@ pub struct GSS {
 }
 
 impl GSS {
-    /// Create Global shared state. dict is initialised later by init_dict.
+    /// Create Global shared state. dict is initialised later by init.
     pub fn new(spd: Arc<SharedPagedData>) -> Self {
         let dict = Arc::new(Dict::new());
         Self { spd, dict }
     }
 
-    /// Called during initialisation to set up Dict.
-    pub fn init_dict(&mut self, dict: Arc<Dict>) {
-        self.dict = dict;
+    /// Initialise. Returns `PageSet` (for writing) and `Arc<Dict>`.
+    pub fn init(&mut self, is_new: bool) -> (PageSet, Arc<Dict>) {
+        let (mut ps, mut dict) = self.get_ps_and_dict_write();
+
+        if is_new {
+            assert!(ps.new_page() == SYS_STORE_PAGE);
+            let ssc = ps.sys_store.clone();
+            *ssc.borrow_mut() = Store::new(&mut ps);
+        } else {
+            load_sys_store(&mut ps);
+            dict = Dict::load_from_sys_store(&mut ps);
+            self.dict = dict.clone();
+        }
+        (ps, dict)
     }
 
     /// Get PageSet and Dict for writing.

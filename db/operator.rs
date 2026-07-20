@@ -16,7 +16,7 @@ pub enum Operator {
     Multiply,
     Divide,
     Remainder,
-    Concat,
+    Concat, // string only for now, should support binary as well at some point.
     And,
     Or,
 }
@@ -64,18 +64,13 @@ impl Operator {
             Or => 2,
             And => 3,
 
-            Equal
-            | NotEqual
-            | Less
-            | Greater
-            | LessEqual
-            | GreaterEqual => 4,
+            Equal | NotEqual | Less | Greater | LessEqual | GreaterEqual => 4,
             Plus | Minus => 5,
             Multiply | Divide | Remainder => 6,
             None => 0,
         }
     }
-        
+
     pub fn eval(&self, x: &Value, y: &Value) -> Value {
         use Operator::*;
         if let Value::Int(x) = &x
@@ -128,6 +123,7 @@ impl Operator {
     }
 }
 
+/// Concatenate strings.
 fn concat(x: &str, y: &str) -> Value {
     let mut s = LString::with_capacity(x.len() + y.len());
     s.push_str(x);
@@ -136,6 +132,7 @@ fn concat(x: &str, y: &str) -> Value {
     Value::String(s)
 }
 
+/// Convert value of any kind to string ( but binary not yet done ).
 pub fn val_to_str(x: &Value) -> LString {
     use std::fmt::Write;
     let mut result = LString::new();
@@ -149,74 +146,3 @@ pub fn val_to_str(x: &Value) -> LString {
     }
     result
 }
-
-/// Builtin functions
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
-pub enum Builtin {
-    Len,
-    Substr,
-    Replace,
-    Contains,
-    BinLen,
-    BinSubstr,
-    FnText,
-    // More to do...
-}
-
-impl Builtin {
-    pub fn new(name: &[u8]) -> Result<Self, E> {
-        use Builtin::*;
-        match name {
-            b"Len" => Ok(Len),
-            b"Fn_text" => Ok(FnText),
-            _ => Err(E::new("Unknown sys call")),
-        }
-    }
-
-    pub fn eval(&self, run: &mut Run) -> Value {
-        // Arguments are on stack
-        use Builtin::*;
-        match self {
-            Len => {
-                let s = run.stack.pop().unwrap();
-                Value::Int(s.string().len() as i64)
-            }
-            FnText => {
-                let fname = run.stack.pop().unwrap();
-                let schema = run.stack.pop().unwrap();
-
-                let sid = run.dict.schema_id(schema.string()).unwrap();
-                let nameid = run.dict.name_id(fname.string()).unwrap();
-                let fix = run.dict.func_index(&(*sid, *nameid)).unwrap();
-                let func = run.dict.func_info(*fix);
-
-                // println!( "FnText ... {:?}", func );
-
-                let result = func.to_source(run.dict);
-
-                Value::String(LRc::new(result))
-            }
-            _ => todo!(),
-        }
-    }
-    pub fn result_type(&self) -> &'static DataType {
-        use Builtin::*;
-        match self {
-            Len => &DataType::Int,
-            FnText => &DataType::String(0),
-            _ => todo!(),
-        }
-    }
-
-    pub fn arg_types(&self) -> &'static [DataType] {
-        use Builtin::*;
-        match self {
-            Len => &STR_1,
-            FnText => &STR_2,
-            _ => todo!(),
-        }
-    }
-}
-
-const STR_1: [DataType; 1] = [DataType::String(0)];
-const STR_2: [DataType; 2] = [DataType::String(0), DataType::String(0)];

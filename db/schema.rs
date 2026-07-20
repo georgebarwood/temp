@@ -416,10 +416,10 @@ pub fn write_block<'a, A: Allocator + Default, S: XString>(
 /// Trait for string that can be a dummy ([NoString]) or not ([YesString]), or source position ([SrcPos]).
 pub trait XString {
     fn str(&self) -> &str {
-        ""
+        panic!()
     }
     fn sstr<'a>(&self, _src: &'a [u8]) -> &'a str {
-        ""
+        panic!()
     }
     fn from_str(s: &str) -> Self;
 }

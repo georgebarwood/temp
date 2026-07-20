@@ -19,12 +19,12 @@ sys.function_text( "schema name", "function name" ) gets function definition.
 sys.table_text( "schema name", "table name" ) gets table definition ( datatype ).
 
 
-
-
-
-
-
-
+ToDo list
+=========
+binary and float constants
+delimited string ( for strings with " in them ).
+sys functions
+make into lib, web server
 
 ===================
 
@@ -124,9 +124,13 @@ pub use schema::*;
 pub mod statement;
 use statement::*;
 
-/// [Operator]s and [Builtin] functions.
+/// [Operator].
 mod operator;
 use operator::*;
+
+/// [Builtin] functions.
+mod builtin;
+use builtin::*;
 
 /// [Exp]ressions.
 pub mod exp;

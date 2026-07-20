@@ -17,7 +17,7 @@ impl XString for SrcPos {
     }
 }
 
-/// No row context.
+/// No row context, for [`Exp::eval`].
 struct NoRowContext;
 impl RowContext for NoRowContext {
     fn item(&mut self, _i: usize, _ps: &mut PageSet) -> Value {
@@ -25,7 +25,7 @@ impl RowContext for NoRowContext {
     }
 }
 
-/// Row context that is list of values.
+/// Row context that is list of values, for [`Exp::eval_vals`].
 struct ValsRowContext<'a> {
     vals: &'a [Value],
 }
@@ -145,12 +145,13 @@ impl<A: Allocator + Default> Exp<A> {
         }
     }
 
+    /// Show expression.
     pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
         self.show_prec(sr, 0, false)
     }
 
     /// Show with specified precedence.
-    fn show_prec(&self, sr: &mut SRun, pp: u8, right:bool) -> Result<(), std::fmt::Error> {
+    fn show_prec(&self, sr: &mut SRun, pp: u8, right: bool) -> Result<(), std::fmt::Error> {
         use Exp::*;
         use std::fmt::Write;
         match self {
@@ -192,6 +193,7 @@ impl<A: Allocator + Default> Exp<A> {
         Ok(())
     }
 
+    /// Show args.
     fn show_args(args: &[Exp<A>], sr: &mut SRun) -> Result<(), std::fmt::Error> {
         sr.output.push('(');
         let save = sr.aos;
@@ -207,5 +209,4 @@ impl<A: Allocator + Default> Exp<A> {
         sr.aos = save;
         Ok(())
     }
-
 }

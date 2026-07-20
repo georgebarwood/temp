@@ -17,6 +17,8 @@ pub fn test() {
            select Id, ' ', Name, ' ', sys.Len(Name), ' ' from dbo.cust where Id < 20 order by Id
            for n = Name from dbo.cust order by Name { set z = 55 }
            set result='George' 
+           set result = sys.Replace( result, 'e', 'ee' )
+           set result = sys.Substr( result, 1, 5 )
         }",
         b"select sys.Fn_text('dbo','Test')",
         b"select dbo.Test(1,'')",
@@ -52,29 +54,18 @@ pub fn test() {
         b"let total=0 for x = age from test.users set total = total + x select total",
     ];
 
-    let sql = _sql1;
+    let sql = _sql3;
 
     let (is_new, spd) = get_spd();
-
-    let global = Arc::new(Mutex::new(GSS::new(spd)));
-
-    let (mut ps, mut dict) = global.lock().unwrap().get_ps_and_dict_write();
-
-    let ps = &mut ps;
-
-    if is_new {
-        assert!(ps.new_page() == SYS_STORE_PAGE);
-        let ssc = ps.sys_store.clone();
-        *ssc.borrow_mut() = Store::new(ps);
-    } else {
-        load_sys_store(ps);
-        dict = Dict::load_from_sys_store(ps);
-        global.lock().unwrap().init_dict(dict.clone());
-    }
+    let mut global = GSS::new(spd);
+    let (mut ps, mut dict) = global.init(is_new);
+    let global = Arc::new(Mutex::new(global));
 
     // At this point everything is initialised and tasks can be started and given a clone of global.
 
     // But for now, for testing purposes we just execute some SQL statements.
+
+    let ps = &mut ps;
 
     let mut dict_changed: bool = false;
     for s in sql {
