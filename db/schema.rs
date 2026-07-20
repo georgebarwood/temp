@@ -357,6 +357,7 @@ pub struct SFunc<S: XString> {
 }
 
 impl<S: XString> SFunc<S> {
+    /// Get source text for function for builtin function [`Builtin::FnText`].
     pub fn to_source(&self, dict: &Dict) -> LString {
         let mut sr = SRun::new(dict);
 

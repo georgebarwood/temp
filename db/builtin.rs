@@ -21,7 +21,7 @@ impl Builtin {
             b"Len" => Ok(Len),
             b"Substr" => Ok(Substr),
             b"Replace" => Ok(Replace),
-            b"Fn_text" => Ok(FnText),
+            b"FnText" => Ok(FnText),
             _ => Err(E::new("Unknown sys call")),
         }
     }

@@ -20,7 +20,7 @@ pub fn test() {
            set result = sys.Replace( result, 'e', 'ee' )
            set result = sys.Substr( result, 1, 5 )
         }",
-        b"select sys.Fn_text('dbo','Test')",
+        b"select sys.FnText('dbo','Test')",
         b"select dbo.Test(1,'')",
     ];
     let _sql2 : [&[u8]; 17] = [
@@ -54,7 +54,7 @@ pub fn test() {
         b"let total=0 for x = age from test.users set total = total + x select total",
     ];
 
-    let sql = _sql3;
+    let sql = _sql1;
 
     let (is_new, spd) = get_spd();
     let mut global = GSS::new(spd);

@@ -66,6 +66,9 @@ impl GSS {
 
 /// Save ps.sys_store to data page SYS_STORE_PAGE.
 pub fn save_sys_store(ps: &mut PageSet) {
+
+    // println!("save sys store, store = {:?}", ps.sys_store.borrow() );
+    
     let bytes = ps.sys_store.borrow_mut().save_to_bytes();
     if let Some(bytes) = bytes {
         let pdata = ps.load(SYS_STORE_PAGE);
