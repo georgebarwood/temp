@@ -105,7 +105,7 @@ make into lib, web server
 
 use datatype::DataType;
 use page_store::*;
-use pstd::{BoxA, StringA, VecA, alloc::Allocator};
+use pstd::{BoxA, VecA, alloc::Allocator};
 use std::sync::Mutex;
 use tablestg::*;
 

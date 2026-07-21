@@ -6,8 +6,8 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
-    pub source: &'a [u8],     // For string constants when executing batch.
-    output: &'a mut LVec<u8>, // Maybe could generalise this in future.
+    pub source: &'a [u8],         // For string constants when executing batch.
+    pub output: &'a mut LVec<u8>, // Maybe could generalise this in future.
 }
 
 impl<'a> Run<'a> {

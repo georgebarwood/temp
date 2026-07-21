@@ -464,13 +464,13 @@ impl<A: Allocator + Default> Select<A> {
                 // print!("got a row :");
                 let mut lr = table.lazy_row(b);
                 let ok = if let Some(wher) = &self.wher {
-                    wher.eval_rc(run, &mut lr).bool()
+                    wher.ev(run, &mut lr).bool()
                 } else {
                     true
                 };
                 if ok {
                     for e in &self.vals {
-                        let v = e.eval_rc(run, &mut lr);
+                        let v = e.ev(run, &mut lr);
                         run.output(&v);
                     }
                 }
@@ -518,7 +518,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
                 let mut lr = table.lazy_row(b);
 
                 let ok = if let Some(wher) = &self.wher {
-                    let v = wher.eval_rc(run, &mut lr);
+                    let v = wher.ev(run, &mut lr);
                     v.bool()
                 } else {
                     true
@@ -527,7 +527,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
                 if ok {
                     let len = run.stack.len();
                     for (_, e) in &self.lets {
-                        let v = e.eval_rc(run, &mut lr);
+                        let v = e.ev(run, &mut lr);
                         run.stack.push(v);
                     }
                     execute_block(&self.block, run);
@@ -639,7 +639,7 @@ where
     let mut iter = table.iter(run.ps);
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
-        if wher.eval_rc(run, &mut lr).bool() {
+        if wher.ev(run, &mut lr).bool() {
             let id = lr.item(0, run.ps).int();
             result.push(id);
         }
@@ -724,18 +724,18 @@ where
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
         let ok = if let Some(wher) = &wher {
-            wher.eval_rc(run, &mut lr).bool()
+            wher.ev(run, &mut lr).bool()
         } else {
             true
         };
         if ok {
             let mut row = LVec::with_capacity(ob.len() + lets.len());
             for e in ob {
-                let v = e.eval_rc(run, &mut lr);
+                let v = e.ev(run, &mut lr);
                 row.push(v);
             }
             for (_, e) in lets {
-                let v = e.eval_rc(run, &mut lr);
+                let v = e.ev(run, &mut lr);
                 row.push(v);
             }
             temp.push(row);
@@ -765,18 +765,18 @@ where
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
         let ok = if let Some(wher) = &wher {
-            wher.eval_rc(run, &mut lr).bool()
+            wher.ev(run, &mut lr).bool()
         } else {
             true
         };
         if ok {
             let mut row = LVec::with_capacity(ob.len() + vals.len());
             for e in ob {
-                let v = e.eval_rc(run, &mut lr);
+                let v = e.ev(run, &mut lr);
                 row.push(v);
             }
             for e in vals {
-                let v = e.eval_rc(run, &mut lr);
+                let v = e.ev(run, &mut lr);
                 row.push(v);
             }
             temp.push(row);

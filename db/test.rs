@@ -67,6 +67,9 @@ pub fn test() {
 
     let ps = &mut ps;
 
+    test_new_exp(ps);
+    // if true { return; }
+
     let mut dict_changed: bool = false;
     for s in sql {
         println!();

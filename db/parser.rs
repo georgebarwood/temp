@@ -472,7 +472,7 @@ impl<'a> Parser<'a> {
         let dt = match e {
             Exp::Bool(_) => &DataType::Bool,
             Exp::Int(_) => &DataType::Int,
-            Exp::String(_) | Exp::SrcString(_) => &DataType::String(0),
+            Exp::Str(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
                 RContext::STable(t, nxt) => {
                     if let Some((col, dt)) = t.name_to_col(tos(self.str(name))) {
@@ -663,19 +663,19 @@ impl<'a> Parser<'a> {
         match self.token {
             Token::Int(x) => {
                 self.next()?;
-                Ok(Exp::Int(x))
+                Ok(Exp::Int(IntExp::Int(x)))
             }
             Token::String(x, y) => {
                 let lit = SrcPos { start: x, end: y };
                 self.next()?;
-                Ok(Exp::SrcString(lit))
+                Ok(Exp::Str(StrExp::StrPos(lit)))
             }
             Token::Ident(x, y) => {
                 let name = SrcPos { start: x, end: y };
                 self.next()?;
                 Ok(match self.str(&name) {
-                    b"true" => Exp::Bool(true),
-                    b"false" => Exp::Bool(false),
+                    b"true" => Exp::Bool(BoolExp::Bool(true)),
+                    b"false" => Exp::Bool(BoolExp::Bool(false)),
                     _ => self.name_exp(name)?,
                 })
             }
