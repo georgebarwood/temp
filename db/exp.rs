@@ -386,8 +386,15 @@ impl<A: Allocator + Default> Exp<A> {
         match self {
             Bool(BoolExp::Bool(x)) => write!(&mut sr.output, "{}", x)?,
             Int(IntExp::Int(x)) => write!(&mut sr.output, "{}", x)?,
-            Str(x) => x.show(sr)?,
+            
+            
             Local(x) => sr.write_name(*x),
+            Bool(BoolExp::Local(x)) => sr.write_name(*x),
+            Int(IntExp::Local(x)) => sr.write_name(*x),
+            Str(StrExp::Local(x)) => sr.write_name(*x),
+
+            Str(x) => x.show(sr)?, // Not sure about this...
+            
             Col(x) => sr.write_col_name(*x),
             Binary(op, x, y) => {
                 let p = op.precedence();
@@ -403,11 +410,11 @@ impl<A: Allocator + Default> Exp<A> {
             }
             FnCall(f, args) => {
                 sr.write_fn_name(*f);
-                Self::show_args(args, sr)?;
+                Self::show_args(args, sr, true)?;
             }
             CallBuiltin(bi, args) => {
                 write!(&mut sr.output, "sys.{:?}", bi)?;
-                Self::show_args(args, sr)?;
+                Self::show_args(args, sr, false)?;
             }
             _ => panic!(),
         }
@@ -415,10 +422,10 @@ impl<A: Allocator + Default> Exp<A> {
     }
 
     /// Show args.
-    fn show_args(args: &[Exp<A>], sr: &mut SRun) -> Result<(), std::fmt::Error> {
+    fn show_args(args: &[Exp<A>], sr: &mut SRun, ros: bool) -> Result<(), std::fmt::Error> {
         sr.output.push('(');
         let save = sr.aos;
-        sr.aos += 1;
+        if ros { sr.aos += 1; }
         for (i, e) in args.iter().enumerate() {
             if i > 0 {
                 sr.output.push_str(", ");
