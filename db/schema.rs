@@ -240,12 +240,15 @@ impl Dict {
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
         let f = &mut self.main.funcs[*fid];
         f.block = gblock(&x.block, src);
+        encode(&mut f.block);
+        println!("set fn block, encode done!");
 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
             let name = name.sstr(src);
             parms.push((YesString::from_str(name), typ.clone()));
         }
+
         let info_func = SFunc::<YesString> {
             schema_id: x.schema_id,
             fname: YesString::from_str(fname),

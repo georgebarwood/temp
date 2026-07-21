@@ -54,13 +54,14 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
                 update_dict = false;
                 break;
             }
-            Ok(slist) => {
+            Ok(mut slist) => {
                 if parser.schema_updates {
                     // println!("statements={:#?}", &slist);
                     let md = Arc::make_mut(&mut temp_dict);
                     execute_schema_updates(pass, &slist, source, md, ps);
                     update_dict = true;
                 } else if pass == 2 {
+                    encode(&mut slist);
                     let mut run = Run {
                         stack: LVec::new(),
                         dict: parser.dict,
@@ -123,6 +124,25 @@ fn execute_schema_updates(
                 }
                 _ => panic!(),
             }
+        }
+    }
+}
+
+pub fn encode<A, S>(slist: &mut [Statement<A, S>])
+where
+    A: Allocator + Default,
+    S: XString,
+{
+    for s in slist {
+        match s {
+            Statement::Let(x) => x.exp.encode(),
+            Statement::Set(x) => x.exp.encode(),
+            Statement::While(x) => {
+                x.exp.encode();
+                encode(&mut x.block);
+            }
+            // More ToDo!
+            _ => {}
         }
     }
 }

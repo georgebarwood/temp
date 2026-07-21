@@ -36,188 +36,8 @@ impl<'a> RowContext for ValsRowContext<'a> {
     }
 }
 
-/**************************************************
-
-/// Expression.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Exp<A: Allocator + Default> {
-    /// Bool constant
-    Bool(bool),
-    /// Integer constant
-    Int(i64),
-    /// String literal
-    String(StringA<A>),
-    /// String literal ( position in source )
-    SrcString(SrcPos),
-    /// Unresolved name
-    Name(SrcPos),
-    /// Local variable.
-    Local(usize),
-    /// Column number
-    Col(usize),
-    /// Binary expression.
-    Binary(Operator, BoxA<Exp<A>, A>, BoxA<Exp<A>, A>),
-    /// Function call (unresolved). Schema, fname, args.
-    FnCallByName(SrcPos, SrcPos, VecA<Exp<A>, A>),
-    /// Function call (resolved). Function id and args.
-    FnCall(usize, VecA<Exp<A>, A>),
-    /// Built-in call. Build-in operation and args.
-    CallBuiltin(Builtin, VecA<Exp<A>, A>),
-}
-
-impl<A: Allocator + Default> Exp<A> {
-    /// Evaluate the expression using specified Run and RowContext.
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Value {
-        use Exp::*;
-        match self {
-            Bool(x) => Value::Bool(*x),
-            Int(x) => Value::Int(*x),
-            SrcString(x) => {
-                let s = x.sstr(run.source);
-                Value::String(LRc::new(LString::from(s)))
-            }
-            String(x) => Value::String(LRc::new(LString::from(x.as_ref()))),
-            Local(x) => {
-                let ix = run.stack.len() - (x + 1);
-                run.stack[ix].clone()
-            }
-            Col(x) => rc.item(*x, run.ps),
-            Binary(op, x, y) => {
-                let x = x.ev(run, rc);
-                let y = y.ev(run, rc);
-                op.eval(&x, &y)
-            }
-            FnCall(f, args) => {
-                let f = run.call_init(*f);
-                let save = run.stack.len();
-                for e in args {
-                    let v = e.ev(run, rc);
-                    run.stack.push(v);
-                }
-                execute_block(&f.block, run);
-                run.stack.truncate(save);
-                run.stack.pop().unwrap() // Pop return value.
-            }
-            CallBuiltin(bi, args) => {
-                for e in args {
-                    let v = e.ev(run, rc);
-                    run.stack.push(v);
-                }
-                bi.eval(run)
-            }
-            Name(_) | FnCallByName(_, _, _) => panic!(),
-        }
-    }
-
-    /// Evaluate the expression, no row context.
-    pub fn eval(&self, run: &mut Run) -> Value {
-        self.ev(run, &mut NoRowContext)
-    }
-
-    /// Evaluate the expression using specified row values.
-    pub fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Value {
-        let mut vc = ValsRowContext { vals };
-        self.ev(run, &mut vc)
-    }
-
-    /// Convert from LExp
-    pub fn from(exp: &LExp, src: &[u8]) -> Self {
-        use Exp::*;
-        match exp {
-            Bool(x) => Bool(*x),
-            Int(x) => Int(*x),
-            SrcString(x) => String(StringA::from(x.sstr(src))),
-            String(x) => String(StringA::from(x.as_str())),
-            Local(x) => Local(*x),
-            Col(x) => Col(*x),
-            Binary(op, lhs, rhs) => {
-                let lhs = BoxA::new(Self::from(lhs, src));
-                let rhs = BoxA::new(Self::from(rhs, src));
-                Binary(*op, lhs, rhs)
-            }
-            FnCall(fid, args) => {
-                let args = gvals(args, src);
-                FnCall(*fid, args)
-            }
-            CallBuiltin(bi, args) => {
-                let args = gvals(args, src);
-                CallBuiltin(*bi, args)
-            }
-            Name(_) | FnCallByName(_, _, _) => panic!(), // Names have been resolved by this point.
-        }
-    }
-
-    /// Show expression.
-    pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
-        self.show_prec(sr, 0, false)
-    }
-
-    /// Show with specified precedence.
-    fn show_prec(&self, sr: &mut SRun, pp: u8, right: bool) -> Result<(), std::fmt::Error> {
-        use Exp::*;
-        use std::fmt::Write;
-        match self {
-            Bool(x) => write!(&mut sr.output, "{}", x)?,
-            Int(x) => write!(&mut sr.output, "{}", x)?,
-            String(x) => {
-                sr.output.push_str("'");
-                sr.output.push_str(x);
-                sr.output.push_str("'");
-            }
-            Local(x) => {
-                sr.write_name(*x);
-            }
-            Col(x) => {
-                sr.write_col_name(*x);
-            }
-            Binary(op, x, y) => {
-                let p = op.precedence();
-                if p < pp || p == pp && right {
-                    sr.output.push_str("(");
-                }
-                x.show_prec(sr, p, false)?;
-                write!(&mut sr.output, " {} ", op)?;
-                y.show_prec(sr, p, true)?;
-                if p < pp || p == pp && right {
-                    sr.output.push_str(")");
-                }
-            }
-            FnCall(f, args) => {
-                sr.write_fn_name(*f);
-                Self::show_args(args, sr)?;
-            }
-            CallBuiltin(bi, args) => {
-                write!(&mut sr.output, "sys.{:?}", bi)?;
-                Self::show_args(args, sr)?;
-            }
-            _ => panic!(),
-        }
-        Ok(())
-    }
-
-    /// Show args.
-    fn show_args(args: &[Exp<A>], sr: &mut SRun) -> Result<(), std::fmt::Error> {
-        sr.output.push('(');
-        let save = sr.aos;
-        sr.aos += 1;
-        for (i, e) in args.iter().enumerate() {
-            if i > 0 {
-                sr.output.push_str(", ");
-            }
-            e.show(sr)?;
-            sr.aos += 1;
-        }
-        sr.output.push(')');
-        sr.aos = save;
-        Ok(())
-    }
-}
-
-*/
-
-//////////////////////////////
-
 pub trait Eval<T> {
+    /// Evaluate the expression with specified row context.
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> T;
 
     /// Evaluate the expression, no row context.
@@ -257,6 +77,10 @@ impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
         match self {
             None => panic!(),
             Bool(x) => *x,
+            Local(x) => {
+                let ix = run.stack.len() - (x + 1);
+                run.stack[ix].bool()
+            }
             And(x, y) => x.ev(run, rc) && y.ev(run, rc),
             Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
             IntEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
@@ -340,7 +164,10 @@ impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
         match self {
             StrExp::None => panic!(),
-            StrExp::Local(_) => todo!(),
+            StrExp::Local(x) => {
+                let ix = run.stack.len() - (x + 1);
+                LString::from(run.stack[ix].string().as_str())
+            }
             StrExp::Col(_) => todo!(),
             StrExp::Str(x) => LString::from(x.as_str()),
             StrExp::StrPos(x) => LString::from(x.sstr(run.source)),
@@ -520,19 +347,32 @@ impl<A: Allocator + Default> Exp<A> {
                             _ => todo!(),
                         }
                     }
-                    _ => { return; }
+                    _ => {
+                        println!("no encoding");
+                        return;
+                    }
                 };
+                println!("encoded exp!");
                 *self = re;
             }
             FnCall(_fid, args) => {
-                for e in args
-                {
+                for e in args {
                     e.encode();
                 }
             }
             _ => {}
         }
     }
+
+    pub fn local(x: usize, dt: &DataType) -> Self {
+        match dt {
+            DataType::Bool => Exp::Bool(BoolExp::Local(x)),
+            DataType::Int => Exp::Int(IntExp::Local(x)),
+            DataType::String(_) => Exp::Str(StrExp::Local(x)),
+            _ => Exp::Local(x),
+        }
+    }
+    // Todo : fn col similar to local for columns.
 
     /// Show expression.
     pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {

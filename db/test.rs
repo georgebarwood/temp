@@ -2,7 +2,7 @@ use crate::*;
 
 pub fn test() {
     let _sql1: [&[u8]; 7] = [
-        b"select sys.len('hello')",
+        b"let x=5 set x=10*13 select x, sys.len('hello')",
         b"schema dbo",
         b"table dbo.cust( Name string )",
         b"insert into dbo.cust(Name) values('Freddy')",

@@ -485,7 +485,7 @@ impl<'a> Parser<'a> {
                 RContext::Local(locs) => {
                     if let Some((i, typ)) = self.local(locs, name) {
                         // println!("name={} aos={}", name, aos);
-                        *e = Exp::Local(i + aos);
+                        *e = Exp::local(i + aos, typ);
                         typ
                     } else {
                         let e = &format!("Name not found : {:?}", tos(self.str(name)));
