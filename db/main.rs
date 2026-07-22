@@ -106,8 +106,8 @@ make into lib, web server
 use datatype::DataType;
 use page_store::*;
 use pstd::{BoxA, VecA, alloc::Allocator};
-use std::sync::Mutex;
 use std::fmt::Debug;
+use std::sync::Mutex;
 use tablestg::*;
 
 /// SQL(-like) parsing. [`Parser`]

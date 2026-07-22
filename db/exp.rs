@@ -62,7 +62,7 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                     let v = e.ev(run, rc);
                     run.stack.push(v);
                 }
-                execute_block(&f.block, run);
+                execute_block_no_restore(&f.block, run);
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }

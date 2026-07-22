@@ -318,7 +318,7 @@ impl Dict {
         let ibytes = Self::load(INFO_ID, ps);
         let info = DictInfo::from_bytes_id(&ibytes);
 
-        /* println!("Loaded dict bytes={} ibytes={} sys_store={:?}", 
+        /* println!("Loaded dict bytes={} ibytes={} sys_store={:?}",
            bytes.len(), ibytes.len(), ps.sys_store
         );
         */

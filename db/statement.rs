@@ -529,7 +529,7 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
                         let v = e.ev(run, &mut lr);
                         run.stack.push(v);
                     }
-                    execute_block(&self.block, run);
+                    execute_block_no_restore(&self.block, run);
                     run.stack.truncate(len);
                 }
             }
@@ -545,7 +545,7 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
             for v in &row[n..] {
                 run.stack.push(v.clone());
             }
-            execute_block(&self.block, run);
+            execute_block_no_restore(&self.block, run);
             run.stack.truncate(len);
         }
     }
@@ -601,13 +601,23 @@ pub struct DropTable {
     pub table: usize,
 }
 
-/// Execute list of statements.
+/// Execute list of statements, restoring stack to original len.
 pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run)
 where
     A: Allocator + Debug + Default,
     S: XString,
 {
     let slen = run.stack.len(); // At end restore stack to this length.
+    execute_block_no_restore(slist, run);
+    run.stack.truncate(slen); // pop local variables from stack.
+}
+
+/// Execute list of statements ( called must restore stack ).
+pub fn execute_block_no_restore<A, S>(slist: &[Statement<A, S>], run: &mut Run)
+where
+    A: Allocator + Debug + Default,
+    S: XString,
+{
     for s in slist {
         use Statement::*;
         match s {
@@ -625,7 +635,6 @@ where
             | DropTable(_) => panic!(),
         };
     }
-    run.stack.truncate(slen); // pop local variables from stack.
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
@@ -687,10 +696,7 @@ where
 }
 
 /// Convert local Order By to new allocator.
-fn gorder_by<A>(list: &LOrderBy, src: &[u8]) -> OrderBy<A>
-where
-    A: Allocator + Debug + Default,
-{
+fn gorder_by<A: Allocator + Debug + Default>(list: &LOrderBy, src: &[u8]) -> OrderBy<A> {
     if let Some((exps, descs)) = list {
         let mut result = VecA::with_capacity(exps.len());
         for e in exps {
@@ -704,16 +710,13 @@ where
 }
 
 /// Get filtered, sorted temporary table.
-fn get_for_temp<A, S>(
+fn get_for_temp<A: Allocator + Debug + Default, S>(
     table_id: usize,
     lets: &[(S, Exp<A>)],
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
     run: &mut Run,
-) -> LVec<LVec<Value>>
-where
-    A: Allocator + Debug + Default,
-{
+) -> LVec<LVec<Value>> {
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.load_table(table_id);
     let table = table.borrow();
