@@ -3,7 +3,7 @@ use serde::*;
 
 /// Statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Statement<A: Allocator + Default, S: XString> {
+pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     /// Declare and initialise a local variable.
     Let(Let<A, S>),
     /// Assign a local variable.
@@ -42,7 +42,7 @@ use std::fmt::Write;
 
 impl<A, S> Statement<A, S>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
     S: XString,
 {
     pub fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
@@ -261,12 +261,12 @@ where
 
 /// LET statement - declare and initialise a local variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Let<A: Allocator + Default, S: XString> {
+pub struct Let<A: Allocator + Debug + Default, S: XString> {
     pub varname: S,
     pub exp: Exp<A>,
 }
 
-impl<A: Allocator + Default, S: XString> Let<A, S> {
+impl<A: Allocator + Debug + Default, S: XString> Let<A, S> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         run.stack.push(v);
@@ -275,12 +275,12 @@ impl<A: Allocator + Default, S: XString> Let<A, S> {
 
 /// SET statement - assign a local variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Set<A: Allocator + Default> {
+pub struct Set<A: Allocator + Debug + Default> {
     pub i: usize,
     pub exp: Exp<A>,
 }
 
-impl<A: Allocator + Default> Set<A> {
+impl<A: Allocator + Debug + Default> Set<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         *run.local(self.i) = v;
@@ -289,12 +289,12 @@ impl<A: Allocator + Default> Set<A> {
 
 /// APPEND ( |= ) statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Append<A: Allocator + Default> {
+pub struct Append<A: Allocator + Debug + Default> {
     pub i: usize,
     pub exp: Exp<A>,
 }
 
-impl<A: Allocator + Default> Append<A> {
+impl<A: Allocator + Debug + Default> Append<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         append(run.local(self.i), &v);
@@ -303,12 +303,12 @@ impl<A: Allocator + Default> Append<A> {
 
 /// WHILE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct While<A: Allocator + Default, S: XString> {
+pub struct While<A: Allocator + Debug + Default, S: XString> {
     pub exp: Exp<A>,
     pub block: VecA<Statement<A, S>, A>,
 }
 
-impl<A: Allocator + Default, S: XString> While<A, S> {
+impl<A: Allocator + Debug + Default, S: XString> While<A, S> {
     pub fn exec(&self, run: &mut Run) {
         while self.exp.eval(run).bool() {
             execute_block(&self.block, run);
@@ -318,13 +318,13 @@ impl<A: Allocator + Default, S: XString> While<A, S> {
 
 /// IF statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct If<A: Allocator + Default, S: XString> {
+pub struct If<A: Allocator + Debug + Default, S: XString> {
     pub exp: Exp<A>,
     pub block: VecA<Statement<A, S>, A>,
     pub els: Option<VecA<Statement<A, S>, A>>,
 }
 
-impl<A: Allocator + Default, S: XString> If<A, S> {
+impl<A: Allocator + Debug + Default, S: XString> If<A, S> {
     pub fn exec(&self, run: &mut Run) {
         if self.exp.eval(run).bool() {
             execute_block(&self.block, run);
@@ -336,13 +336,13 @@ impl<A: Allocator + Default, S: XString> If<A, S> {
 
 /// INSERT statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Insert<A: Allocator + Default> {
+pub struct Insert<A: Allocator + Debug + Default> {
     pub table: usize,
     pub cols: VecA<usize, A>,
     pub vals: VecA<Exp<A>, A>,
 }
 
-impl<A: Allocator + Default> Insert<A> {
+impl<A: Allocator + Debug + Default> Insert<A> {
     pub fn exec(&self, run: &mut Run) {
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
@@ -392,13 +392,13 @@ impl<A: Allocator + Default> Insert<A> {
 
 /// UPDATE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Update<A: Allocator + Default> {
+pub struct Update<A: Allocator + Debug + Default> {
     pub table: usize,
     pub assigns: VecA<(usize, Exp<A>), A>, // col num, Exp
     pub wher: Exp<A>,
 }
 
-impl<A: Allocator + Default> Update<A> {
+impl<A: Allocator + Debug + Default> Update<A> {
     pub fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
@@ -423,12 +423,12 @@ impl<A: Allocator + Default> Update<A> {
 
 /// DELETE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Delete<A: Allocator + Default> {
+pub struct Delete<A: Allocator + Debug + Default> {
     pub table: usize,
     pub wher: Exp<A>,
 }
 
-impl<A: Allocator + Default> Delete<A> {
+impl<A: Allocator + Debug + Default> Delete<A> {
     pub fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
@@ -444,14 +444,14 @@ pub type OrderBy<A> = Option<(VecA<Exp<A>, A>, VecA<bool, A>)>;
 
 /// SELECT statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Select<A: Allocator + Default> {
+pub struct Select<A: Allocator + Debug + Default> {
     pub vals: VecA<Exp<A>, A>,
     pub from: Option<usize>,
     pub wher: Option<Exp<A>>,
     pub order_by: OrderBy<A>,
 }
 
-impl<A: Allocator + Default> Select<A> {
+impl<A: Allocator + Debug + Default> Select<A> {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run)
@@ -497,7 +497,7 @@ impl<A: Allocator + Default> Select<A> {
 
 /// FOR statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct For<A: Allocator + Default, S: XString> {
+pub struct For<A: Allocator + Debug + Default, S: XString> {
     pub lets: VecA<(S, Exp<A>), A>,
     pub from: usize,
     pub wher: Option<Exp<A>>,
@@ -505,7 +505,7 @@ pub struct For<A: Allocator + Default, S: XString> {
     pub block: VecA<Statement<A, S>, A>,
 }
 
-impl<A: Allocator + Default, S: XString> For<A, S> {
+impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
     pub fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run);
@@ -576,7 +576,7 @@ pub struct RenameTable {
 
 /// CREATE FN statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateFn<A: Allocator + Default> {
+pub struct CreateFn<A: Allocator + Debug + Default> {
     pub schema_id: i64,
     pub fname: SrcPos,
     pub ret: Arc<DataType>,
@@ -604,7 +604,7 @@ pub struct DropTable {
 /// Execute list of statements.
 pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run)
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
     S: XString,
 {
     let slen = run.stack.len(); // At end restore stack to this length.
@@ -631,7 +631,7 @@ where
 /// Get a list of ids for records from table that satisfy where condition.
 fn ids<A>(t: &RTable, wher: &Exp<A>, run: &mut Run) -> LVec<i64>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
 {
     let mut result = LVec::new();
     let table = t.borrow();
@@ -649,7 +649,7 @@ where
 /// Convert list of local expressions to new allocator.
 pub fn gvals<A>(list: &[LExp], src: &[u8]) -> VecA<Exp<A>, A>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
 {
     let mut result = VecA::with_capacity(list.len());
     for e in list {
@@ -661,7 +661,7 @@ where
 /// Convert list of bindings to new allocatpr.
 pub fn glets<A, S>(list: &[(SrcPos, LExp)], src: &[u8]) -> VecA<(S, Exp<A>), A>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
     S: XString,
 {
     let mut result = VecA::with_capacity(list.len());
@@ -676,7 +676,7 @@ where
 /// Convert list of local statements to new allocator.
 pub fn gblock<A, S>(list: &[LStatement], src: &[u8]) -> VecA<Statement<A, S>, A>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
     S: XString,
 {
     let mut block = VecA::with_capacity(list.len());
@@ -689,7 +689,7 @@ where
 /// Convert local Order By to new allocator.
 fn gorder_by<A>(list: &LOrderBy, src: &[u8]) -> OrderBy<A>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
 {
     if let Some((exps, descs)) = list {
         let mut result = VecA::with_capacity(exps.len());
@@ -712,7 +712,7 @@ fn get_for_temp<A, S>(
     run: &mut Run,
 ) -> LVec<LVec<Value>>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
 {
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.load_table(table_id);
@@ -753,7 +753,7 @@ fn get_temp<A>(
     run: &mut Run,
 ) -> LVec<LVec<Value>>
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
 {
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.load_table(table_id);

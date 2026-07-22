@@ -73,6 +73,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
                     update_dict = true;
                 } else if pass == 2 {
                     encode_block(&mut slist);
+                    // println!("Executing {:?}", slist);
                     let mut run = Run {
                         stack: LVec::new(),
                         dict: parser.dict,
@@ -144,7 +145,7 @@ fn execute_schema_updates(
 /// Encode a list of statements.
 pub fn encode_block<A, S>(slist: &mut [Statement<A, S>])
 where
-    A: Allocator + Default,
+    A: Allocator + Debug + Default,
     S: XString,
 {
     for s in slist {
@@ -201,7 +202,7 @@ where
     }
 }
 
-fn encode_exp_list<A: Allocator + Default>(list: &mut [Exp<A>]) {
+fn encode_exp_list<A: Allocator + Debug + Default>(list: &mut [Exp<A>]) {
     for exp in list {
         exp.encode();
     }

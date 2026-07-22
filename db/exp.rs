@@ -20,7 +20,7 @@ use serde::*;
 
 /// Expression.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum Exp<A: Allocator + Default> {
+pub enum Exp<A: Allocator + Debug + Default> {
     #[default]
     None,
     Bool(BoolExp<A>),
@@ -41,7 +41,7 @@ pub enum Exp<A: Allocator + Default> {
     CallBuiltin(Builtin, VecA<Exp<A>, A>),
 }
 
-impl<A: Allocator + Default> Eval<Value> for Exp<A> {
+impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Value {
         use Exp::*;
         match self {
@@ -78,7 +78,7 @@ impl<A: Allocator + Default> Eval<Value> for Exp<A> {
     }
 }
 
-impl<A: Allocator + Default> Exp<A> {
+impl<A: Allocator + Debug + Default> Exp<A> {
     /// Convert from Local allocator.
     pub fn from(exp: &Exp<Local>, src: &[u8]) -> Self {
         use Exp::*;
@@ -307,7 +307,7 @@ pub trait Eval<T> {
 
 /// Bool Expression.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum BoolExp<A: Allocator + Default> {
+pub enum BoolExp<A: Allocator + Debug + Default> {
     #[default]
     None,
     Bool(bool),
@@ -324,7 +324,7 @@ pub enum BoolExp<A: Allocator + Default> {
     // String comparison is todo
 }
 
-impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
+impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> bool {
         use BoolExp::*;
         match self {
@@ -344,7 +344,7 @@ impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
     }
 }
 
-impl<A: Allocator + Default> BoolExp<A> {
+impl<A: Allocator + Debug + Default> BoolExp<A> {
     pub fn from(exp: &BoolExp<Local>, _src: &[u8]) -> Self {
         match exp {
             BoolExp::Bool(x) => BoolExp::Bool(*x),
@@ -357,7 +357,7 @@ impl<A: Allocator + Default> BoolExp<A> {
 
 /// Integer Expression.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum IntExp<A: Allocator + Default> {
+pub enum IntExp<A: Allocator + Debug + Default> {
     #[default]
     None,
     Int(i64),
@@ -370,7 +370,7 @@ pub enum IntExp<A: Allocator + Default> {
     Rem(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
 }
 
-impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
+impl<A: Allocator + Debug + Default> Eval<i64> for IntExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> i64 {
         use IntExp::*;
         match self {
@@ -387,7 +387,7 @@ impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
     }
 }
 
-impl<A: Allocator + Default> IntExp<A> {
+impl<A: Allocator + Debug + Default> IntExp<A> {
     /// Convert from Local allocator.
     pub fn from(exp: &IntExp<Local>, _src: &[u8]) -> Self {
         match exp {
@@ -401,7 +401,7 @@ impl<A: Allocator + Default> IntExp<A> {
 
 /// String Expression.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum StrExp<A: Allocator + Default> {
+pub enum StrExp<A: Allocator + Debug + Default> {
     #[default]
     None,
     Local(usize),
@@ -411,7 +411,7 @@ pub enum StrExp<A: Allocator + Default> {
     Concat(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
 }
 
-impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
+impl<A: Allocator + Debug + Default> Eval<LString> for StrExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
         use StrExp::*;
         match self {
@@ -430,7 +430,7 @@ impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
     }
 }
 
-impl<A: Allocator + Default> StrExp<A> {
+impl<A: Allocator + Debug + Default> StrExp<A> {
     /// Convert from Local allocator.
     pub fn from(exp: &StrExp<Local>, src: &[u8]) -> Self {
         match exp {

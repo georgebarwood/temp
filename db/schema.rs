@@ -263,7 +263,7 @@ impl Dict {
         let f = &mut self.main.funcs[*fid];
         f.block = gblock(&x.block, src);
         encode_block(&mut f.block);
-        // println!("set fn block, encode done!");
+        // println!("set fn block, encode done, encoded block={:?}", &f.block);
 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
@@ -315,8 +315,13 @@ impl Dict {
         let bytes = Self::load(DICT_ID, ps);
         let mut main = DictMain::from_bytes_id(&bytes);
 
-        let bytes = Self::load(INFO_ID, ps);
-        let info = DictInfo::from_bytes_id(&bytes);
+        let ibytes = Self::load(INFO_ID, ps);
+        let info = DictInfo::from_bytes_id(&ibytes);
+
+        /* println!("Loaded dict bytes={} ibytes={} sys_store={:?}", 
+           bytes.len(), ibytes.len(), ps.sys_store
+        );
+        */
 
         main.cleanup();
 
@@ -399,7 +404,7 @@ impl<S: XString> SFunc<S> {
     }
 }
 
-pub fn write_block<'a, A: Allocator + Default, S: XString>(
+pub fn write_block<'a, A: Allocator + Debug + Default, S: XString>(
     sr: &mut SRun<'a>,
     block: &'a VecA<Statement<A, S>, A>,
 ) -> Result<(), std::fmt::Error> {
