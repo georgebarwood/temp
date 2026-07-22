@@ -30,6 +30,13 @@ impl<'a> Run<'a> {
         self.stack.push(def);
         f
     }
+
+    /// Get mut ref to local stack variable.
+    pub fn local(&mut self, ix: usize) -> &mut Value
+    {
+        let ix = self.stack.len() - (ix + 1);
+        &mut self.stack[ix]
+    }
 }
 
 /// Executes a batch of statements. Result is whether dict was updated.

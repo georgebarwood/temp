@@ -77,10 +77,7 @@ impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
         match self {
             None => panic!(),
             Bool(x) => *x,
-            Local(x) => {
-                let ix = run.stack.len() - (x + 1);
-                run.stack[ix].bool()
-            }
+            Local(x) => run.local(*x).bool(),
             Col(x) => rc.item(*x, run.ps).bool(),
             And(x, y) => x.ev(run, rc) && y.ev(run, rc),
             Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
@@ -124,18 +121,15 @@ impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> i64 {
         use IntExp::*;
         match self {
+            None => panic!(),
             Int(x) => *x,
-            Local(x) => {
-                let ix = run.stack.len() - (x + 1);
-                run.stack[ix].int()
-            }
+            Local(x) => run.local(*x).int(),
             Col(x) => rc.item(*x, run.ps).int(),
             Add(lhs, rhs) => lhs.ev(run, rc) + rhs.ev(run, rc),
             Sub(lhs, rhs) => lhs.ev(run, rc) - rhs.ev(run, rc),
             Mul(lhs, rhs) => lhs.ev(run, rc) * rhs.ev(run, rc),
             Div(lhs, rhs) => lhs.ev(run, rc) / rhs.ev(run, rc),
             Rem(lhs, rhs) => lhs.ev(run, rc) % rhs.ev(run, rc),
-            _ => panic!(),
         }
     }
 }
@@ -169,10 +163,7 @@ impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
         use StrExp::*;
         match self {
             None => panic!(),
-            Local(x) => {
-                let ix = run.stack.len() - (x + 1);
-                LString::from(run.stack[ix].string().as_str())
-            }
+            Local(x) => LString::from( run.local(*x).string().as_str() ),
             Col(x) => LString::from( rc.item(*x, run.ps).string().as_str() ),
             Str(x) => LString::from( x.as_str() ),
             StrPos(x) => LString::from(x.sstr(run.source)),
@@ -252,21 +243,19 @@ pub enum Exp<A: Allocator + Default> {
 
 impl<A: Allocator + Default> Eval<Value> for Exp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Value {
+        use Exp::*;
         match self {
-            Exp::Bool(x) => Value::Bool(x.ev(run, rc)),
-            Exp::Int(x) => Value::Int(x.ev(run, rc)),
-            Exp::Str(x) => Value::String(LRc::new(x.ev(run, rc))),
-            Exp::Local(x) => {
-                let ix = run.stack.len() - (x + 1);
-                run.stack[ix].clone()
-            }
-            Exp::Col(x) => rc.item(*x, run.ps),
-            Exp::Binary(op, x, y) => {
+            Bool(x) => Value::Bool(x.ev(run, rc)),
+            Int(x) => Value::Int(x.ev(run, rc)),
+            Str(x) => Value::String(LRc::new(x.ev(run, rc))),
+            Local(x) => run.local(*x).clone(),
+            Col(x) => rc.item(*x, run.ps),
+            Binary(op, x, y) => {
                 let x = x.ev(run, rc);
                 let y = y.ev(run, rc);
                 op.eval(&x, &y)
             }
-            Exp::FnCall(f, args) => {
+            FnCall(f, args) => {
                 let f = run.call_init(*f);
                 let save = run.stack.len();
                 for e in args {
@@ -277,7 +266,7 @@ impl<A: Allocator + Default> Eval<Value> for Exp<A> {
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            Exp::CallBuiltin(bi, args) => {
+            CallBuiltin(bi, args) => {
                 for e in args {
                     let v = e.ev(run, rc);
                     run.stack.push(v);
