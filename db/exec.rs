@@ -32,10 +32,14 @@ impl<'a> Run<'a> {
     }
 
     /// Get mut ref to local stack variable.
-    pub fn local(&mut self, ix: usize) -> &mut Value
-    {
+    pub fn local(&mut self, ix: usize) -> &mut Value {
         let ix = self.stack.len() - (ix + 1);
         &mut self.stack[ix]
+    }
+
+    pub fn load_table(&mut self, table_ix: usize) -> RTable {
+        let table_dt = self.dict.table_datatype(table_ix);
+        self.ps.load_table(table_ix as i64, table_dt)
     }
 }
 
@@ -108,7 +112,7 @@ fn execute_schema_updates(
 
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
-                    dict.create_table(x.schema_id, tname, x.col_defs.clone());
+                    dict.create_table(x.schema_id, tname, &x.col_defs);
                     println!("Table '{}' created", tname);
                 }
 
@@ -125,9 +129,11 @@ fn execute_schema_updates(
                 Statement::RenameFn(x) => dict.rename_fn(x, src),
 
                 Statement::DropTable(x) => {
+                    let t = x.table;
+                    let dt = dict.table_datatype(t).clone();
                     dict.drop_table(x);
                     // Remove record from sys_schema using x.table_id and ps.
-                    Table::drop(x.table.id, x.table.dt.clone(), ps);
+                    Table::drop(t as i64, dt, ps);
                 }
                 _ => panic!(),
             }
@@ -153,56 +159,53 @@ where
             Statement::If(x) => {
                 x.exp.encode();
                 encode_block(&mut x.block);
-                if let Some(ref mut els) = x.els
-                {
+                if let Some(ref mut els) = x.els {
                     encode_block(els);
                 }
             }
-            Statement::Insert(x) => encode_exp_list( &mut x.vals ),
-            Statement::Update(x) => { 
+            Statement::Insert(x) => encode_exp_list(&mut x.vals),
+            Statement::Update(x) => {
                 x.wher.encode();
-                for (_,exp) in &mut x.assigns
-                {
+                for (_, exp) in &mut x.assigns {
                     exp.encode();
                 }
-            },
+            }
             Statement::Delete(x) => x.wher.encode(),
-            Statement::Select(x) => { 
-                encode_exp_list( &mut x.vals );
-                if let Some(ref mut wher) = x.wher { wher.encode(); }
+            Statement::Select(x) => {
+                encode_exp_list(&mut x.vals);
+                if let Some(ref mut wher) = x.wher {
+                    wher.encode();
+                }
                 if let Some(ref mut ob) = x.order_by {
-                   for exp in &mut ob.0
-                   {
-                      exp.encode();
-                   }
+                    for exp in &mut ob.0 {
+                        exp.encode();
+                    }
                 }
             }
             Statement::For(x) => {
-                for (_,exp) in &mut x.lets
-                {
+                for (_, exp) in &mut x.lets {
                     exp.encode();
                 }
-                if let Some(ref mut wher) = x.wher { wher.encode(); }
-                if let Some(ref mut ob) = x.order_by {
-                   for exp in &mut ob.0
-                   {
-                      exp.encode();
-                   }
+                if let Some(ref mut wher) = x.wher {
+                    wher.encode();
                 }
-                encode_block( &mut x.block );
-            },
+                if let Some(ref mut ob) = x.order_by {
+                    for exp in &mut ob.0 {
+                        exp.encode();
+                    }
+                }
+                encode_block(&mut x.block);
+            }
             _ => {}
         }
     }
 }
 
-fn encode_exp_list<A: Allocator+Default>( list: &mut [Exp<A>] )
-{
+fn encode_exp_list<A: Allocator + Default>(list: &mut [Exp<A>]) {
     for exp in list {
         exp.encode();
     }
 }
-    
 
 /// Append to String or Binary Value.
 pub fn append(x: &mut Value, y: &Value) {

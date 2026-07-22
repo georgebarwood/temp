@@ -83,7 +83,7 @@ where
             }
             Insert(x) => {
                 sr.output.push_str("insert into ");
-                sr.table = Some(x.table.clone());
+                sr.set_table(x.table);
                 sr.write_table_name();
                 sr.output.push_str("(");
                 for i in &x.cols {
@@ -98,7 +98,7 @@ where
             }
             Update(x) => {
                 sr.output.push_str("update ");
-                sr.table = Some(x.table.clone());
+                sr.set_table(x.table);
                 sr.write_table_name();
                 sr.output.push_str(" set ");
                 for (i, (c, e)) in x.assigns.iter().enumerate() {
@@ -114,14 +114,16 @@ where
             }
             Delete(x) => {
                 sr.output.push_str("delete from ");
-                sr.table = Some(x.table.clone());
+                sr.set_table(x.table);
                 sr.write_table_name();
                 sr.output.push_str(" where ");
                 x.wher.show(sr)?;
             }
             Select(x) => {
                 sr.output.push_str("select ");
-                sr.table = x.from.clone();
+                if let Some(from) = x.from {
+                    sr.set_table(from);
+                }
                 for (i, e) in x.vals.iter().enumerate() {
                     if i != 0 {
                         sr.output.push_str(", ");
@@ -141,7 +143,7 @@ where
             For(x) => {
                 let save = sr.names.len();
                 sr.output.push_str("for ");
-                sr.table = Some(x.from.clone());
+                sr.set_table(x.from);
                 for (name, val) in &x.lets {
                     let name = name.str();
                     sr.names.push(name);
@@ -203,14 +205,14 @@ where
                 Statement::If(If { exp, block, els })
             }
             Statement::Insert(x) => {
-                let table = x.table.clone();
+                let table = x.table;
                 let cols = VecA::from(&*x.cols);
                 let vals = gvals(&x.vals, src);
                 Statement::Insert(Insert { table, cols, vals })
             }
             Statement::Select(x) => {
                 let vals = gvals(&x.vals, src);
-                let from = x.from.clone();
+                let from = x.from;
                 let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
                 let order_by = gorder_by(&x.order_by, src);
                 Statement::Select(Select {
@@ -222,7 +224,7 @@ where
             }
             Statement::For(x) => {
                 let lets = glets(&x.lets, src);
-                let from = x.from.clone();
+                let from = x.from;
                 let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
                 let order_by = gorder_by(&x.order_by, src);
                 let block = gblock(&x.block, src);
@@ -235,7 +237,7 @@ where
                 })
             }
             Statement::Update(x) => {
-                let table = x.table.clone();
+                let table = x.table;
                 let wher = Exp::from(&x.wher, src);
                 let mut assigns = VecA::new();
                 for (i, e) in &x.assigns {
@@ -248,7 +250,7 @@ where
                 })
             }
             Statement::Delete(x) => {
-                let table = x.table.clone();
+                let table = x.table;
                 let wher = Exp::from(&x.wher, src);
                 Statement::Delete(Delete { table, wher })
             }
@@ -335,7 +337,7 @@ impl<A: Allocator + Default, S: XString> If<A, S> {
 /// INSERT statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Insert<A: Allocator + Default> {
-    pub table: Arc<STable>,
+    pub table: usize,
     pub cols: VecA<usize, A>,
     pub vals: VecA<Exp<A>, A>,
 }
@@ -347,8 +349,7 @@ impl<A: Allocator + Default> Insert<A> {
         for e in &self.vals {
             ee.push(e.eval(run));
         }
-        let t = &self.table;
-        let t = run.ps.load_table(t.id, &t.dt);
+        let t = run.load_table(self.table);
         let mut table = t.borrow_mut();
 
         let mut row = table.datatype.default_value();
@@ -392,14 +393,14 @@ impl<A: Allocator + Default> Insert<A> {
 /// UPDATE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update<A: Allocator + Default> {
-    pub table: Arc<STable>,
+    pub table: usize,
     pub assigns: VecA<(usize, Exp<A>), A>, // col num, Exp
     pub wher: Exp<A>,
 }
 
 impl<A: Allocator + Default> Update<A> {
     pub fn exec(&self, run: &mut Run) {
-        let t = run.ps.load_table(self.table.id, &self.table.dt);
+        let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
         for id in &ids {
@@ -423,13 +424,13 @@ impl<A: Allocator + Default> Update<A> {
 /// DELETE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete<A: Allocator + Default> {
-    pub table: Arc<STable>,
+    pub table: usize,
     pub wher: Exp<A>,
 }
 
 impl<A: Allocator + Default> Delete<A> {
     pub fn exec(&self, run: &mut Run) {
-        let t = run.ps.load_table(self.table.id, &self.table.dt);
+        let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
         for id in &ids {
@@ -445,7 +446,7 @@ pub type OrderBy<A> = Option<(VecA<Exp<A>, A>, VecA<bool, A>)>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Select<A: Allocator + Default> {
     pub vals: VecA<Exp<A>, A>,
-    pub from: Option<Arc<STable>>,
+    pub from: Option<usize>,
     pub wher: Option<Exp<A>>,
     pub order_by: OrderBy<A>,
 }
@@ -455,7 +456,7 @@ impl<A: Allocator + Default> Select<A> {
         if self.order_by.is_some() {
             self.exec_order_by(run)
         } else if let Some(f) = &self.from {
-            let t = run.ps.load_table(f.id, &f.dt);
+            let t = run.load_table(*f);
             let table = t.borrow();
             let mut iter = table.iter(run.ps);
             while let Some(b) = iter.next_ref(run.ps) {
@@ -482,7 +483,7 @@ impl<A: Allocator + Default> Select<A> {
         }
     }
     pub fn exec_order_by(&self, run: &mut Run) {
-        let f = self.from.as_ref().unwrap();
+        let f = self.from.unwrap();
         let temp = get_temp(f, &self.vals, &self.wher, &self.order_by, run);
 
         let n = self.order_by.as_ref().unwrap().0.len();
@@ -498,7 +499,7 @@ impl<A: Allocator + Default> Select<A> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct For<A: Allocator + Default, S: XString> {
     pub lets: VecA<(S, Exp<A>), A>,
-    pub from: Arc<STable>,
+    pub from: usize,
     pub wher: Option<Exp<A>>,
     pub order_by: OrderBy<A>,
     pub block: VecA<Statement<A, S>, A>,
@@ -509,7 +510,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
         if self.order_by.is_some() {
             self.exec_order_by(run);
         } else {
-            let t = run.ps.load_table(self.from.id, &self.from.dt);
+            let t = run.load_table(self.from);
             let table = t.borrow();
             let mut iter = table.iter(run.ps);
             while let Some(b) = iter.next_ref(run.ps) {
@@ -535,7 +536,7 @@ impl<A: Allocator + Default, S: XString> For<A, S> {
         }
     }
     pub fn exec_order_by(&self, run: &mut Run) {
-        let temp = get_for_temp(&self.from, &self.lets, &self.wher, &self.order_by, run);
+        let temp = get_for_temp(self.from, &self.lets, &self.wher, &self.order_by, run);
 
         let n = self.order_by.as_ref().unwrap().0.len();
 
@@ -561,7 +562,7 @@ pub struct CreateSchema {
 pub struct CreateTable {
     pub schema_id: i64,
     pub tname: SrcPos,
-    pub col_defs: Arc<DataType>,
+    pub col_defs: DataType,
 }
 
 /// RENAME TABLE statement.
@@ -597,7 +598,7 @@ pub struct RenameFn {
 pub struct DropTable {
     pub schema_id: i64,
     pub name_id: i64,
-    pub table: Arc<STable>,
+    pub table: usize,
 }
 
 /// Execute list of statements.
@@ -704,7 +705,7 @@ where
 
 /// Get filtered, sorted temporary table.
 fn get_for_temp<A, S>(
-    st: &STable,
+    table_id: usize,
     lets: &[(S, Exp<A>)],
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
@@ -714,7 +715,7 @@ where
     A: Allocator + Default,
 {
     let (ob, desc) = order_by.as_ref().unwrap();
-    let table = run.ps.load_table(st.id, &st.dt);
+    let table = run.load_table(table_id);
     let table = table.borrow();
     let mut iter = table.iter(run.ps);
 
@@ -745,7 +746,7 @@ where
 
 /// Get filtered, sorted temporary table.
 fn get_temp<A>(
-    st: &STable,
+    table_id: usize,
     vals: &[Exp<A>],
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
@@ -755,7 +756,7 @@ where
     A: Allocator + Default,
 {
     let (ob, desc) = order_by.as_ref().unwrap();
-    let table = run.ps.load_table(st.id, &st.dt);
+    let table = run.load_table(table_id);
     let table = table.borrow();
     let mut iter = table.iter(run.ps);
 

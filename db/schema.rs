@@ -32,7 +32,7 @@ pub struct Dict {
     schema_names: HashMap<i64, GString>,
 
     /// Maps table id to (schema_id, nid).
-    table_names: HashMap<i64, (i64, i64)>,
+    table_names: HashMap<usize, (i64, i64)>,
 }
 
 /// Main dictionary, run-time copy.
@@ -42,15 +42,22 @@ struct DictMain {
     schemas: HashMap<GString, i64>,
     /// Map from string to name id.
     names: HashMap<GString, i64>,
-    /// Map from (schema id,name id) to STable.
-    tables: HashMap<(i64, i64), Arc<STable>>,
+
+    /// Map from (schema id,name id) to table index/id.
+    table_lookup: HashMap<(i64, i64), usize>,
+
     /// Map from (schema id, name id) to index into funcs.
     func_lookup: HashMap<(i64, i64), usize>,
-    /// List of stored functions (no display datat)
+
+    /// List of table datatypes.
+    table_dt: GVec<Arc<DataType>>,
+
+    /// List of stored functions (no display data)
     funcs: GVec<SFunc<NoString>>,
+
     last_schema_id: i64,
     last_name_id: i64,
-    last_table_id: i64,
+    last_table_id: usize,
 }
 
 /// Extra info, such as parameter and local variable names for functions.
@@ -76,7 +83,7 @@ impl DictInfo {
 impl DictMain {
     fn new() -> Self {
         Self {
-            last_table_id: RESVD_ID as i64,
+            last_table_id: (RESVD_ID - 1) as usize,
             ..Default::default()
         }
     }
@@ -84,7 +91,7 @@ impl DictMain {
         self.last_schema_id += 1;
         self.last_schema_id
     }
-    fn new_table_id(&mut self) -> i64 {
+    fn new_table_id(&mut self) -> usize {
         self.last_table_id += 1;
         self.last_table_id
     }
@@ -105,7 +112,7 @@ impl DictMain {
     /// Retain only nids that are still in use.
     fn cleanup(&mut self) {
         let mut ok = HashSet::default();
-        for (_, nid) in self.tables.keys() {
+        for (_, nid) in self.table_lookup.keys() {
             ok.insert(nid);
         }
         for (_, nid) in self.func_lookup.keys() {
@@ -140,16 +147,26 @@ impl Dict {
     }
 
     /// Get table from schema id and name id.
-    pub fn table(&self, x: &(i64, i64)) -> Option<&Arc<STable>> {
-        self.main.tables.get(x)
+    pub fn table(&self, x: &(i64, i64)) -> Option<(usize, &Arc<DataType>)> {
+        if let Some(table_ix) = self.main.table_lookup.get(x) {
+            let ix = *table_ix - RESVD_ID as usize;
+            Some((*table_ix, &self.main.table_dt[ix]))
+        } else {
+            None
+        }
     }
 
     /// Get table schema and name from table id.
-    pub fn table_name(&self, id: i64) -> Option<(&str, &str)> {
+    pub fn table_name(&self, id: usize) -> Option<(&str, &str)> {
         let (schema_id, nid) = self.table_names.get(&id)?;
         let schema = self.schema_names.get(schema_id)?;
         let tname = self.names.get(nid)?;
         Some((schema, tname))
+    }
+
+    /// Get table datatype from table id.
+    pub fn table_datatype(&self, id: usize) -> &Arc<DataType> {
+        &self.main.table_dt[id - RESVD_ID as usize]
     }
 
     /// Get function index from schema id and name id.
@@ -187,11 +204,11 @@ impl Dict {
     }
 
     /// Create Table.
-    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: Arc<DataType>) {
+    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) {
         let id = self.main.new_table_id();
-        let table = STable { id, dt };
         let nid = self.new_name_id(name);
-        self.main.tables.insert((schema_id, nid), Arc::new(table));
+        self.main.table_lookup.insert((schema_id, nid), id);
+        self.main.table_dt.push(Arc::new(dt.clone()));
         self.table_names.insert(id, (schema_id, nid));
     }
 
@@ -201,15 +218,20 @@ impl Dict {
         let new_nid = self.new_name_id(new_tname);
         let t = self
             .main
-            .tables
+            .table_lookup
             .remove(&(x.old_schema_id, x.old_nid))
             .unwrap();
-        self.main.tables.insert((x.new_schema_id, new_nid), t);
+        self.main.table_lookup.insert((x.new_schema_id, new_nid), t);
     }
 
     /// Drop Table.
     pub fn drop_table(&mut self, x: &DropTable) {
-        self.main.tables.remove(&(x.schema_id, x.name_id));
+        let ix = self
+            .main
+            .table_lookup
+            .remove(&(x.schema_id, x.name_id))
+            .unwrap();
+        self.main.table_dt[ix - RESVD_ID as usize] = Arc::new(DataType::Empty); // Now an empty slot.
     }
 
     /// Create Function.
@@ -310,9 +332,8 @@ impl Dict {
         for (k, v) in &dict.main.names {
             dict.names.insert(*v, k.clone());
         }
-        for (k, t) in &dict.main.tables {
-            let id = t.id;
-            dict.table_names.insert(id, *k);
+        for (k, id) in &dict.main.table_lookup {
+            dict.table_names.insert(*id, *k);
         }
 
         Arc::new(dict)
@@ -334,19 +355,6 @@ impl Dict {
     }
 }
 
-/// Schema Table - id and DataType.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct STable {
-    pub id: i64,
-    pub dt: Arc<DataType>,
-}
-
-impl STable {
-    pub fn name_to_col(&self, s: &str) -> Option<(usize, &DataType)> {
-        self.dt.name_to_col(s)
-    }
-}
-
 /// Schema Stored Function - result DataType, Param types and Statements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc<S: XString> {
@@ -354,8 +362,8 @@ pub struct SFunc<S: XString> {
     pub fname: S,
 
     /// result datatype
-    pub ret: Arc<DataType>,
-    pub parms: GVec<(S, Arc<DataType>)>,
+    pub ret: Arc<DataType>, // Maybe don't need the Arc.
+    pub parms: GVec<(S, Arc<DataType>)>, // Maybe don't need the Arc.
     pub block: GVec<Statement<Perm, S>>,
 }
 
@@ -466,7 +474,7 @@ pub struct SRun<'a> {
     pub indent: usize,
     pub output: LString,
     pub dict: &'a Dict,
-    pub table: Option<Arc<STable>>, // For column names.
+    pub table: Option<(usize, &'a Arc<DataType>)>, // For table name and column names.
 }
 
 impl<'a> SRun<'a> {
@@ -481,6 +489,11 @@ impl<'a> SRun<'a> {
         }
     }
 
+    pub fn set_table(&mut self, table_ix: usize) {
+        let dt = self.dict.table_datatype(table_ix);
+        self.table = Some((table_ix, dt));
+    }
+
     pub fn write_name(&mut self, ix: usize) {
         // println!("output={} names={:?}, self.name, ix={} aos={}", &self.output, &self.names, ix, self.aos );
 
@@ -489,17 +502,16 @@ impl<'a> SRun<'a> {
     }
 
     pub fn write_col_name(&mut self, ix: usize) {
-        let t = self.table.as_ref().unwrap();
-        let name = t.dt.name_struct(ix);
+        let (_id, dt) = self.table.as_ref().unwrap();
+        let name = dt.name_struct(ix);
 
         write!(&mut self.output, "{}", name).unwrap();
     }
 
     pub fn write_table_name(&mut self) {
-        let t = self.table.as_ref().unwrap();
-        let id = t.id;
+        let (id, _dt) = self.table.as_ref().unwrap();
 
-        let (schema, name) = self.dict.table_name(id).unwrap();
+        let (schema, name) = self.dict.table_name(*id).unwrap();
 
         write!(&mut self.output, "{}.{}", schema, name).unwrap();
     }

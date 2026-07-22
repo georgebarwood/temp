@@ -117,7 +117,7 @@ use parser::*;
 mod token;
 use token::*;
 
-/// [Dict]ionary of schemas, tables, functions. [`STable`], [`SFunc`].
+/// [Dict]ionary of schemas, tables, functions. [`SFunc`].
 mod schema;
 pub use schema::*;
 

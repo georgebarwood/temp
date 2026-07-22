@@ -12,7 +12,7 @@ struct Loc<'a> {
 
 /// Resolve Context ( for resolving names ).
 enum RContext<'a> {
-    STable(&'a STable, &'a RContext<'a>),
+    STable(&'a Arc<DataType>, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }
 
@@ -228,14 +228,14 @@ impl<'a> Parser<'a> {
             }
         }
         self.expect_ident(b"from")?;
-        let (from, _, _) = self.table()?;
+        let (from, _, _, table_dt) = self.table()?;
 
         let len = self.locs.len();
 
         // Resolve names, push idents and typs onto local bindings.
         for (name, val) in &mut lets {
             let lctx = RContext::Local(&self.locs);
-            let tctx = RContext::STable(&from, &lctx);
+            let tctx = RContext::STable(&table_dt, &lctx);
             let dt = self.resolve(val, &tctx, 0)?;
             let dt = Arc::new(dt.clone());
             self.locs.push(Loc {
@@ -245,12 +245,12 @@ impl<'a> Parser<'a> {
         }
 
         let wher = if self.test_ident(b"where")? {
-            let wher = self.bool_exp_table(&from)?;
+            let wher = self.bool_exp_table(&table_dt)?;
             Some(wher)
         } else {
             None
         };
-        let order_by = self.order_by(&from)?;
+        let order_by = self.order_by(&table_dt)?;
 
         let block = self.block()?;
 
@@ -285,12 +285,12 @@ impl<'a> Parser<'a> {
     }
 
     fn update(&mut self) -> Result<LStatement, E> {
-        let (table, _, _) = self.table()?;
+        let (table, _, _, table_dt) = self.table()?;
         self.expect_ident(b"set")?;
-        let assigns = self.assigns(&table)?;
+        let assigns = self.assigns(&table_dt)?;
         self.expect_ident(b"where")?;
 
-        let wher = self.bool_exp_table(&table)?;
+        let wher = self.bool_exp_table(&table_dt)?;
 
         let result = Statement::Update(Update {
             table,
@@ -303,25 +303,25 @@ impl<'a> Parser<'a> {
 
     fn delete(&mut self) -> Result<LStatement, E> {
         self.expect_ident(b"from")?;
-        let (table, _, _) = self.table()?;
+        let (table, _, _, table_dt) = self.table()?;
         self.expect_ident(b"where")?;
 
-        let wher = self.bool_exp_table(&table)?;
+        let wher = self.bool_exp_table(&table_dt)?;
 
         let result = Statement::Delete(Delete { table, wher });
         self.non_schema_statements = true;
         Ok(result)
     }
 
-    fn assigns(&mut self, table: &STable) -> Result<LVec<(usize, Exp<Local>)>, E> {
+    fn assigns(&mut self, table_dt: &Arc<DataType>) -> Result<LVec<(usize, Exp<Local>)>, E> {
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
-            if let Some(col_id) = table.dt.lookup_col(ident) {
+            if let Some(col_id) = table_dt.lookup_col(ident) {
                 self.expect_token(Token::Equal)?;
                 let mut exp = self.exp(0)?;
                 {
                     let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::STable(table, &lctx);
+                    let tctx = RContext::STable(table_dt, &lctx);
                     self.resolve(&mut exp, &tctx, 0)?;
                 }
                 result.push((col_id, exp));
@@ -337,8 +337,8 @@ impl<'a> Parser<'a> {
 
     fn insert(&mut self) -> Result<LStatement, E> {
         self.expect_ident(b"into")?;
-        let (table, _, _) = self.table()?;
-        let cols = self.name_list(&table)?;
+        let (table, _, _, table_dt) = self.table()?;
+        let cols = self.name_list(&table_dt)?;
 
         self.expect_ident(b"values")?;
 
@@ -352,7 +352,7 @@ impl<'a> Parser<'a> {
                     // Resolve variables and check expression has correct type.
                     let lctx = RContext::Local(&self.locs);
                     let vt = self.resolve(&mut val, &lctx, 0)?;
-                    let et = table.dt.dt_struct(cols[i]);
+                    let et = table_dt.dt_struct(cols[i]);
                     self.check_types(vt, et)?;
                 }
                 vals.push(val);
@@ -379,18 +379,18 @@ impl<'a> Parser<'a> {
         let mut vals = self.exp_list()?;
 
         let result = if self.test_ident(b"from")? {
-            let (from, _, _) = self.table()?;
+            let (from, _, _, table_dt) = self.table()?;
 
             let wher = if self.test_ident(b"where")? {
-                let wher = self.bool_exp_table(&from)?;
+                let wher = self.bool_exp_table(&table_dt)?;
                 Some(wher)
             } else {
                 None
             };
-            let order_by = self.order_by(&from)?;
+            let order_by = self.order_by(&table_dt)?;
             {
                 let lctx = RContext::Local(&self.locs);
-                let tctx = RContext::STable(&from, &lctx);
+                let tctx = RContext::STable(&table_dt, &lctx);
                 self.resolve_names(&mut vals, &tctx)?;
             }
 
@@ -415,7 +415,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Select(result))
     }
 
-    fn order_by(&mut self, t: &STable) -> Result<LOrderBy, E> {
+    fn order_by(&mut self, table_dt: &Arc<DataType>) -> Result<LOrderBy, E> {
         if self.test_ident(b"order")? {
             self.expect_ident(b"by")?;
             let mut exps = LVec::new();
@@ -425,7 +425,7 @@ impl<'a> Parser<'a> {
 
                 if self.pass == 2 {
                     let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::STable(t, &lctx);
+                    let tctx = RContext::STable(table_dt, &lctx);
                     let _dt = self.resolve(&mut exp, &tctx, 0)?;
                 }
 
@@ -585,11 +585,11 @@ impl<'a> Parser<'a> {
         Ok(exp)
     }
 
-    fn bool_exp_table(&mut self, t: &STable) -> Result<LExp, E> {
+    fn bool_exp_table(&mut self, table_dt: &Arc<DataType>) -> Result<LExp, E> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
-            let tctx = RContext::STable(t, &lctx);
+            let tctx = RContext::STable(table_dt, &lctx);
             let edt = self.resolve(&mut exp, &tctx, 0)?;
             if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
@@ -711,11 +711,11 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn name_list(&mut self, table: &STable) -> Result<LVec<usize>, E> {
+    fn name_list(&mut self, table_dt: &Arc<DataType>) -> Result<LVec<usize>, E> {
         self.expect_token(Token::LBra)?;
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
-            if let Some(col_id) = table.dt.lookup_col(ident) {
+            if let Some(col_id) = table_dt.lookup_col(ident) {
                 result.push(col_id);
             } else {
                 return Err(E::new("Col name not found"));
@@ -728,13 +728,13 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn table(&mut self) -> Result<(Arc<STable>, i64, i64), E> {
+    fn table(&mut self) -> Result<(usize, i64, i64, Arc<DataType>), E> {
         let schema = self.read_ident()?;
         let sid = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table, nid) = self.check_table(sid, &tname)?;
-        Ok((table, sid, nid))
+        let (table_ix, nid, table_dt) = self.check_table(sid, &tname)?;
+        Ok((table_ix, sid, nid, table_dt.clone()))
     }
 
     fn function(&mut self) -> Result<(usize, i64, i64), E> {
@@ -763,7 +763,7 @@ impl<'a> Parser<'a> {
             if self.pass == 2 {
                 (0, 0)
             } else {
-                let (_, x, y) = t?;
+                let (_, x, y, _) = t?;
                 (x, y)
             }
         };
@@ -795,7 +795,7 @@ impl<'a> Parser<'a> {
         if self.pass == 1 && self.check_table(schema_id, &tname).is_ok() {
             return Err(E::new("Table already exists"));
         }
-        let col_defs = Arc::new(self.col_defs()?);
+        let col_defs = self.col_defs()?;
 
         let result = CreateTable {
             schema_id,
@@ -898,7 +898,7 @@ impl<'a> Parser<'a> {
     }
 
     fn drop_table(&mut self) -> Result<LStatement, E> {
-        let (table, schema_id, name_id) = self.table()?;
+        let (table, schema_id, name_id, _table_dt) = self.table()?;
         let result = DropTable {
             table,
             schema_id,
@@ -966,10 +966,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(Arc<STable>, i64), E> {
+    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, i64, &Arc<DataType>), E> {
         let nid = self.check_tfname(tname)?;
-        if let Some(table) = self.dict.table(&(schema, nid)) {
-            Ok((table.clone(), nid))
+        if let Some((table_ix, table_dt)) = self.dict.table(&(schema, nid)) {
+            Ok((table_ix, nid, table_dt))
         } else {
             Err(E::new("Table not found"))
         }

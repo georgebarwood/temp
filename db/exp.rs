@@ -1,207 +1,6 @@
 use crate::*;
 use serde::*;
 
-/// Position of string in source.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct SrcPos {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl XString for SrcPos {
-    fn sstr<'a>(&self, src: &'a [u8]) -> &'a str {
-        tos(&src[self.start..self.end])
-    }
-    fn from_str(_s: &str) -> Self {
-        panic!()
-    }
-}
-
-/// No row context, for [`Exp::eval`].
-struct NoRowContext;
-impl RowContext for NoRowContext {
-    fn item(&mut self, _i: usize, _ps: &mut PageSet) -> Value {
-        panic!()
-    }
-}
-
-/// Row context that is list of values, for [`Exp::eval_vals`].
-struct ValsRowContext<'a> {
-    vals: &'a [Value],
-}
-
-impl<'a> RowContext for ValsRowContext<'a> {
-    fn item(&mut self, item: usize, _ps: &mut PageSet) -> Value {
-        self.vals[item].clone()
-    }
-}
-
-pub trait Eval<T> {
-    /// Evaluate the expression with specified row context.
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> T;
-
-    /// Evaluate the expression, no row context.
-    fn eval(&self, run: &mut Run) -> T {
-        self.ev(run, &mut NoRowContext)
-    }
-
-    /// Evaluate the expression using specified row values.
-    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> T {
-        let mut vc = ValsRowContext { vals };
-        self.ev(run, &mut vc)
-    }
-}
-
-/// Bool Expression.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum BoolExp<A: Allocator + Default> {
-    #[default]
-    None,
-    Bool(bool),
-    Local(usize),
-    Col(usize),
-    And(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
-    Or(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
-    IntEq(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    IntNe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    IntLt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    IntGt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    IntLe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    IntGe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    // String comparison is todo
-}
-
-impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> bool {
-        use BoolExp::*;
-        match self {
-            None => panic!(),
-            Bool(x) => *x,
-            Local(x) => run.local(*x).bool(),
-            Col(x) => rc.item(*x, run.ps).bool(),
-            And(x, y) => x.ev(run, rc) && y.ev(run, rc),
-            Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
-            IntEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
-            IntNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
-            IntLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
-            IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
-            IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
-            IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
-        }
-    }
-}
-
-impl<A: Allocator + Default> BoolExp<A> {
-    pub fn from(exp: &BoolExp<Local>, _src: &[u8]) -> Self {
-        match exp {
-            BoolExp::Bool(x) => BoolExp::Bool(*x),
-            BoolExp::Local(x) => BoolExp::Local(*x),
-            BoolExp::Col(x) => BoolExp::Col(*x),
-            _ => todo!(),
-        }
-    }
-}
-
-/// Integer Expression.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum IntExp<A: Allocator + Default> {
-    #[default]
-    None,
-    Int(i64),
-    Local(usize),
-    Col(usize),
-    Add(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    Sub(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    Mul(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    Div(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    Rem(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-}
-
-impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> i64 {
-        use IntExp::*;
-        match self {
-            None => panic!(),
-            Int(x) => *x,
-            Local(x) => run.local(*x).int(),
-            Col(x) => rc.item(*x, run.ps).int(),
-            Add(lhs, rhs) => lhs.ev(run, rc) + rhs.ev(run, rc),
-            Sub(lhs, rhs) => lhs.ev(run, rc) - rhs.ev(run, rc),
-            Mul(lhs, rhs) => lhs.ev(run, rc) * rhs.ev(run, rc),
-            Div(lhs, rhs) => lhs.ev(run, rc) / rhs.ev(run, rc),
-            Rem(lhs, rhs) => lhs.ev(run, rc) % rhs.ev(run, rc),
-        }
-    }
-}
-
-impl<A: Allocator + Default> IntExp<A> {
-    /// Convert from Local allocator.
-    pub fn from(exp: &IntExp<Local>, _src: &[u8]) -> Self {
-        match exp {
-            IntExp::Int(x) => IntExp::Int(*x),
-            IntExp::Local(x) => IntExp::Local(*x),
-            IntExp::Col(x) => IntExp::Col(*x),
-            _ => todo!(),
-        }
-    }
-}
-
-/// String Expression.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub enum StrExp<A: Allocator + Default> {
-    #[default]
-    None,
-    Local(usize),
-    Col(usize),
-    Str(GString),
-    StrPos(SrcPos),
-    Concat(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
-}
-
-impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
-        use StrExp::*;
-        match self {
-            None => panic!(),
-            Local(x) => LString::from( run.local(*x).string().as_str() ),
-            Col(x) => LString::from( rc.item(*x, run.ps).string().as_str() ),
-            Str(x) => LString::from( x.as_str() ),
-            StrPos(x) => LString::from(x.sstr(run.source)),
-            Concat(lhs, rhs) => {
-                let mut lhs = lhs.ev(run, rc);
-                let rhs = rhs.ev(run, rc);
-                lhs.push_str(&rhs);
-                lhs
-            }
-        }
-    }
-}
-
-impl<A: Allocator + Default> StrExp<A> {
-    /// Convert from Local allocator.
-    pub fn from(exp: &StrExp<Local>, src: &[u8]) -> Self {
-        match exp {
-            StrExp::Str(x) => StrExp::Str(GString::from(x.as_str())),
-            StrExp::Local(x) => StrExp::Local(*x),
-            StrExp::Col(x) => StrExp::Col(*x),
-            StrExp::StrPos(x) => StrExp::Str(GString::from(x.sstr(src))),
-            _ => todo!(),
-        }
-    }
-
-    pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
-        match self {
-            StrExp::Str(x) => {
-                sr.output.push_str("'");
-                sr.output.push_str(x.as_str());
-                sr.output.push_str("'");
-            }
-            _ => todo!(),
-        }
-        Ok(())
-    }
-}
-
 /* Experiment...
    Idea is that stronger typed expression eval more efficiently as fewer internal Values to evaluate.
 
@@ -219,6 +18,7 @@ impl<A: Allocator + Default> StrExp<A> {
    If it is not a stored function, it is simply encoded for temporary execution.
 */
 
+/// Expression.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub enum Exp<A: Allocator + Default> {
     #[default]
@@ -372,7 +172,7 @@ impl<A: Allocator + Default> Exp<A> {
             _ => Exp::Local(x),
         }
     }
-    
+
     pub fn col(x: usize, dt: &DataType) -> Self {
         match dt {
             DataType::Bool => Exp::Bool(BoolExp::Col(x)),
@@ -392,22 +192,19 @@ impl<A: Allocator + Default> Exp<A> {
         use Exp::*;
         use std::fmt::Write;
         match self {
-                 
-            Local(x) 
-                | Bool(BoolExp::Local(x))
-                | Int(IntExp::Local(x))
-                | Str(StrExp::Local(x)) => sr.write_name(*x),
-            
-            Col(x)
-                | Bool(BoolExp::Col(x))
-                | Int(IntExp::Col(x))
-                | Str(StrExp::Col(x)) => sr.write_col_name(*x),
+            Local(x) | Bool(BoolExp::Local(x)) | Int(IntExp::Local(x)) | Str(StrExp::Local(x)) => {
+                sr.write_name(*x)
+            }
+
+            Col(x) | Bool(BoolExp::Col(x)) | Int(IntExp::Col(x)) | Str(StrExp::Col(x)) => {
+                sr.write_col_name(*x)
+            }
 
             // Constants.
             Bool(BoolExp::Bool(x)) => write!(&mut sr.output, "{}", x)?,
             Int(IntExp::Int(x)) => write!(&mut sr.output, "{}", x)?,
             Str(x) => x.show(sr)?, // For string constants,
-            
+
             Binary(op, x, y) => {
                 let p = op.precedence();
                 if p < pp || p == pp && right {
@@ -437,7 +234,9 @@ impl<A: Allocator + Default> Exp<A> {
     fn show_args(args: &[Exp<A>], sr: &mut SRun, ros: bool) -> Result<(), std::fmt::Error> {
         sr.output.push('(');
         let save = sr.aos;
-        if ros { sr.aos += 1; }
+        if ros {
+            sr.aos += 1;
+        }
         for (i, e) in args.iter().enumerate() {
             if i > 0 {
                 sr.output.push_str(", ");
@@ -449,42 +248,209 @@ impl<A: Allocator + Default> Exp<A> {
         sr.aos = save;
         Ok(())
     }
+} // end impl Exp
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+/// Position of string in source.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct SrcPos {
+    pub start: usize,
+    pub end: usize,
 }
 
-pub fn test_new_exp(ps: &mut PageSet) {
-    let i1 = LBox::new(IntExp::Int(100));
-    let i2 = LBox::new(IntExp::Int(5));
-    let i3 = LBox::new(IntExp::Int(2));
-    let exp1 = LBox::new(IntExp::Add(i1, i2));
-    let exp3 = IntExp::Mul(exp1, i3);
-
-    println!("exp3={:?}", exp3);
-
-    let dict = Dict::new();
-    let mut output = LVec::new();
-    let mut run = Run {
-        stack: LVec::new(),
-        dict: &dict,
-        ps,
-        source: b"",
-        output: &mut output,
-    };
-
-    let result = exp3.eval(&mut run);
-    println!("result ={}", result);
-}
-
-/**/
-
-/*
-impl<A,AT> TExp<T> for Add<A,AT>
-where
-    A: Allocator + Default,
-    AT: TExp<T>,
-    T: ops::Add<Output = T>,
-{
-    fn eval(&self, run: &mut Run) -> T {
-        self.0.eval(run) + self.1.eval(run)
+impl XString for SrcPos {
+    fn sstr<'a>(&self, src: &'a [u8]) -> &'a str {
+        tos(&src[self.start..self.end])
+    }
+    fn from_str(_s: &str) -> Self {
+        panic!()
     }
 }
-*/
+
+/// No row context, for [`Exp::eval`].
+struct NoRowContext;
+impl RowContext for NoRowContext {
+    fn item(&mut self, _i: usize, _ps: &mut PageSet) -> Value {
+        panic!()
+    }
+}
+
+/// Row context that is list of values, for [`Exp::eval_vals`].
+struct ValsRowContext<'a> {
+    vals: &'a [Value],
+}
+
+impl<'a> RowContext for ValsRowContext<'a> {
+    fn item(&mut self, item: usize, _ps: &mut PageSet) -> Value {
+        self.vals[item].clone()
+    }
+}
+
+pub trait Eval<T> {
+    /// Evaluate the expression with specified row context.
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> T;
+
+    /// Evaluate the expression, no row context.
+    fn eval(&self, run: &mut Run) -> T {
+        self.ev(run, &mut NoRowContext)
+    }
+
+    /// Evaluate the expression using specified row values.
+    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> T {
+        let mut vc = ValsRowContext { vals };
+        self.ev(run, &mut vc)
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+/// Bool Expression.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum BoolExp<A: Allocator + Default> {
+    #[default]
+    None,
+    Bool(bool),
+    Local(usize),
+    Col(usize),
+    And(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
+    Or(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
+    IntEq(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    IntNe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    IntLt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    IntGt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    IntLe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    IntGe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    // String comparison is todo
+}
+
+impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> bool {
+        use BoolExp::*;
+        match self {
+            None => panic!(),
+            Bool(x) => *x,
+            Local(x) => run.local(*x).bool(),
+            Col(x) => rc.item(*x, run.ps).bool(),
+            And(x, y) => x.ev(run, rc) && y.ev(run, rc),
+            Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
+            IntEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
+            IntNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
+            IntLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
+            IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
+            IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
+            IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
+        }
+    }
+}
+
+impl<A: Allocator + Default> BoolExp<A> {
+    pub fn from(exp: &BoolExp<Local>, _src: &[u8]) -> Self {
+        match exp {
+            BoolExp::Bool(x) => BoolExp::Bool(*x),
+            BoolExp::Local(x) => BoolExp::Local(*x),
+            BoolExp::Col(x) => BoolExp::Col(*x),
+            _ => panic!(),
+        }
+    }
+}
+
+/// Integer Expression.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum IntExp<A: Allocator + Default> {
+    #[default]
+    None,
+    Int(i64),
+    Local(usize),
+    Col(usize),
+    Add(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    Sub(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    Mul(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    Div(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+    Rem(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+}
+
+impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> i64 {
+        use IntExp::*;
+        match self {
+            None => panic!(),
+            Int(x) => *x,
+            Local(x) => run.local(*x).int(),
+            Col(x) => rc.item(*x, run.ps).int(),
+            Add(lhs, rhs) => lhs.ev(run, rc) + rhs.ev(run, rc),
+            Sub(lhs, rhs) => lhs.ev(run, rc) - rhs.ev(run, rc),
+            Mul(lhs, rhs) => lhs.ev(run, rc) * rhs.ev(run, rc),
+            Div(lhs, rhs) => lhs.ev(run, rc) / rhs.ev(run, rc),
+            Rem(lhs, rhs) => lhs.ev(run, rc) % rhs.ev(run, rc),
+        }
+    }
+}
+
+impl<A: Allocator + Default> IntExp<A> {
+    /// Convert from Local allocator.
+    pub fn from(exp: &IntExp<Local>, _src: &[u8]) -> Self {
+        match exp {
+            IntExp::Int(x) => IntExp::Int(*x),
+            IntExp::Local(x) => IntExp::Local(*x),
+            IntExp::Col(x) => IntExp::Col(*x),
+            _ => panic!(),
+        }
+    }
+}
+
+/// String Expression.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum StrExp<A: Allocator + Default> {
+    #[default]
+    None,
+    Local(usize),
+    Col(usize),
+    Str(GString),
+    StrPos(SrcPos),
+    Concat(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+}
+
+impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
+        use StrExp::*;
+        match self {
+            None => panic!(),
+            Local(x) => LString::from(run.local(*x).string().as_str()),
+            Col(x) => LString::from(rc.item(*x, run.ps).string().as_str()),
+            Str(x) => LString::from(x.as_str()),
+            StrPos(x) => LString::from(x.sstr(run.source)),
+            Concat(lhs, rhs) => {
+                let mut lhs = lhs.ev(run, rc);
+                let rhs = rhs.ev(run, rc);
+                lhs.push_str(&rhs);
+                lhs
+            }
+        }
+    }
+}
+
+impl<A: Allocator + Default> StrExp<A> {
+    /// Convert from Local allocator.
+    pub fn from(exp: &StrExp<Local>, src: &[u8]) -> Self {
+        match exp {
+            StrExp::Str(x) => StrExp::Str(GString::from(x.as_str())),
+            StrExp::Local(x) => StrExp::Local(*x),
+            StrExp::Col(x) => StrExp::Col(*x),
+            StrExp::StrPos(x) => StrExp::Str(GString::from(x.sstr(src))),
+            _ => todo!(),
+        }
+    }
+
+    pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
+        match self {
+            StrExp::Str(x) => {
+                sr.output.push_str("'");
+                sr.output.push_str(x.as_str());
+                sr.output.push_str("'");
+            }
+            _ => todo!(),
+        }
+        Ok(())
+    }
+}
