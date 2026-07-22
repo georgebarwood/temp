@@ -61,7 +61,7 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
                     execute_schema_updates(pass, &slist, source, md, ps);
                     update_dict = true;
                 } else if pass == 2 {
-                    encode(&mut slist);
+                    encode_block(&mut slist);
                     let mut run = Run {
                         stack: LVec::new(),
                         dict: parser.dict,
@@ -128,7 +128,8 @@ fn execute_schema_updates(
     }
 }
 
-pub fn encode<A, S>(slist: &mut [Statement<A, S>])
+/// Encode a list of statements.
+pub fn encode_block<A, S>(slist: &mut [Statement<A, S>])
 where
     A: Allocator + Default,
     S: XString,
@@ -137,15 +138,64 @@ where
         match s {
             Statement::Let(x) => x.exp.encode(),
             Statement::Set(x) => x.exp.encode(),
+            Statement::Append(x) => x.exp.encode(),
             Statement::While(x) => {
                 x.exp.encode();
-                encode(&mut x.block);
+                encode_block(&mut x.block);
             }
-            // More ToDo!
+            Statement::If(x) => {
+                x.exp.encode();
+                encode_block(&mut x.block);
+                if let Some(ref mut els) = x.els
+                {
+                    encode_block(els);
+                }
+            }
+            Statement::Insert(x) => encode_exp_list( &mut x.vals ),
+            Statement::Update(x) => { 
+                x.wher.encode();
+                for (_,exp) in &mut x.assigns
+                {
+                    exp.encode();
+                }
+            },
+            Statement::Delete(x) => x.wher.encode(),
+            Statement::Select(x) => { 
+                encode_exp_list( &mut x.vals );
+                if let Some(ref mut wher) = x.wher { wher.encode(); }
+                if let Some(ref mut ob) = x.order_by {
+                   for exp in &mut ob.0
+                   {
+                      exp.encode();
+                   }
+                }
+            }
+            Statement::For(x) => {
+                for (_,exp) in &mut x.lets
+                {
+                    exp.encode();
+                }
+                if let Some(ref mut wher) = x.wher { wher.encode(); }
+                if let Some(ref mut ob) = x.order_by {
+                   for exp in &mut ob.0
+                   {
+                      exp.encode();
+                   }
+                }
+                encode_block( &mut x.block );
+            },
             _ => {}
         }
     }
 }
+
+fn encode_exp_list<A: Allocator+Default>( list: &mut [Exp<A>] )
+{
+    for exp in list {
+        exp.encode();
+    }
+}
+    
 
 /// Append to String or Binary Value.
 pub fn append(x: &mut Value, y: &Value) {

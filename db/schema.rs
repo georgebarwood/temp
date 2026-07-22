@@ -240,8 +240,8 @@ impl Dict {
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
         let f = &mut self.main.funcs[*fid];
         f.block = gblock(&x.block, src);
-        encode(&mut f.block);
-        println!("set fn block, encode done!");
+        encode_block(&mut f.block);
+        // println!("set fn block, encode done!");
 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {

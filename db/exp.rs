@@ -68,7 +68,7 @@ pub enum BoolExp<A: Allocator + Default> {
     IntGt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntLe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntGe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
-    // Many more todo!
+    // String comparison is todo
 }
 
 impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
@@ -81,6 +81,7 @@ impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
                 let ix = run.stack.len() - (x + 1);
                 run.stack[ix].bool()
             }
+            Col(x) => rc.item(*x, run.ps).bool(),
             And(x, y) => x.ev(run, rc) && y.ev(run, rc),
             Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
             IntEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
@@ -89,7 +90,6 @@ impl<A: Allocator + Default> Eval<bool> for BoolExp<A> {
             IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
             IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
             IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
-            _ => panic!(),
         }
     }
 }
@@ -98,6 +98,8 @@ impl<A: Allocator + Default> BoolExp<A> {
     pub fn from(exp: &BoolExp<Local>, _src: &[u8]) -> Self {
         match exp {
             BoolExp::Bool(x) => BoolExp::Bool(*x),
+            BoolExp::Local(x) => BoolExp::Local(*x),
+            BoolExp::Col(x) => BoolExp::Col(*x),
             _ => todo!(),
         }
     }
@@ -127,6 +129,7 @@ impl<A: Allocator + Default> Eval<i64> for IntExp<A> {
                 let ix = run.stack.len() - (x + 1);
                 run.stack[ix].int()
             }
+            Col(x) => rc.item(*x, run.ps).int(),
             Add(lhs, rhs) => lhs.ev(run, rc) + rhs.ev(run, rc),
             Sub(lhs, rhs) => lhs.ev(run, rc) - rhs.ev(run, rc),
             Mul(lhs, rhs) => lhs.ev(run, rc) * rhs.ev(run, rc),
@@ -143,6 +146,7 @@ impl<A: Allocator + Default> IntExp<A> {
         match exp {
             IntExp::Int(x) => IntExp::Int(*x),
             IntExp::Local(x) => IntExp::Local(*x),
+            IntExp::Col(x) => IntExp::Col(*x),
             _ => todo!(),
         }
     }
@@ -162,16 +166,17 @@ pub enum StrExp<A: Allocator + Default> {
 
 impl<A: Allocator + Default> Eval<LString> for StrExp<A> {
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
+        use StrExp::*;
         match self {
-            StrExp::None => panic!(),
-            StrExp::Local(x) => {
+            None => panic!(),
+            Local(x) => {
                 let ix = run.stack.len() - (x + 1);
                 LString::from(run.stack[ix].string().as_str())
             }
-            StrExp::Col(_) => todo!(),
-            StrExp::Str(x) => LString::from(x.as_str()),
-            StrExp::StrPos(x) => LString::from(x.sstr(run.source)),
-            StrExp::Concat(lhs, rhs) => {
+            Col(x) => LString::from( rc.item(*x, run.ps).string().as_str() ),
+            Str(x) => LString::from( x.as_str() ),
+            StrPos(x) => LString::from(x.sstr(run.source)),
+            Concat(lhs, rhs) => {
                 let mut lhs = lhs.ev(run, rc);
                 let rhs = rhs.ev(run, rc);
                 lhs.push_str(&rhs);
@@ -187,6 +192,7 @@ impl<A: Allocator + Default> StrExp<A> {
         match exp {
             StrExp::Str(x) => StrExp::Str(GString::from(x.as_str())),
             StrExp::Local(x) => StrExp::Local(*x),
+            StrExp::Col(x) => StrExp::Col(*x),
             StrExp::StrPos(x) => StrExp::Str(GString::from(x.sstr(src))),
             _ => todo!(),
         }
@@ -311,7 +317,7 @@ impl<A: Allocator + Default> Exp<A> {
     }
 
     /// Encode for execution.
-    /// Eliminate Exp::Binary expressions, changing them to type specific Bool, Int or Str expressions.
+    /// Replace most Exp::Binary expressions, changing them to type specific Bool, Int or Str expressions.
     pub fn encode(&mut self) {
         // use std::ops::DerefMut;
         use Exp::*;
@@ -348,14 +354,19 @@ impl<A: Allocator + Default> Exp<A> {
                         }
                     }
                     _ => {
-                        println!("no encoding");
+                        // println!("no encoding");
                         return;
                     }
                 };
-                println!("encoded exp!");
+                // println!("encoded exp!");
                 *self = re;
             }
             FnCall(_fid, args) => {
+                for e in args {
+                    e.encode();
+                }
+            }
+            CallBuiltin(_bi, args) => {
                 for e in args {
                     e.encode();
                 }
@@ -372,7 +383,15 @@ impl<A: Allocator + Default> Exp<A> {
             _ => Exp::Local(x),
         }
     }
-    // Todo : fn col similar to local for columns.
+    
+    pub fn col(x: usize, dt: &DataType) -> Self {
+        match dt {
+            DataType::Bool => Exp::Bool(BoolExp::Col(x)),
+            DataType::Int => Exp::Int(IntExp::Col(x)),
+            DataType::String(_) => Exp::Str(StrExp::Col(x)),
+            _ => Exp::Col(x),
+        }
+    }
 
     /// Show expression.
     pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
@@ -384,18 +403,22 @@ impl<A: Allocator + Default> Exp<A> {
         use Exp::*;
         use std::fmt::Write;
         match self {
+                 
+            Local(x) 
+                | Bool(BoolExp::Local(x))
+                | Int(IntExp::Local(x))
+                | Str(StrExp::Local(x)) => sr.write_name(*x),
+            
+            Col(x)
+                | Bool(BoolExp::Col(x))
+                | Int(IntExp::Col(x))
+                | Str(StrExp::Col(x)) => sr.write_col_name(*x),
+
+            // Constants.
             Bool(BoolExp::Bool(x)) => write!(&mut sr.output, "{}", x)?,
             Int(IntExp::Int(x)) => write!(&mut sr.output, "{}", x)?,
+            Str(x) => x.show(sr)?, // For string constants,
             
-            
-            Local(x) => sr.write_name(*x),
-            Bool(BoolExp::Local(x)) => sr.write_name(*x),
-            Int(IntExp::Local(x)) => sr.write_name(*x),
-            Str(StrExp::Local(x)) => sr.write_name(*x),
-
-            Str(x) => x.show(sr)?, // Not sure about this...
-            
-            Col(x) => sr.write_col_name(*x),
             Binary(op, x, y) => {
                 let p = op.precedence();
                 if p < pp || p == pp && right {

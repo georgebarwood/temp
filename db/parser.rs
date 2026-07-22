@@ -475,9 +475,9 @@ impl<'a> Parser<'a> {
             Exp::Str(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
                 RContext::STable(t, nxt) => {
-                    if let Some((col, dt)) = t.name_to_col(tos(self.str(name))) {
-                        *e = Exp::Col(col);
-                        dt
+                    if let Some((col, typ)) = t.name_to_col(tos(self.str(name))) {
+                        *e = Exp::col(col, typ);
+                        typ
                     } else {
                         self.resolve(e, nxt, aos)?
                     }

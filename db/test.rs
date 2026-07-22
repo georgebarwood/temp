@@ -54,7 +54,7 @@ pub fn test() {
         b"let total=0 for x = age from test.users set total = total + x select total",
     ];
 
-    let sql = _sql1;
+    let sql = _sql3;
 
     let (is_new, spd) = get_spd();
     let mut global = GSS::new(spd);
