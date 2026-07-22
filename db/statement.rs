@@ -6,7 +6,7 @@ use serde::*;
 pub enum Statement<A: Allocator + Default, S: XString> {
     /// Declare and initialise a local variable.
     Let(Let<A, S>),
-    /// Declare and initialise a local variable (position in source).
+    /// Assign a local variable.
     Set(Set<A>),
     /// Append to a local string or binary variable.
     Append(Append<A>),
@@ -257,7 +257,7 @@ where
     }
 }
 
-/// LET statement.
+/// LET statement - declare and initialise a local variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Let<A: Allocator + Default, S: XString> {
     pub varname: S,
@@ -271,7 +271,7 @@ impl<A: Allocator + Default, S: XString> Let<A, S> {
     }
 }
 
-/// SET statement.
+/// SET statement - assign a local variable.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Set<A: Allocator + Default> {
     pub i: usize,
@@ -281,8 +281,7 @@ pub struct Set<A: Allocator + Default> {
 impl<A: Allocator + Default> Set<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
-        let ix = run.stack.len() - 1 - self.i;
-        run.stack[ix] = v;
+        *run.local(self.i) = v;
     }
 }
 
@@ -296,8 +295,7 @@ pub struct Append<A: Allocator + Default> {
 impl<A: Allocator + Default> Append<A> {
     pub fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
-        let ix = run.stack.len() - 1 - self.i;
-        append(&mut run.stack[ix], &v);
+        append(run.local(self.i), &v);
     }
 }
 
