@@ -836,13 +836,13 @@ impl<'a> Parser<'a> {
         let save = self.locs.len();
         self.locs.push(Loc {
             name: b"result",
-            datatype: ret.clone().into(),
+            datatype: ret.clone(),
         });
 
         for (name, typ) in &parms {
             self.locs.push(Loc {
                 name: self.str(name),
-                datatype: typ.clone().into(),
+                datatype: typ.clone(),
             });
         }
 

@@ -1,5 +1,7 @@
 /* What next plan...
 
+Creaate web server!
+
 Have "system tables", but they are not part of the system, they are created and managed by SQL code.
 
 So on initialisation we do
@@ -15,7 +17,7 @@ but they are not part of the actual system, which operates independently of thes
 
 Have built-in functions that allow text for named object to be retrieved, e.g.
 
-sys.function_text( "schema name", "function name" ) gets function definition.
+sys.fn_text( "schema name", "function name" ) gets function definition.
 sys.table_text( "schema name", "table name" ) gets table definition ( datatype ).
 
 
