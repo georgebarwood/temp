@@ -1,9 +1,5 @@
 use crate::*;
 
-pub fn tos(s: &[u8]) -> &str {
-    str::from_utf8(s).unwrap()
-}
-
 /// Local variable declaration.
 struct Loc<'a> {
     pub name: &'a [u8],
@@ -12,7 +8,7 @@ struct Loc<'a> {
 
 /// Resolve Context ( for resolving names ).
 enum RContext<'a> {
-    STable(&'a Arc<DataType>, &'a RContext<'a>),
+    Table(&'a Arc<DataType>, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }
 
@@ -81,7 +77,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn statements(&mut self) -> Result<LVec<LStatement>, E> {
+    fn statements(&mut self) -> Result<LVec<LStatement>, E> {
         self.next()?;
         let mut result = LVec::new();
         loop {
@@ -235,7 +231,7 @@ impl<'a> Parser<'a> {
         // Resolve names, push idents and typs onto local bindings.
         for (name, val) in &mut lets {
             let lctx = RContext::Local(&self.locs);
-            let tctx = RContext::STable(&table_dt, &lctx);
+            let tctx = RContext::Table(&table_dt, &lctx);
             let dt = self.resolve(val, &tctx, 0)?;
             let dt = dt.clone();
             self.locs.push(Loc {
@@ -321,7 +317,7 @@ impl<'a> Parser<'a> {
                 let mut exp = self.exp(0)?;
                 {
                     let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::STable(table_dt, &lctx);
+                    let tctx = RContext::Table(table_dt, &lctx);
                     self.resolve(&mut exp, &tctx, 0)?;
                 }
                 result.push((col_id, exp));
@@ -390,7 +386,7 @@ impl<'a> Parser<'a> {
             let order_by = self.order_by(&table_dt)?;
             {
                 let lctx = RContext::Local(&self.locs);
-                let tctx = RContext::STable(&table_dt, &lctx);
+                let tctx = RContext::Table(&table_dt, &lctx);
                 self.resolve_names(&mut vals, &tctx)?;
             }
 
@@ -425,7 +421,7 @@ impl<'a> Parser<'a> {
 
                 if self.pass == 2 {
                     let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::STable(table_dt, &lctx);
+                    let tctx = RContext::Table(table_dt, &lctx);
                     let _dt = self.resolve(&mut exp, &tctx, 0)?;
                 }
 
@@ -474,7 +470,7 @@ impl<'a> Parser<'a> {
             Exp::Int(_) => &DataType::Int,
             Exp::Str(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
-                RContext::STable(t, nxt) => {
+                RContext::Table(t, nxt) => {
                     if let Some((col, typ)) = t.name_to_col(tos(self.str(name))) {
                         *e = Exp::col(col, typ);
                         typ
@@ -589,7 +585,7 @@ impl<'a> Parser<'a> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
-            let tctx = RContext::STable(table_dt, &lctx);
+            let tctx = RContext::Table(table_dt, &lctx);
             let edt = self.resolve(&mut exp, &tctx, 0)?;
             if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
@@ -1112,6 +1108,12 @@ impl<'a> Parser<'a> {
     }
 }
 
+/// Check whether dataype is string or binary.
 fn is_string_or_binary(x: &DataType) -> bool {
     matches!(x, DataType::String(_) | DataType::Binary(_))
+}
+
+/// Convert `&[u8]` to `&str`.
+pub fn tos(s: &[u8]) -> &str {
+    str::from_utf8(s).unwrap()
 }
