@@ -94,6 +94,7 @@ impl PageSet {
         }
     }
 
+    /// Load table.
     pub fn load_table(&mut self, tid: i64, dt: &Arc<DataType>) -> RTable {
         if let Some(t) = self.tables.get(&tid) {
             t.clone()
@@ -136,7 +137,7 @@ pub type PData = LRc<RefCell<PDataInner>>;
 #[derive(Default)]
 pub struct PDataInner {
     pub data: Data,
-    changed: bool,
+    pub changed: bool,
 }
 
 /// Mark pdata as changed.

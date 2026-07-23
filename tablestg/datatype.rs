@@ -27,20 +27,20 @@ pub enum DataType {
     /// e.g. `float` ( todo : have different sizes )
     Float,
 
-    /// e.g. `( string, string, int )`
-    Tuple(GVec<DataType>), // Maybe use Arc to make cloning cheap.
-
-    /// e.g. `struct{ name: string, email: string, created: date }`
-    Struct(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
-
-    /// e.g. `enum{ leaf: int, node: [int] }`
-    Enum(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
-
     /// String(n), if string length is > n, value is stored indirectly.
     String(usize),
 
     /// Binary(n), if binary length is > n, value is stored indirectly.
     Binary(usize),
+
+    /// e.g. `struct{ name: string, email: string, created: date }`
+    Struct(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
+
+    /// e.g. `( string, string, int )`
+    Tuple(GVec<DataType>), // Maybe use Arc to make cloning cheap.
+
+    /// e.g. `enum{ leaf: int, node: [int] }`
+    Enum(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
 
     // Array of values.
     // Array(usize, LBox<DataType>),
