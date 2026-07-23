@@ -7,7 +7,7 @@ pub fn tos(s: &[u8]) -> &str {
 /// Local variable declaration.
 struct Loc<'a> {
     pub name: &'a [u8],
-    pub datatype: Arc<DataType>,
+    pub datatype: DataType,
 }
 
 /// Resolve Context ( for resolving names ).
@@ -123,7 +123,7 @@ impl<'a> Parser<'a> {
 
         let mut dt = if self.token == Token::Colon {
             self.next()?;
-            Some(Arc::new(self.datatype()?))
+            Some(self.datatype()?)
         } else {
             None
         };
@@ -137,7 +137,7 @@ impl<'a> Parser<'a> {
             if let Some(dt) = &dt {
                 self.check_types(dt, edt)?;
             } else {
-                dt = Some(Arc::new(edt.clone()));
+                dt = Some(edt.clone());
             }
         }
 
@@ -237,7 +237,7 @@ impl<'a> Parser<'a> {
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::STable(&table_dt, &lctx);
             let dt = self.resolve(val, &tctx, 0)?;
-            let dt = Arc::new(dt.clone());
+            let dt = dt.clone();
             self.locs.push(Loc {
                 name: self.str(name),
                 datatype: dt,
@@ -823,7 +823,7 @@ impl<'a> Parser<'a> {
         while self.token != Token::RBra {
             let ident = self.read_ident()?;
             let typ = self.datatype()?;
-            parms.push((ident, Arc::new(typ)));
+            parms.push((ident, typ));
             if !self.test_token(Token::Comma)? {
                 break;
             }
@@ -836,18 +836,17 @@ impl<'a> Parser<'a> {
         } else {
             DataType::Empty
         };
-        let ret = Arc::new(ret);
 
         let save = self.locs.len();
         self.locs.push(Loc {
             name: b"result",
-            datatype: ret.clone(),
+            datatype: ret.clone().into(),
         });
 
         for (name, typ) in &parms {
             self.locs.push(Loc {
                 name: self.str(name),
-                datatype: typ.clone(),
+                datatype: typ.clone().into(),
             });
         }
 

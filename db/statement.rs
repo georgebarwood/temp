@@ -70,15 +70,15 @@ where
             While(x) => {
                 sr.output.push_str("while ");
                 x.exp.show(sr)?;
-                write_block(sr, &x.block)?;
+                show_block(sr, &x.block)?;
             }
             If(x) => {
                 sr.output.push_str("if ");
                 x.exp.show(sr)?;
-                write_block(sr, &x.block)?;
+                show_block(sr, &x.block)?;
                 if let Some(b) = &x.els {
                     sr.output.push_str(" else ");
-                    write_block(sr, b)?;
+                    show_block(sr, b)?;
                 }
             }
             Insert(x) => {
@@ -158,7 +158,7 @@ where
                     w.show(sr)?;
                 }
                 Self::show_order_by(&x.order_by, sr)?;
-                write_block(sr, &x.block)?;
+                show_block(sr, &x.block)?;
                 sr.names.truncate(save);
             }
             _ => todo!(),
@@ -267,7 +267,7 @@ pub struct Let<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> Let<A, S> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         run.stack.push(v);
     }
@@ -281,7 +281,7 @@ pub struct Set<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Set<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         *run.local(self.i) = v;
     }
@@ -295,7 +295,7 @@ pub struct Append<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Append<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         append(run.local(self.i), &v);
     }
@@ -309,7 +309,7 @@ pub struct While<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> While<A, S> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         while self.exp.eval(run).bool() {
             execute_block(&self.block, run);
         }
@@ -325,7 +325,7 @@ pub struct If<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> If<A, S> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         if self.exp.eval(run).bool() {
             execute_block(&self.block, run);
         } else if let Some(els) = &self.els {
@@ -343,7 +343,7 @@ pub struct Insert<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Insert<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
         for e in &self.vals {
@@ -399,7 +399,7 @@ pub struct Update<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Update<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
@@ -429,7 +429,7 @@ pub struct Delete<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Delete<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
@@ -452,7 +452,7 @@ pub struct Select<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Select<A> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run)
         } else if let Some(f) = &self.from {
@@ -506,7 +506,7 @@ pub struct For<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
-    pub fn exec(&self, run: &mut Run) {
+fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run);
         } else {
@@ -579,8 +579,8 @@ pub struct RenameTable {
 pub struct CreateFn<A: Allocator + Debug + Default> {
     pub schema_id: i64,
     pub fname: SrcPos,
-    pub ret: Arc<DataType>,
-    pub parms: VecA<(SrcPos, Arc<DataType>), A>,
+    pub ret: DataType,
+    pub parms: VecA<(SrcPos, DataType), A>,
     pub block: VecA<Statement<A, SrcPos>, A>,
 }
 

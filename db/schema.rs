@@ -367,8 +367,8 @@ pub struct SFunc<S: XString> {
     pub fname: S,
 
     /// result datatype
-    pub ret: Arc<DataType>, // Maybe don't need the Arc.
-    pub parms: GVec<(S, Arc<DataType>)>, // Maybe don't need the Arc.
+    pub ret: DataType, // Maybe don't need the Arc.
+    pub parms: GVec<(S, DataType)>, // Maybe don't need the Arc.
     pub block: GVec<Statement<Perm, S>>,
 }
 
@@ -382,6 +382,7 @@ impl<S: XString> SFunc<S> {
         std::mem::take(&mut sr.output)
     }
 
+    /// Get source text for function.
     fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
         sr.names.push("result");
 
@@ -399,12 +400,13 @@ impl<S: XString> SFunc<S> {
         }
         write!(&mut sr.output, ") -> {}", self.ret)?;
 
-        write_block(sr, &self.block)?;
+        show_block(sr, &self.block)?;
         Ok(())
     }
 }
 
-pub fn write_block<'a, A: Allocator + Debug + Default, S: XString>(
+/// Show source text for list of statements.
+pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
     sr: &mut SRun<'a>,
     block: &'a VecA<Statement<A, S>, A>,
 ) -> Result<(), std::fmt::Error> {
