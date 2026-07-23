@@ -547,7 +547,7 @@ impl<'a> Parser<'a> {
                     return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
                 }
             }
-            Exp::CallBuiltin(builtin, args) => {
+            Exp::BuiltinCall(builtin, args) => {
                 // Resolve the args, check the types.
                 let arg_types = builtin.arg_types();
                 if arg_types.len() != args.len() {
@@ -701,7 +701,7 @@ impl<'a> Parser<'a> {
             if self.str(&schema) == b"sys" {
                 let builtin = Builtin::new(self.str(&fname))?;
                 // ToDo : check the arg types using builtin.arg_types().
-                Exp::CallBuiltin(builtin, args)
+                Exp::BuiltinCall(builtin, args)
             } else {
                 Exp::FnCallByName(schema, fname, args)
             }

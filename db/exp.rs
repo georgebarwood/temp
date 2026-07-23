@@ -26,19 +26,27 @@ pub enum Exp<A: Allocator + Debug + Default> {
     Bool(BoolExp<A>),
     Int(IntExp<A>),
     Str(StrExp<A>),
-    /// Name (unresolved).
+    
+    /// Name (unresolved). Resolves to Local or Col.
     Name(SrcPos),
+    
+    /// Local variable.
     Local(usize),
+    
+    /// Table column.
     Col(usize),
+    
+    /// Binary expression.
     Binary(Operator, BoxA<Exp<A>, A>, BoxA<Exp<A>, A>),
-
+    
     /// Function call (unresolved). Schema, fname, args.
     FnCallByName(SrcPos, SrcPos, VecA<Exp<A>, A>),
 
     /// Function call (resolved). Function id and args.
     FnCall(usize, VecA<Exp<A>, A>),
+    
     /// Built-in call. Build-in operation and args.
-    CallBuiltin(Builtin, VecA<Exp<A>, A>),
+    BuiltinCall(Builtin, VecA<Exp<A>, A>),
 }
 
 impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
@@ -66,7 +74,7 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
-            CallBuiltin(bi, args) => {
+            BuiltinCall(bi, args) => {
                 for e in args {
                     let v = e.ev(run, rc);
                     run.stack.push(v);
@@ -97,9 +105,9 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 let args = gvals(args, src);
                 FnCall(*fid, args)
             }
-            CallBuiltin(bi, args) => {
+            BuiltinCall(bi, args) => {
                 let args = gvals(args, src);
-                CallBuiltin(*bi, args)
+                BuiltinCall(*bi, args)
             }
             _ => todo!(),
         }
@@ -155,7 +163,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                     e.encode();
                 }
             }
-            CallBuiltin(_bi, args) => {
+            BuiltinCall(_bi, args) => {
                 for e in args {
                     e.encode();
                 }
@@ -164,6 +172,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
     }
 
+    /// New local variable, variant chosen based on datatype.
     pub fn local(x: usize, dt: &DataType) -> Self {
         match dt {
             DataType::Bool => Exp::Bool(BoolExp::Local(x)),
@@ -173,6 +182,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
     }
 
+    /// New column, variant chosen based on datatype.
     pub fn col(x: usize, dt: &DataType) -> Self {
         match dt {
             DataType::Bool => Exp::Bool(BoolExp::Col(x)),
@@ -221,7 +231,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 sr.write_fn_name(*f);
                 Self::show_args(args, sr, true)?;
             }
-            CallBuiltin(bi, args) => {
+            BuiltinCall(bi, args) => {
                 write!(&mut sr.output, "sys.{:?}", bi)?;
                 Self::show_args(args, sr, false)?;
             }

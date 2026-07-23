@@ -37,6 +37,7 @@ impl<'a> Run<'a> {
         &mut self.stack[ix]
     }
 
+    /// Load table specified by table_ix.
     pub fn load_table(&mut self, table_ix: usize) -> RTable {
         let table_dt = self.dict.table_datatype(table_ix);
         self.ps.load_table(table_ix as i64, table_dt)
