@@ -60,6 +60,14 @@ impl Value {
         }
     }
 
+    /// Get clone of string ( Value must be String )
+    pub fn string_clone(&self) -> LRc<LString> {
+        match self {
+            Value::String(s) => s.clone(),
+            _ => panic!("string expected"),
+        }
+    }
+
     /// Get reference to `LVec<u8>` ( Value must be Binary )
     pub fn binary(&self) -> &LVec<u8> {
         match self {
