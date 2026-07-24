@@ -1,6 +1,7 @@
 /* What next plan...
 
 Creaate web server!
+sys.execute function. Executes string.
 
 Have "system tables", but they are not part of the system, they are created and managed by SQL code.
 
@@ -9,14 +10,14 @@ So on initialisation we do
 schema info
 table info.schema( Name string )
 
-table info.table( Schema int, Name string
-table info.column( Table int, Name string, DataType string, Description string, .... more meta info )
+table info.table( Schema int, Name string 
+table info.column( Table int, Name string, DataType string, Description string, .... more meta info ) 
 table info.function( Schema int, Name string, Description string ....  )
 
 These tables allow user interface to keep track of names of system objects,
 but they are not part of the base system, which operates independently of these tables.
 
-Note that when importing from some other database, it is necessary to do insert into table... statements as well as
+Note that when importing from some other database, it is necessary to do insert into table... statements as well as 
 table x.y ( ....) statements. Similarly when dumping the database to text, these "info" tables need to be dumped as well as
 the corresponding table and fn statements.
 
@@ -24,6 +25,15 @@ Have built-in function that allow text for named function to be retrieved, e.g.
 
 sys.fn_text( "schema name", "function name" ) gets function definition.
 
+Altering table columns
+======================
+First choose a temp unique table name that doesn't appear anywhere in function text (check!).
+Rename original table to temp name.
+
+Create new table with original table name and modified columns.
+Copy all records from original table to new table, preserving columns that are not being dropped.
+Edit functions, replacing temp name with original name.
+Drop temp name table ( now the original table ).
 
 
 ToDo list

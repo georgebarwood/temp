@@ -429,7 +429,7 @@ impl<A: Allocator + Debug + Default> Eval<LString> for StrExp<A> {
             Local(x) => LString::from(run.local(*x).string().as_str()),
             Col(x) => LString::from(rc.item(*x, run.ps).string().as_str()),
             Str(x) => LString::from(x.as_str()),
-            StrPos(x) => LString::from(x.sstr(run.source)),
+            StrPos(x) => LString::from(x.sstr(run.source.as_bytes())),
             Concat(lhs, rhs) => {
                 let mut lhs = lhs.ev(run, rc);
                 let rhs = rhs.ev(run, rc);

@@ -12,6 +12,7 @@ pub enum Builtin {
     binlen,
     binsubstr,
     fn_text,
+    execute,
     // More to do...
 }
 
@@ -24,6 +25,7 @@ impl Builtin {
             b"replace" => Ok(replace),
             b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
+            b"execute" => Ok(execute),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -87,6 +89,13 @@ impl Builtin {
 
                 Value::String(LRc::new(result))
             }
+            execute => {
+                let source = run.stack.pop().unwrap();
+                let source : LRc<LString> = source.string_clone();
+                run.source = source;
+                go( run );
+                Value::Bool(true)
+            }
             _ => todo!(),
         }
     }
@@ -98,6 +107,7 @@ impl Builtin {
             replace => &DataType::String(0),
             contains => &DataType::Bool,
             fn_text => &DataType::String(0),
+            execute => &DataType::Bool, // Maybe should be error code or string?
             _ => todo!(),
         }
     }
@@ -110,6 +120,7 @@ impl Builtin {
             replace => &STR_3,
             contains => &STR_2,
             fn_text => &STR_2,
+            execute => &STR_1,
             _ => todo!(),
         }
     }

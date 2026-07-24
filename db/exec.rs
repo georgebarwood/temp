@@ -6,11 +6,29 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
-    pub source: &'a [u8],         // For string constants when executing batch.
-    pub output: &'a mut LVec<u8>, // Maybe could generalise this in future.
+    pub source: LRc<LString>,     // For string constants when executing batch.
+    pub output: LVec<u8>,         // Maybe could generalise this in future.
+    pub dict_changed: bool,
+    pub new_dict: &'a mut Arc<Dict>,
 }
 
 impl<'a> Run<'a> {
+
+    /// Create Run.
+    pub fn new( dict: &'a Dict, new_dict: &'a mut Arc<Dict>, ps: &'a mut PageSet ) -> Self
+    {
+        Self{ 
+            stack: LVec::new(), 
+            dict, 
+            ps, 
+            source: LRc::new(LString::new()),
+            output: LVec::new(), 
+            new_dict,
+            dict_changed: false
+        }
+    }
+    
+
     /// Output Value.
     pub fn output(&mut self, v: &Value) {
         match v {
@@ -45,15 +63,13 @@ impl<'a> Run<'a> {
 }
 
 /// Executes a batch of statements. Result is whether dict was updated.
-pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LVec<u8>) -> bool {
-    let mut temp_dict = dict.clone();
-    let mut update_dict = false;
-
+pub fn go(run: &mut Run) {
     for pass in 1..=2
     // If we know there are no schema updates, could skip pass 1.
     {
-        let parse_dict = temp_dict.clone();
-        let mut parser = Parser::new(source, &parse_dict);
+        let temp_dict = run.new_dict.clone();
+        let source = run.source.clone();
+        let mut parser = Parser::new(source.as_bytes(), &temp_dict);
         match parser.pass(pass) {
             Err(e) => {
                 let pos = parser.position();
@@ -61,38 +77,24 @@ pub fn go(source: &[u8], dict: &mut Arc<Dict>, ps: &mut PageSet, output: &mut LV
                     "Pass {} Error {} at input position {}",
                     pass, e.message, pos
                 );
-                println!("Source: {}", tos(&source[0..pos]));
+                println!("Source: {}", tos(&run.source.as_bytes()[0..pos]));
                 println!();
-                update_dict = false;
                 break;
             }
             Ok(mut slist) => {
                 if parser.schema_updates {
                     // println!("statements={:#?}", &slist);
-                    let md = Arc::make_mut(&mut temp_dict);
-                    execute_schema_updates(pass, &slist, source, md, ps);
-                    update_dict = true;
+                    let md = Arc::make_mut(run.new_dict);
+                    execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps);
+                    run.dict_changed = true;
                 } else if pass == 2 {
                     encode_block(&mut slist);
                     // println!("Executing {:?}", slist);
-                    let mut run = Run {
-                        stack: LVec::new(),
-                        dict: parser.dict,
-                        ps,
-                        source,
-                        output,
-                    };
-                    execute_block(&slist, &mut run);
+                    execute_block(&slist, run);
                 }
             }
         }
     }
-    if update_dict {
-        *dict = temp_dict;
-        // println!("dict updated to {:?}", &dict);
-        // println!();
-    }
-    update_dict
 }
 
 fn execute_schema_updates(
