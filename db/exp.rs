@@ -58,11 +58,13 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
             Str(x) => Value::String(LRc::new(x.ev(run, rc))),
             Local(x) => run.local(*x).clone(),
             Col(x) => rc.item(*x, run.ps),
+            /*
             Binary(op, x, y) => {
                 let x = x.ev(run, rc);
                 let y = y.ev(run, rc);
                 op.eval(&x, &y)
             }
+            */
             FnCall(f, args) => {
                 let f = run.call_init(*f);
                 let save = run.stack.len();
@@ -147,6 +149,14 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                             Operator::Greater => Bool(BoolExp::IntGt(x, y)),
                             Operator::LessEqual => Bool(BoolExp::IntLe(x, y)),
                             Operator::GreaterEqual => Bool(BoolExp::IntGe(x, y)),
+                            _ => todo!(),
+                        }
+                    }
+                    (op, Str(x), Str(y)) => {
+                        let x = BoxA::new(std::mem::take(x));
+                        let y = BoxA::new(std::mem::take(y));
+                        match op {
+                            Operator::Concat=> Str(StrExp::Concat(x, y)),
                             _ => todo!(),
                         }
                     }
