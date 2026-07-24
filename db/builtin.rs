@@ -90,9 +90,7 @@ impl Builtin {
                 Value::String(LRc::new(result))
             }
             execute => {
-                let source = run.stack.pop().unwrap();
-                let source : LRc<LString> = source.string_clone();
-                run.source = source;
+                run.source = run.stack.pop().unwrap().string_clone();
                 go( run );
                 Value::Bool(true)
             }
