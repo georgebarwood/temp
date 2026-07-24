@@ -6,19 +6,24 @@ Have "system tables", but they are not part of the system, they are created and 
 
 So on initialisation we do
 
-create schema sys
-create table sys.schema( Name string )
+schema info
+table info.schema( Name string )
 
-create table sys.table( Schema int, Name string )
-create table sys.function( Schema int, Name string )
+table info.table( Schema int, Name string
+table info.column( Table int, Name string, DataType string, Description string, .... more meta info )
+table info.function( Schema int, Name string, Description string ....  )
 
-These tables allow user interface to keep track of names of "system" objects,
-but they are not part of the actual system, which operates independently of these tables.
+These tables allow user interface to keep track of names of system objects,
+but they are not part of the base system, which operates independently of these tables.
 
-Have built-in functions that allow text for named object to be retrieved, e.g.
+Note that when importing from some other database, it is necessary to do insert into table... statements as well as
+table x.y ( ....) statements. Similarly when dumping the database to text, these "info" tables need to be dumped as well as
+the corresponding table and fn statements.
+
+Have built-in function that allow text for named function to be retrieved, e.g.
 
 sys.fn_text( "schema name", "function name" ) gets function definition.
-sys.table_text( "schema name", "table name" ) gets table definition ( datatype ).
+
 
 
 ToDo list

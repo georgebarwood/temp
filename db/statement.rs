@@ -267,7 +267,7 @@ pub struct Let<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> Let<A, S> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         run.stack.push(v);
     }
@@ -281,7 +281,7 @@ pub struct Set<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Set<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         *run.local(self.i) = v;
     }
@@ -295,7 +295,7 @@ pub struct Append<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Append<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         let v = self.exp.eval(run);
         append(run.local(self.i), &v);
     }
@@ -309,7 +309,7 @@ pub struct While<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> While<A, S> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         while self.exp.eval(run).bool() {
             execute_block(&self.block, run);
         }
@@ -325,7 +325,7 @@ pub struct If<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> If<A, S> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         if self.exp.eval(run).bool() {
             execute_block(&self.block, run);
         } else if let Some(els) = &self.els {
@@ -343,7 +343,7 @@ pub struct Insert<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Insert<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
         for e in &self.vals {
@@ -399,7 +399,7 @@ pub struct Update<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Update<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
@@ -429,7 +429,7 @@ pub struct Delete<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Delete<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run);
         let mut table = t.borrow_mut();
@@ -452,7 +452,7 @@ pub struct Select<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Select<A> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run)
         } else if let Some(f) = &self.from {
@@ -506,7 +506,7 @@ pub struct For<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
-fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run) {
         if self.order_by.is_some() {
             self.exec_order_by(run);
         } else {
@@ -612,7 +612,7 @@ where
     run.stack.truncate(slen); // pop local variables from stack.
 }
 
-/// Execute list of statements ( called must restore stack ).
+/// Execute list of statements ( caller must restore stack ).
 pub fn execute_block_no_restore<A, S>(slist: &[Statement<A, S>], run: &mut Run)
 where
     A: Allocator + Debug + Default,

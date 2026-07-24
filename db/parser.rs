@@ -8,7 +8,7 @@ struct Loc<'a> {
 
 /// Resolve Context ( for resolving names ).
 enum RContext<'a> {
-    Table(&'a Arc<DataType>, &'a RContext<'a>),
+    Table(&'a STable, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }
 
@@ -309,7 +309,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn assigns(&mut self, table_dt: &Arc<DataType>) -> Result<LVec<(usize, Exp<Local>)>, E> {
+    fn assigns(&mut self, table_dt: &STable) -> Result<LVec<(usize, Exp<Local>)>, E> {
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
             if let Some(col_id) = table_dt.lookup_col(ident) {
@@ -411,7 +411,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Select(result))
     }
 
-    fn order_by(&mut self, table_dt: &Arc<DataType>) -> Result<LOrderBy, E> {
+    fn order_by(&mut self, table_dt: &STable) -> Result<LOrderBy, E> {
         if self.test_ident(b"order")? {
             self.expect_ident(b"by")?;
             let mut exps = LVec::new();
@@ -581,7 +581,7 @@ impl<'a> Parser<'a> {
         Ok(exp)
     }
 
-    fn bool_exp_table(&mut self, table_dt: &Arc<DataType>) -> Result<LExp, E> {
+    fn bool_exp_table(&mut self, table_dt: &STable) -> Result<LExp, E> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
@@ -707,7 +707,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn name_list(&mut self, table_dt: &Arc<DataType>) -> Result<LVec<usize>, E> {
+    fn name_list(&mut self, table_dt: &STable) -> Result<LVec<usize>, E> {
         self.expect_token(Token::LBra)?;
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
@@ -724,7 +724,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn table(&mut self) -> Result<(usize, i64, i64, Arc<DataType>), E> {
+    fn table(&mut self) -> Result<(usize, i64, i64, STable), E> {
         let schema = self.read_ident()?;
         let sid = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
@@ -961,7 +961,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, i64, &Arc<DataType>), E> {
+    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, i64, &STable), E> {
         let nid = self.check_tfname(tname)?;
         if let Some((table_ix, table_dt)) = self.dict.table(&(schema, nid)) {
             Ok((table_ix, nid, table_dt))

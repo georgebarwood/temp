@@ -50,7 +50,7 @@ struct DictMain {
     func_lookup: HashMap<(i64, i64), usize>,
 
     /// List of table datatypes.
-    table_dt: GVec<Arc<DataType>>,
+    table_dt: GVec<STable>,
 
     /// List of stored functions (no display data)
     funcs: GVec<SFunc<NoString>>,
@@ -141,13 +141,13 @@ impl Dict {
         self.schema_names.get(&id).map(|v| &**v)
     }
 
-    /// Get table or function name id from name.
+    /// Get table name id or function name id from name.
     pub fn name_id(&self, name: &str) -> Option<&i64> {
         self.main.names.get(name)
     }
 
-    /// Get table from schema id and name id.
-    pub fn table(&self, x: &(i64, i64)) -> Option<(usize, &Arc<DataType>)> {
+    /// Get table id and datatype from schema id and name id.
+    pub fn table(&self, x: &(i64, i64)) -> Option<(usize, &STable)> {
         if let Some(table_ix) = self.main.table_lookup.get(x) {
             let ix = *table_ix - RESVD_ID as usize;
             Some((*table_ix, &self.main.table_dt[ix]))
@@ -165,7 +165,7 @@ impl Dict {
     }
 
     /// Get table datatype from table id.
-    pub fn table_datatype(&self, id: usize) -> &Arc<DataType> {
+    pub fn table_datatype(&self, id: usize) -> &STable {
         &self.main.table_dt[id - RESVD_ID as usize]
     }
 
@@ -184,6 +184,7 @@ impl Dict {
         &self.info.funcs[ix]
     }
 
+    /// Get name id from string.
     fn new_name_id(&mut self, s: &str) -> i64 {
         if let Some(id) = self.main.names.get(s) {
             return *id;
@@ -344,6 +345,7 @@ impl Dict {
         Arc::new(dict)
     }
 
+    /// Save bytes to sys_store.
     fn save(id: u64, bytes: &[u8], ps: &mut PageSet) {
         let ssc = ps.sys_store.clone();
         let mut sys_store = ssc.borrow_mut();
@@ -351,6 +353,7 @@ impl Dict {
         sys_store.replace(&key, bytes, ps);
     }
 
+    /// Load bytes from sys_store.
     fn load(id: u64, ps: &mut PageSet) -> LVec<u8> {
         let ssc = ps.sys_store.clone();
         let sys_store = ssc.borrow();
@@ -359,6 +362,8 @@ impl Dict {
         sdata.bytes()
     }
 }
+
+pub type STable = Arc<DataType>;
 
 /// Schema Stored Function - result DataType, Param types and Statements.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -481,7 +486,7 @@ pub struct SRun<'a> {
     pub indent: usize,
     pub output: LString,
     pub dict: &'a Dict,
-    pub table: Option<(usize, &'a Arc<DataType>)>, // For table name and column names.
+    pub table: Option<(usize, &'a STable)>, // For table name and column names.
 }
 
 impl<'a> SRun<'a> {

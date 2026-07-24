@@ -26,25 +26,25 @@ pub enum Exp<A: Allocator + Debug + Default> {
     Bool(BoolExp<A>),
     Int(IntExp<A>),
     Str(StrExp<A>),
-    
+
     /// Name (unresolved). Resolves to Local or Col.
     Name(SrcPos),
-    
+
     /// Local variable.
     Local(usize),
-    
+
     /// Table column.
     Col(usize),
-    
+
     /// Binary expression.
     Binary(Operator, BoxA<Exp<A>, A>, BoxA<Exp<A>, A>),
-    
+
     /// Function call (unresolved). Schema, fname, args.
     FnCallByName(SrcPos, SrcPos, VecA<Exp<A>, A>),
 
     /// Function call (resolved). Function id and args.
     FnCall(usize, VecA<Exp<A>, A>),
-    
+
     /// Built-in call. Build-in operation and args.
     BuiltinCall(Builtin, VecA<Exp<A>, A>),
 }

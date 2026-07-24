@@ -22,6 +22,7 @@ impl Builtin {
             b"len" => Ok(len),
             b"substr" => Ok(substr),
             b"replace" => Ok(replace),
+            b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
             _ => Err(E::new("Unknown sys call")),
         }
@@ -63,6 +64,14 @@ impl Builtin {
                 let result = src.string().replace(pat.string(), with.string());
                 Value::String(LRc::new(result))
             }
+            contains => {
+                let pat = run.stack.pop().unwrap();
+                let src = run.stack.pop().unwrap();
+                let pat: &str = pat.string();
+                let src: &str = src.string();
+                let result = src.contains(pat);
+                Value::Bool(result)
+            }
             fn_text => {
                 let fname = run.stack.pop().unwrap();
                 let schema = run.stack.pop().unwrap();
@@ -87,6 +96,7 @@ impl Builtin {
             len => &DataType::Int,
             substr => &DataType::String(0),
             replace => &DataType::String(0),
+            contains => &DataType::Bool,
             fn_text => &DataType::String(0),
             _ => todo!(),
         }
@@ -98,6 +108,7 @@ impl Builtin {
             len => &STR_1,
             substr => &STR_INT_INT,
             replace => &STR_3,
+            contains => &STR_2,
             fn_text => &STR_2,
             _ => todo!(),
         }
