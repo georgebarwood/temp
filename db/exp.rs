@@ -58,13 +58,11 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
             Str(x) => Value::String(LRc::new(x.ev(run, rc))),
             Local(x) => run.local(*x).clone(),
             Col(x) => rc.item(*x, run.ps),
-            /*
             Binary(op, x, y) => {
                 let x = x.ev(run, rc);
                 let y = y.ev(run, rc);
                 op.eval(&x, &y)
             }
-            */
             FnCall(f, args) => {
                 let f = run.call_init(*f);
                 let save = run.stack.len();
@@ -83,7 +81,10 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 }
                 bi.eval(run)
             }
-            _ => panic!(),
+            _ => {
+                println!("problem exp={:?}", self);
+                panic!()
+            }
         }
     }
 }
@@ -168,12 +169,12 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 // println!("encoded exp!");
                 *self = re;
             }
-            FnCall(_fid, args) => {
+            FnCall(_fid, args) => { // Could have typed versions of FnCall.
                 for e in args {
                     e.encode();
                 }
             }
-            BuiltinCall(_bi, args) => {
+            BuiltinCall(_bi, args) => { // Could have typed versions of BuilinCall.
                 for e in args {
                     e.encode();
                 }

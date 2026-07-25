@@ -93,7 +93,7 @@ pub fn go(run: &mut Run) {
                     run.dict_changed = true;
                 } else if pass == 2 {
                     encode_block(&mut slist);
-                    // println!("Executing {:?}", slist);
+                    println!("Executing {:?}", slist);
                     execute_block(&slist, run);
                 }
             }

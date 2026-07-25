@@ -9,10 +9,11 @@ pub enum Builtin {
     substr,
     replace,
     contains,
-    binlen,
-    binsubstr,
+    // binlen,
+    // binsubstr,
     fn_text,
     execute,
+    arg,
     // More to do...
 }
 
@@ -26,6 +27,7 @@ impl Builtin {
             b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
             b"execute" => Ok(execute),
+            b"arg" => Ok(arg),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -94,19 +96,20 @@ impl Builtin {
                 go(run);
                 Value::Bool(true)
             }
-            _ => todo!(),
+            arg => {
+                let name = run.stack.pop().unwrap();
+                let kind = run.stack.pop().unwrap();
+                let result = run.tr.arg( kind.int(), name.string() );
+                Value::String(result)
+            }
         }
     }
     pub fn result_type(&self) -> &'static DataType {
         use Builtin::*;
         match self {
-            len => &DataType::Int,
-            substr => &DataType::String(0),
-            replace => &DataType::String(0),
-            contains => &DataType::Bool,
-            fn_text => &DataType::String(0),
-            execute => &DataType::Bool, // Maybe should be error code or string?
-            _ => todo!(),
+            execute | contains => &DataType::Bool,
+            len  => &DataType::Int,
+            substr | replace | fn_text | arg => &DataType::String(0),
         }
     }
 
@@ -119,7 +122,7 @@ impl Builtin {
             contains => &STR_2,
             fn_text => &STR_2,
             execute => &STR_1,
-            _ => todo!(),
+            arg => &INT_STR,
         }
     }
 }
@@ -132,3 +135,4 @@ const STR_3: [DataType; 3] = [
     DataType::String(0),
 ];
 const STR_INT_INT: [DataType; 3] = [DataType::String(0), DataType::Int, DataType::Int];
+const INT_STR: [DataType; 2] = [DataType::Int, DataType::String(0)];

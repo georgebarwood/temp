@@ -71,8 +71,7 @@ impl Operator {
         }
     }
 
-    /*
-    /// This may not be called any more.
+    /// Evaluate.
     pub fn eval(&self, x: &Value, y: &Value) -> Value {
         use Operator::*;
 
@@ -126,10 +125,8 @@ impl Operator {
             todo!()
         }
     }
-    */
 }
 
-/*
 /// Concatenate strings.
 fn concat(x: &str, y: &str) -> Value {
     let mut s = LString::with_capacity(x.len() + y.len());
@@ -138,7 +135,6 @@ fn concat(x: &str, y: &str) -> Value {
     let s = LRc::new(s);
     Value::String(s)
 }
-*/
 
 /// Convert value of any kind to string ( but binary not yet done ).
 pub fn val_to_str(x: &Value) -> LString {

@@ -20,7 +20,8 @@ pub fn test() {
            for n = Name from dbo.cust order by Name { set z = 55 }
            set result = 'George' 
            set result = sys.replace( result, 'e', 'ee' )
-           set result = sys.substr( result, 1, 5 )
+           set result = ' result=' | sys.substr( result, 1, 5 )
+           select 'k=', sys.arg(1,'k')
         }",
         "select sys.fn_text('dbo','test')",
         "select dbo.test(1,'')",
@@ -80,6 +81,8 @@ pub fn test() {
         let start = std::time::Instant::now();
 
         let mut tr = GenTransaction::new();
+        tr.qy.params.insert( GString::from("k"), GString::from("george") );
+        
         db.run(s, &mut tr);
 
         println!(
