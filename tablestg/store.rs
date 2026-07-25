@@ -138,7 +138,7 @@ impl Store {
                 vbm: vbm1,
                 record_count: 0,
                 remove_balance: 0,
-                changed: false,
+                changed: true,
             },
             extra: Extra {
                 vbm: vbm2,
