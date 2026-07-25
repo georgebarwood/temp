@@ -6,28 +6,32 @@ pub struct Run<'a> {
     pub stack: LVec<Value>,
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
-    pub source: LRc<LString>,     // For string constants when executing batch.
-    pub output: LVec<u8>,         // Maybe could generalise this in future.
+    pub source: LRc<LString>, // For string constants when executing batch.
+    pub output: GVec<u8>,
     pub dict_changed: bool,
     pub new_dict: &'a mut Arc<Dict>,
+    pub tr: &'a mut dyn Transaction,
 }
 
 impl<'a> Run<'a> {
-
     /// Create Run.
-    pub fn new( dict: &'a Dict, new_dict: &'a mut Arc<Dict>, ps: &'a mut PageSet ) -> Self
-    {
-        Self{ 
-            stack: LVec::new(), 
-            dict, 
-            ps, 
+    pub fn new(
+        dict: &'a Dict,
+        new_dict: &'a mut Arc<Dict>,
+        ps: &'a mut PageSet,
+        tr: &'a mut dyn Transaction,
+    ) -> Self {
+        Self {
+            stack: LVec::new(),
+            dict,
+            ps,
             source: LRc::new(LString::new()),
-            output: LVec::new(), 
+            output: GVec::new(),
             new_dict,
-            dict_changed: false
+            dict_changed: false,
+            tr,
         }
     }
-    
 
     /// Output Value.
     pub fn output(&mut self, v: &Value) {

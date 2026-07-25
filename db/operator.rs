@@ -77,7 +77,7 @@ impl Operator {
         use Operator::*;
 
         // println!("Operator::eval self={:?}", self);
-        
+
         if let Value::Int(x) = &x
             && let Value::Int(y) = &y
         {

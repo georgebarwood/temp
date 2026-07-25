@@ -25,7 +25,7 @@ pub fn test() {
         "select sys.fn_text('dbo','test')",
         "select dbo.test(1,'')",
     ];
-    let _sql2 : [&str; 17] = [
+    let _sql2: [&str; 17] = [
         "schema dbo",
         "table dbo.xxx(Name string,Age int,Height float,Email string)",
         "insert into dbo.xxx(Name,Age,Email) values('George', 60+8, 'george@gmail.com')",
@@ -71,43 +71,27 @@ pub fn test() {
     let sql = _sql1;
 
     let (is_new, spd) = get_spd();
-    let mut global = GSS::new(spd);
-    let (mut ps, mut dict) = global.init(is_new);
-    let global = Arc::new(Mutex::new(global));
+    let db = Database::new(spd, is_new);
 
-    // At this point everything is initialised and tasks can be started and given a clone of global.
-
-    // But for now, for testing purposes we just execute some SQL statements.
-
-    let mut dict_changed = false;
     for s in sql {
         println!();
         println!("Source='{}'", s);
 
         let start = std::time::Instant::now();
 
-        let ps = &mut ps;
-        let mut new_dict = dict.clone();
-        let mut run = Run::new( &dict, &mut new_dict, ps );
-    
-        run.source = LRc::new( LString::from(s) );
-        go(&mut run);
+        let mut tr = GenTransaction::new();
+        db.run(s, &mut tr);
+
         println!(
             "elapsed micros={} output=\n{}",
             start.elapsed().as_micros(),
-            tos(&run.output)
+            tos(&tr.rp.output)
         );
-        if run.dict_changed {
-            dict = new_dict.clone();
-            dict_changed = true;
-        }
     }
 
     println!();
     //println!("Perm::info = {:?}", pstd::localalloc::Perm::info());
     //println!();
 
-    global.lock().unwrap().commit(&mut ps, dict, dict_changed);
-
-    global.lock().unwrap().shutdown();
+    db.shutdown();
 }

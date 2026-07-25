@@ -10,14 +10,14 @@ So on initialisation we do
 schema info
 table info.schema( Name string )
 
-table info.table( Schema int, Name string 
-table info.column( Table int, Name string, DataType string, Description string, .... more meta info ) 
+table info.table( Schema int, Name string
+table info.column( Table int, Name string, DataType string, Description string, .... more meta info )
 table info.function( Schema int, Name string, Description string ....  )
 
 These tables allow user interface to keep track of names of system objects,
 but they are not part of the base system, which operates independently of these tables.
 
-Note that when importing from some other database, it is necessary to do insert into table... statements as well as 
+Note that when importing from some other database, it is necessary to do insert into table... statements as well as
 table x.y ( ....) statements. Similarly when dumping the database to text, these "info" tables need to be dumped as well as
 the corresponding table and fn statements.
 
@@ -123,6 +123,7 @@ make into lib, web server
 use datatype::DataType;
 use page_store::*;
 use pstd::{BoxA, VecA, alloc::Allocator};
+use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Mutex;
 use tablestg::*;
@@ -155,7 +156,7 @@ use builtin::*;
 pub mod exp;
 use exp::*;
 
-/// Global state [`GSS`], initialisation.
+/// [`Database`] - global shared state, [SharedPagedData] + [Dict].
 pub mod global;
 use global::*;
 
@@ -165,6 +166,10 @@ use exec::*;
 
 /// [`test::test()`]
 mod test;
+
+/// [Transaction]
+pub mod transaction;
+use transaction::*;
 
 fn main() {
     test::test();

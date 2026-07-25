@@ -156,7 +156,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                         let x = BoxA::new(std::mem::take(x));
                         let y = BoxA::new(std::mem::take(y));
                         match op {
-                            Operator::Concat=> Str(StrExp::Concat(x, y)),
+                            Operator::Concat => Str(StrExp::Concat(x, y)),
                             _ => todo!(),
                         }
                     }

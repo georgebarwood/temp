@@ -91,7 +91,7 @@ impl Builtin {
             }
             execute => {
                 run.source = run.stack.pop().unwrap().string_clone();
-                go( run );
+                go(run);
                 Value::Bool(true)
             }
             _ => todo!(),

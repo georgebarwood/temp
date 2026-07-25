@@ -3,39 +3,79 @@ use crate::*;
 /// Page number of page where info for sys_store is saved.
 const SYS_STORE_PAGE: u64 = 1;
 
-/// Global shared state.
-pub struct GSS {
+/// Database.
+pub struct Database {
+    inner: Arc<Mutex<DatabaseInner>>,
+}
+
+impl Database {
+    pub fn new(spd: Arc<SharedPagedData>, is_new: bool) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(DatabaseInner::new(spd, is_new))),
+        }
+    }
+    pub fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
+        self.inner.lock().unwrap().get_ps_and_dict_write()
+    }
+    pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
+        self.inner.lock().unwrap().get_ps_and_dict_read()
+    }
+    pub fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) {
+        self.inner.lock().unwrap().commit(ps, dict, new_dict);
+    }
+    pub fn shutdown(&self) {
+        self.inner.lock().unwrap().shutdown();
+    }
+    pub fn run(&self, source: &str, tr: &mut dyn Transaction) {
+        let (mut ps, mut dict) = self.get_ps_and_dict_write();
+        let ps = &mut ps;
+        let mut new_dict = dict.clone();
+        let mut run = Run::new(&dict, &mut new_dict, ps, tr);
+        let mut dict_changed = false;
+        run.source = LRc::new(LString::from(source));
+        go(&mut run);
+        let output = std::mem::take(&mut run.output);
+        if run.dict_changed {
+            dict = new_dict.clone();
+            dict_changed = true;
+        }
+        self.commit(ps, dict, dict_changed);
+        tr.set_output(output);
+    }
+}
+
+pub struct DatabaseInner {
     spd: Arc<SharedPagedData>,
     dict: Arc<Dict>,
 }
 
-impl GSS {
-    /// Create Global shared state. dict is initialised later by init.
-    pub fn new(spd: Arc<SharedPagedData>) -> Self {
-        let dict = Arc::new(Dict::new());
-        Self { spd, dict }
-    }
+impl DatabaseInner {
+    /// Create Database from SharedPagedData.
+    fn new(spd: Arc<SharedPagedData>, is_new: bool) -> Self {
+        let apd = spd.new_writer();
+        let mut ps = PageSet::new(apd);
 
-    /// Initialise. Returns `PageSet` (for writing) and `Arc<Dict>`.
-    pub fn init(&mut self, is_new: bool) -> (PageSet, Arc<Dict>) {
-        let (mut ps, mut dict) = self.get_ps_and_dict_write();
-
-        if is_new {
+        let dict = if is_new {
             assert!(ps.new_page() == SYS_STORE_PAGE);
             let ssc = ps.sys_store.clone();
             *ssc.borrow_mut() = Store::new(&mut ps);
+            println!("Calling save_sys_store");
+            save_sys_store(&mut ps);
+            ps.save();
+            Arc::new(Dict::new())
         } else {
             load_sys_store(&mut ps);
-            dict = Dict::load_from_sys_store(&mut ps);
-            self.dict = dict.clone();
-        }
-        (ps, dict)
+            Dict::load_from_sys_store(&mut ps)
+        };
+        Self { spd, dict }
     }
 
     /// Get PageSet and Dict for writing.
-    pub fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
+    fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
         let apd = self.spd.new_writer();
-        let ps = PageSet::new(apd);
+        let mut ps = PageSet::new(apd);
+        println!("Calling load_sys_store");
+        load_sys_store(&mut ps);
         let dict = self.dict.clone();
         (ps, dict)
     }
@@ -43,7 +83,8 @@ impl GSS {
     /// Get PageSet and Dict for reading.
     pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
         let apd = self.spd.new_reader();
-        let ps = PageSet::new(apd);
+        let mut ps = PageSet::new(apd);
+        load_sys_store(&mut ps);
         let dict = self.dict.clone();
         (ps, dict)
     }
