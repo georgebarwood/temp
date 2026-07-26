@@ -4,6 +4,7 @@ use crate::*;
 const SYS_STORE_PAGE: u64 = 1;
 
 /// Database.
+#[derive(Clone)]
 pub struct Database {
     inner: Arc<Mutex<DatabaseInner>>,
 }

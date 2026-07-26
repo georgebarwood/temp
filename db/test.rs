@@ -1,5 +1,6 @@
 use crate::*;
 
+#[test]
 pub fn test() {
         let _sql1: [&str; 1] = [ "
 let x=5 set x=10*13 select x, ' ', sys.len('hello')

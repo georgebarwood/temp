@@ -1,7 +1,5 @@
 use crate::*;
 
-use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
-
 /// Input/Output message. Query and Response.
 pub trait Transaction: Any {
     /// Output bytes.
@@ -57,8 +55,6 @@ impl Transaction for DummyTransaction {
         println!("Error: {}", err);
     }
 }
-
-type GBTreeMap<K, V> = BTreeMapA<K, V, CustomTuning<GTemp>>;
 
 use serde::{Deserialize, Serialize};
 
@@ -132,7 +128,7 @@ impl GenTransaction {
             .unwrap();
         Self {
             qy: GenQuery {
-                sql: Arc::new("EXEC web.Main()".to_string()),
+                sql: Arc::new("let x = web.Main()".to_string()),
                 now: now.as_micros() as i64,
                 ..Default::default()
             },
