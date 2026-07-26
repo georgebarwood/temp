@@ -7,7 +7,6 @@ pub struct Run<'a> {
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
     pub source: LRc<LString>, // For string constants when executing batch.
-    pub output: GVec<u8>,
     pub dict_changed: bool,
     pub new_dict: &'a mut Arc<Dict>,
     pub tr: &'a mut dyn Transaction,
@@ -26,7 +25,6 @@ impl<'a> Run<'a> {
             dict,
             ps,
             source: LRc::new(LString::new()),
-            output: GVec::new(),
             new_dict,
             dict_changed: false,
             tr,
@@ -36,11 +34,11 @@ impl<'a> Run<'a> {
     /// Output Value.
     pub fn output(&mut self, v: &Value) {
         match v {
-            Value::String(v) => self.output.extend_from_slice(v.as_bytes()),
-            Value::Binary(v) => self.output.extend_from_slice(v),
+            Value::String(v) => self.tr.output(v.as_bytes()),
+            Value::Binary(v) => self.tr.output(v),
             _ => {
                 let s = val_to_str(v);
-                self.output.extend_from_slice(s.as_bytes());
+                self.tr.output( s.as_bytes() );
             }
         }
     }
@@ -66,13 +64,13 @@ impl<'a> Run<'a> {
     }
 }
 
-/// Executes a batch of statements. Result is whether dict was updated.
-pub fn go(run: &mut Run) {
+/// Executes a batch of statements. Result is None is there was an error, otherwise position in source.
+pub fn go(run: &mut Run) -> Option<usize> {
+    let source = run.source.clone();
     for pass in 1..=2
     // If we know there are no schema updates, could skip pass 1.
     {
         let temp_dict = run.new_dict.clone();
-        let source = run.source.clone();
         let mut parser = Parser::new(source.as_bytes(), &temp_dict);
         match parser.pass(pass) {
             Err(e) => {
@@ -83,22 +81,27 @@ pub fn go(run: &mut Run) {
                 );
                 println!("Source: {}", tos(&run.source.as_bytes()[0..pos]));
                 println!();
-                break;
+                return None;
             }
             Ok(mut slist) => {
                 if parser.schema_updates {
-                    // println!("statements={:#?}", &slist);
+                    // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
                     execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps);
                     run.dict_changed = true;
                 } else if pass == 2 {
                     encode_block(&mut slist);
-                    println!("Executing {:?}", slist);
+                    // println!("Executing {:?}", slist);
                     execute_block(&slist, run);
+                }
+                if pass == 2 
+                {
+                    return Some(parser.tr.pos);
                 }
             }
         }
     }
+    None // We do not get here.
 }
 
 fn execute_schema_updates(
@@ -143,7 +146,10 @@ fn execute_schema_updates(
                     // Remove record from sys_schema using x.table_id and ps.
                     Table::drop(t as i64, dt, ps);
                 }
-                _ => panic!(),
+                _  => {
+                    println!("s={:?}", s);
+                    panic!();
+                }
             }
         }
     }

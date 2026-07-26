@@ -1,31 +1,37 @@
 use crate::*;
 
 pub fn test() {
-    let _sql1: [&str; 7] = [
-        "let x=5 set x=10*13 select x, sys.len('hello')",
-        "schema dbo",
-        "table dbo.cust( Name string )",
-        "insert into dbo.cust(Name) values('Freddy')",
-        "fn dbo.test(x int, y string) -> string { 
-           let z = ( x - 2 ) * 3
-           set y |= 'ok'
-           while z > 5 { set z = z - 1 }
-           if z = 0 { set z = 1 } else { set z = 2 }
-           insert into dbo.cust(Name) values('Marilyn')
-           insert into dbo.cust(Name) values('George')
-           let ok = sys.execute('select sys.substr(Name,0,4) from dbo.cust')
-           update dbo.cust set Name = Name | 'x' where Id < 6 and Id > 1
-           delete from dbo.cust where Id > 100
-           select Id, ' ', Name, ' ', sys.len(Name), ' ' from dbo.cust where sys.contains(Name,'e') order by Id
-           for n = Name from dbo.cust order by Name { set z = 55 }
-           set result = 'George' 
-           set result = sys.replace( result, 'e', 'ee' )
-           set result = ' result=' | sys.substr( result, 1, 5 )
-           select 'k=', sys.arg(1,'k')
-        }",
-        "select sys.fn_text('dbo','test')",
-        "select dbo.test(1,'')",
-    ];
+        let _sql1: [&str; 1] = [ "
+let x=5 set x=10*13 select x, ' ', sys.len('hello')
+go
+schema dbo 
+go 
+table dbo.cust( Name string )
+go
+insert into dbo.cust(Name) values('Freddy')
+go
+fn dbo.test(x int, y string) -> string { 
+    let z = ( x - 2 ) * 3
+    set y |= 'ok'
+    while z > 5 { set z = z - 1 }
+    if z = 0 { set z = 1 } else { set z = 2 }
+        insert into dbo.cust(Name) values('Marilyn')
+        insert into dbo.cust(Name) values('George')
+        let ok = sys.execute('select sys.substr(Name,0,4) from dbo.cust')
+        update dbo.cust set Name = Name | 'x' where Id < 6 and Id > 1
+        delete from dbo.cust where Id > 100
+        select ' ', Id, ' ', Name, ' ', sys.len(Name), ' ' from dbo.cust where sys.contains(Name,'e') order by Id
+        for n = Name from dbo.cust order by Name { set z = 55 }
+        set result = 'George' 
+        set result = sys.replace( result, 'e', 'ee' )
+        set result = ' result=' | sys.substr( result, 1, 5 )
+        select 'k=', sys.arg(1,'k')
+}
+go
+select sys.fn_text('dbo','test')
+select dbo.test(1,'')
+"];
+
     let _sql2: [&str; 17] = [
         "schema dbo",
         "table dbo.xxx(Name string,Age int,Height float,Email string)",
@@ -49,11 +55,9 @@ pub fn test() {
         "select dbo.yy(100)",
     ];
 
-    let _sql3: [&str; 4] = [
-        "schema test",
-        "table test.users (name string, age int)",
-        "let i = 8192
-          while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
+    let _sql3: [&str; 2] = [ "schema test go table test.users (name string, age int) go
+         let i = 8192
+         while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
         "let total=0 for x = age from test.users set total = total + x select total",
     ];
 
@@ -69,14 +73,14 @@ pub fn test() {
         "table info.function(Schema int, Name string)",
     ];
 
-    let sql = _sql1;
+    let sql = _sql3;
 
     let (is_new, spd) = get_spd();
     let db = Database::new(spd, is_new);
 
     for s in sql {
-        println!();
-        println!("Source='{}'", s);
+        //println!();
+        //println!("Source='{}'", s);
 
         let start = std::time::Instant::now();
 

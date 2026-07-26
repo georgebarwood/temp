@@ -1,5 +1,9 @@
 /* What next plan...
 
+Can execute be used to modify schema? Yes, but newly defined tables and functions are not acvailable
+until whole query finishes. Batch mode "go" is special, and used for database initialisation.
+
+
 Creaate web server!
 sys.execute function. Executes string.
 

@@ -29,18 +29,32 @@ impl Database {
     pub fn run(&self, source: &str, tr: &mut dyn Transaction) {
         let (mut ps, mut dict) = self.get_ps_and_dict_write();
         let ps = &mut ps;
-        let mut new_dict = dict.clone();
-        let mut run = Run::new(&dict, &mut new_dict, ps, tr);
         let mut dict_changed = false;
-        run.source = LRc::new(LString::from(source));
-        go(&mut run);
-        let output = std::mem::take(&mut run.output);
-        if run.dict_changed {
-            dict = new_dict.clone();
-            dict_changed = true;
+        let mut new_dict = dict.clone();
+        let mut start_pos = 0;
+        let mut end_pos;
+        loop 
+        {
+            let changed = {
+                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
+                let src = &source[start_pos..];
+                run.source = LRc::new(LString::from(src));
+                end_pos = go(&mut run);
+                run.dict_changed
+            };
+            if changed {
+                dict = new_dict.clone();
+                dict_changed = true;
+            }
+            if let Some(new_pos) = end_pos
+            {
+               start_pos += new_pos;
+               if start_pos == source.len() { break; }
+            } else {
+                break;
+            }
         }
         self.commit(ps, dict, dict_changed);
-        tr.set_output(output);
     }
 }
 
@@ -74,7 +88,7 @@ impl DatabaseInner {
     fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
         let apd = self.spd.new_writer();
         let mut ps = PageSet::new(apd);
-        println!("Calling load_sys_store");
+        // println!("Calling load_sys_store");
         load_sys_store(&mut ps);
         let dict = self.dict.clone();
         (ps, dict)

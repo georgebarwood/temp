@@ -4,14 +4,14 @@ use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localal
 
 /// Input/Output message. Query and Response.
 pub trait Transaction: Any {
+    /// Output bytes.
+    fn output(&mut self, _bytes: &[u8] ) {}
+
     /// STATUSCODE builtin function. sets the response status code.
     fn status_code(&mut self, _code: i64) {}
 
     /// HEADER builtin function, adds header to response.
     fn header(&mut self, _name: &str, _value: &str) {}
-
-    /// Set output.
-    fn set_output(&mut self, _bytes: GVec<u8>) {}
 
     /// GLOBAL builtin function. Used to get request time.
     fn global(&self, _kind: i64) -> i64 {
@@ -147,10 +147,11 @@ impl GenTransaction {
 }
 
 impl Transaction for GenTransaction {
-    fn set_output(&mut self, bytes: GVec<u8>) {
-        self.rp.output = bytes;
-    }
 
+    fn output(&mut self, bytes: &[u8] ) {
+       self.rp.output.extend_from_slice(bytes);
+    }
+    
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {
         let s: Option<&str> = match kind {
             0 => Some(&self.qy.path),

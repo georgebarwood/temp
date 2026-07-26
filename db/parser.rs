@@ -15,7 +15,7 @@ enum RContext<'a> {
 /// Parse SQL. There are two passes.
 pub struct Parser<'a> {
     token: Token,
-    tr: TokenReader<'a>,
+    pub tr: TokenReader<'a>,
     pub dict: &'a Dict,
     pub schema_updates: bool,
     non_schema_statements: bool,
@@ -84,6 +84,9 @@ impl<'a> Parser<'a> {
             match &self.token {
                 Token::Ident(x, y) => {
                     let ident = &self.tr.input[*x..*y];
+                    if ident == b"go" {
+                        break;
+                    }
                     self.next()?;
                     let s = self.statement(ident)?;
                     result.push(s);
