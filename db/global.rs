@@ -45,6 +45,7 @@ impl Database {
             };
             if changed {
                 dict = new_dict.clone();
+                println!("dict changed");
                 dict_changed = true;
             }
             if let Some(new_pos) = end_pos

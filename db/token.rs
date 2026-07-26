@@ -50,7 +50,7 @@ impl<'a> TokenReader<'a> {
     }
     pub fn next_token(&mut self) -> Result<Token, E> {
         let mut c = self.cc();
-        while c == b' ' || c == b'\n'
+        while c == b' ' || c == b'\n' || c == b'\r'
         // Skip spaces
         {
             c = self.getc();

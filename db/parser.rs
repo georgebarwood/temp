@@ -39,6 +39,8 @@ impl<'a> Parser<'a> {
 
     pub fn pass(&mut self, pass: u8) -> Result<LVec<LStatement>, E> {
         self.pass = pass;
+        self.schema_updates = false;
+        self.non_schema_statements = false;
         self.tr.pos = 0;
         self.locs.clear();
         self.statements()
@@ -229,6 +231,14 @@ impl<'a> Parser<'a> {
         self.expect_ident(b"from")?;
         let (from, _, _, table_dt) = self.table()?;
 
+        let wher = if self.test_ident(b"where")? {
+            let wher = self.bool_exp_table(&table_dt)?;
+            Some(wher)
+        } else {
+            None
+        };
+        let order_by = self.order_by(&table_dt)?;
+
         let len = self.locs.len();
 
         // Resolve names, push idents and typs onto local bindings.
@@ -242,14 +252,6 @@ impl<'a> Parser<'a> {
                 datatype: dt,
             });
         }
-
-        let wher = if self.test_ident(b"where")? {
-            let wher = self.bool_exp_table(&table_dt)?;
-            Some(wher)
-        } else {
-            None
-        };
-        let order_by = self.order_by(&table_dt)?;
 
         let block = self.block()?;
 
@@ -387,6 +389,7 @@ impl<'a> Parser<'a> {
                 None
             };
             let order_by = self.order_by(&table_dt)?;
+            
             {
                 let lctx = RContext::Local(&self.locs);
                 let tctx = RContext::Table(&table_dt, &lctx);
