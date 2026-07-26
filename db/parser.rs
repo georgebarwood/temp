@@ -543,7 +543,7 @@ impl<'a> Parser<'a> {
 
                     &f.ret
                 } else {
-                    return Err(E::new(&format!("Function {} . {} not found", sname, fname)));
+                    return Err(E::new(&format!("Function {}.{} not found", sname, fname)));
                 }
             }
             Exp::BuiltinCall(builtin, args) => {
