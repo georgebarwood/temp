@@ -130,7 +130,7 @@ fn execute_schema_updates(
                 Statement::RenameTable(x) => dict.rename_table(x, src),
 
                 Statement::CreateFn(x) => {
-                    if pass == 1 {
+                    if pass == 1 && !x.alter {
                         dict.create_fn(x, src);
                     } else {
                         dict.set_fn_block(x, src);

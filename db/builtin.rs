@@ -15,6 +15,7 @@ pub enum Builtin {
     execute,
     arg,
     header,
+    parseint,
     // More to do...
 }
 
@@ -30,6 +31,7 @@ impl Builtin {
             b"execute" => Ok(execute),
             b"arg" => Ok(arg),
             b"header" => Ok(header),
+            b"parseint" => Ok(parseint),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -110,13 +112,22 @@ impl Builtin {
                 run.tr.header( name.string(), value.string() );
                 Value::Bool(true)
             }
+            parseint => { 
+                let str = run.stack.pop().unwrap();
+                let str = str.string();
+                let i = if let Ok(i) = str.parse::<i64>()
+                {
+                    i
+                } else { 0 };
+                Value::Int(i)
+            }
         }
     }
     pub fn result_type(&self) -> &'static DataType {
         use Builtin::*;
         match self {
             execute | contains | header => &DataType::Bool,
-            len  => &DataType::Int,
+            len | parseint  => &DataType::Int,
             substr | replace | fn_text | arg => &DataType::String(0),
         }
     }
@@ -129,7 +140,7 @@ impl Builtin {
             replace => &STR_3,
             contains | header => &STR_2,
             fn_text => &STR_2,
-            execute => &STR_1,
+            execute | parseint => &STR_1,
             arg => &INT_STR,
         }
     }

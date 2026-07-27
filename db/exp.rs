@@ -158,7 +158,13 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                         let y = BoxA::new(std::mem::take(y));
                         match op {
                             Operator::Concat => Str(StrExp::Concat(x, y)),
-                            _ => todo!(),
+                            Operator::Equal => Bool(BoolExp::StrEq(x, y)),
+                            Operator::NotEqual => Bool(BoolExp::StrNe(x, y)),
+                            Operator::Less => Bool(BoolExp::StrLt(x, y)),
+                            Operator::Greater => Bool(BoolExp::StrGt(x, y)),
+                            Operator::LessEqual => Bool(BoolExp::StrLe(x, y)),
+                            Operator::GreaterEqual => Bool(BoolExp::StrGe(x, y)),
+                            _ => todo!("Op={:?}", op),
                         }
                     }
                     _ => {
@@ -342,6 +348,13 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
     IntGt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntLe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntGe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
+
+    StrEq(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+    StrNe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+    StrLt(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+    StrGt(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+    StrLe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+    StrGe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
     // String comparison is todo
 }
 
@@ -361,6 +374,13 @@ impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
             IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
             IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
             IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
+            
+            StrEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
+            StrNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
+            StrLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
+            StrGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
+            StrLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
+            StrGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
         }
     }
 }

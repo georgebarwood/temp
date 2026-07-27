@@ -59,9 +59,10 @@ impl<'a> Parser<'a> {
             b"for" => self.p_for(),
             b"schema" => self.create_schema(),
             b"table" => self.create_table(),
-            b"fn" => self.create_fn(),
+            b"fn" => self.create_fn(false),
             b"drop" => self.drop(),
             b"rename" => self.rename(),
+            b"alter" => self.alter(),
             _ => {
                 return Err(E::new("Unknown keyword"));
             }
@@ -272,7 +273,15 @@ impl<'a> Parser<'a> {
             b"table" => self.rename_table(),
             b"fn" => self.rename_fn(),
             // "schema" => self.drop_schema(),
-            _ => Err(E::new("Expected TABLE, SCHEMA....")),
+            _ => Err(E::new("Expected table, fn...")),
+        }
+    }
+
+    fn alter(&mut self) -> Result<LStatement, E> {
+        let ident = self.read_ident()?;
+        match self.str(&ident) {
+            b"fn" => self.create_fn(true),
+            _ => Err(E::new("Expected fn...")),
         }
     }
 
@@ -281,7 +290,7 @@ impl<'a> Parser<'a> {
         match self.str(&ident) {
             b"table" => self.drop_table(),
             // "schema" => self.drop_schema(),
-            _ => Err(E::new("Expected TABLE, SCHEMA....")),
+            _ => Err(E::new("Expected table...")),
         }
     }
 
@@ -809,15 +818,23 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn create_fn(&mut self) -> Result<LStatement, E> {
+    fn create_fn(&mut self, alter:bool) -> Result<LStatement, E> {
         // create fn schema.name ( param1 type1, param2 type2... ) -> rtyp as tatement
         let schema = self.read_ident()?;
         let schema_id = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let fname = self.read_ident()?;
 
-        if self.pass == 1 && self.check_function(schema_id, &fname).is_ok() {
-            return Err(E::new("Function already exists"));
+        if self.pass == 1 {
+            let exists = self.check_function(schema_id, &fname);
+            if alter {
+                if exists.is_err() {
+                    return Err(E::new("Function not found"));
+                }
+                println!("todo : check fn arg types/ret type have not changed");
+            } else if exists.is_ok() {
+                return Err(E::new("Function already exists"));
+            }
         }
 
         self.expect_token(Token::LBra)?;
@@ -861,6 +878,7 @@ impl<'a> Parser<'a> {
             parms,
             ret,
             block,
+            alter
         };
 
         let result = Statement::CreateFn(result);
@@ -1072,12 +1090,11 @@ impl<'a> Parser<'a> {
         self.tr.pos
     }
 
-    fn show_ct(&self) -> &str {
+    fn show_ct(&self) -> String {
         match &self.token {
-            Token::Ident(x, y) => tos(&self.tr.input[*x..*y]),
+            Token::Ident(x, y) => String::from(tos(&self.tr.input[*x..*y])),
             _ => {
-                println!("show_ct {:?}", self.token);
-                "todo"
+                format!("{:?}", self.token)
             }
         }
     }

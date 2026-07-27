@@ -128,7 +128,7 @@ impl GenTransaction {
             .unwrap();
         Self {
             qy: GenQuery {
-                sql: Arc::new("let x = web.Main()".to_string()),
+                sql: Arc::new("let x = web.main()".to_string()),
                 now: now.as_micros() as i64,
                 ..Default::default()
             },
@@ -150,7 +150,10 @@ impl Transaction for GenTransaction {
     
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {
         let s: Option<&str> = match kind {
-            0 => Some(&self.qy.path),
+            0 => {
+                println!("path={}", &self.qy.path );
+                Some(&self.qy.path)
+            }
             1 => self.qy.params.get(s).as_ref().map(|x| x.as_str()),
             2 => self.qy.form.get(s).as_ref().map(|x| x.as_str()),
             3 => self.qy.cookies.get(s).as_ref().map(|x| x.as_str()),

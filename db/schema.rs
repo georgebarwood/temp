@@ -254,6 +254,20 @@ impl Dict {
         };
         self.main.funcs.push(func);
         self.main.func_lookup.insert((x.schema_id, nid), func_id);
+
+        let mut parms = GVec::new();
+        for (name, typ) in &x.parms {
+            let name = name.sstr(src);
+            parms.push((YesString::from_str(name), typ.clone()));
+        }
+        let info_func = SFunc::<YesString> {
+            schema_id: x.schema_id,
+            fname: YesString::from_str(fname),
+            ret: x.ret.clone(),
+            parms,
+            block: GVec::new(), // Dummy block on pass 1
+        };
+        self.info.funcs.push(info_func);
     }
 
     /// Set Function block.
@@ -261,25 +275,14 @@ impl Dict {
         let fname = x.fname.sstr(src);
         let nid = self.main.names.get(fname).unwrap();
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
+        
         let f = &mut self.main.funcs[*fid];
         f.block = gblock(&x.block, src);
         encode_block(&mut f.block);
-        // println!("set fn block, encode done, encoded block={:?}", &f.block);
 
-        let mut parms = GVec::new();
-        for (name, typ) in &x.parms {
-            let name = name.sstr(src);
-            parms.push((YesString::from_str(name), typ.clone()));
-        }
-
-        let info_func = SFunc::<YesString> {
-            schema_id: x.schema_id,
-            fname: YesString::from_str(fname),
-            ret: x.ret.clone(),
-            parms,
-            block: gblock(&x.block, src),
-        };
-        self.info.funcs.push(info_func);
+        let f = &mut self.info.funcs[*fid];
+        f.block = gblock(&x.block, src);
+        // info func is not encoded.
     }
 
     /// Rename Function.
@@ -403,7 +406,10 @@ impl<S: XString> SFunc<S> {
             write!(&mut sr.output, "{} {}", pname, p.1)?;
             sr.names.push(pname);
         }
-        write!(&mut sr.output, ") -> {}", self.ret)?;
+        if self.ret != DataType::Empty
+        {
+            write!(&mut sr.output, ") -> {}", self.ret)?;
+        }
 
         show_block(sr, &self.block)?;
         Ok(())

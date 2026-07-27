@@ -27,8 +27,12 @@ impl Database {
     pub fn shutdown(&self) {
         self.inner.lock().unwrap().shutdown();
     }
-    pub fn run(&self, source: &str, tr: &mut dyn Transaction) {
-        let (mut ps, mut dict) = self.get_ps_and_dict_write();
+    pub fn run(&self, source: &str, tr: &mut dyn Transaction, readonly: bool) {
+        let (mut ps, mut dict) = if readonly {
+            self.get_ps_and_dict_read()
+        } else {
+            self.get_ps_and_dict_write()
+        };
         let ps = &mut ps;
         let mut dict_changed = false;
         let mut new_dict = dict.clone();
@@ -45,7 +49,6 @@ impl Database {
             };
             if changed {
                 dict = new_dict.clone();
-                println!("dict changed");
                 dict_changed = true;
             }
             if let Some(new_pos) = end_pos
@@ -56,13 +59,17 @@ impl Database {
                 break;
             }
         }
-        self.commit(ps, dict, dict_changed);
+        if !readonly
+        {
+            self.commit(ps, dict, dict_changed);
+        }
     }
 }
 
 pub struct DatabaseInner {
     spd: Arc<SharedPagedData>,
     dict: Arc<Dict>,
+    dict_version: i64,
 }
 
 impl DatabaseInner {
@@ -83,11 +90,13 @@ impl DatabaseInner {
             load_sys_store(&mut ps);
             Dict::load_from_sys_store(&mut ps)
         };
-        Self { spd, dict }
+        Self { spd, dict, dict_version: 1 }
     }
 
     /// Get PageSet and Dict for writing.
     fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
+        // println!("get_ps_and_dict_write dict version={}", self.dict_version);
+        
         let apd = self.spd.new_writer();
         let mut ps = PageSet::new(apd);
         // println!("Calling load_sys_store");
@@ -98,6 +107,7 @@ impl DatabaseInner {
 
     /// Get PageSet and Dict for reading.
     pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
+        // println!("get_ps_and_dict_read dict version={}", self.dict_version);
         let apd = self.spd.new_reader();
         let mut ps = PageSet::new(apd);
         load_sys_store(&mut ps);
@@ -108,8 +118,10 @@ impl DatabaseInner {
     /// Save dict (if changed), sys_store and any updated tables and pages.
     pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) {
         if new_dict {
+            println!("DatabaseInner commit new_dict");
             dict.save_to_sys_store(ps);
             self.dict = dict;
+            self.dict_version += 1;
         }
         save_sys_store(ps);
         ps.save();

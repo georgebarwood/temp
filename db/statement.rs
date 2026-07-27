@@ -574,7 +574,7 @@ pub struct RenameTable {
     pub new_tname: SrcPos,
 }
 
-/// CREATE FN statement.
+/// create / alter fn statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateFn<A: Allocator + Debug + Default> {
     pub schema_id: i64,
@@ -582,9 +582,10 @@ pub struct CreateFn<A: Allocator + Debug + Default> {
     pub ret: DataType,
     pub parms: VecA<(SrcPos, DataType), A>,
     pub block: VecA<Statement<A, SrcPos>, A>,
+    pub alter: bool,
 }
 
-/// RENAME FN statement.
+/// rename fn statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameFn {
     pub old_schema_id: i64,
