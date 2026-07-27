@@ -1,4 +1,14 @@
-/* What next plan...
+/* What next plan..
+
+Display errors in execute and alter fn. Handle refcell errors.
+
+Rename fn, drop fn ( with checks ).
+
+Alter fn checks done.
+
+Optimise select from .... where Id = x 
+
+Finish ShowAll to show table data.
 
 Can execute be used to modify schema? Yes, but newly defined tables and functions are not acvailable
 until whole query finishes. Batch mode "go" is special, and used for database initialisation.

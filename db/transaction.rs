@@ -151,7 +151,7 @@ impl Transaction for GenTransaction {
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {
         let s: Option<&str> = match kind {
             0 => {
-                println!("path={}", &self.qy.path );
+                // println!("path={}", &self.qy.path );
                 Some(&self.qy.path)
             }
             1 => self.qy.params.get(s).as_ref().map(|x| x.as_str()),

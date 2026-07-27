@@ -58,7 +58,7 @@ impl<'a> TokenReader<'a> {
         match c {
             b'0'..=b'9' => self.num(),
             b'a'..=b'z' | b'A'..=b'Z' => self.ident(),
-            b'\'' => self.string(),
+            b'\'' | b'"' => self.string(c),
             0 => Ok(Token::Eof),
             _ => self.other(),
         }
@@ -177,12 +177,12 @@ impl<'a> TokenReader<'a> {
         }
         Ok(Token::Ident(start, self.pos))
     }
-    fn string(&mut self) -> Result<Token, E> {
+    fn string(&mut self, term: u8) -> Result<Token, E> {
         let mut c = self.getc();
         let start = self.pos;
         loop {
+            if c == term { break; }
             match c {
-                b'\'' => break,
                 0 => return self.err("EOF reached in string"),
                 _ => c = self.getc(),
             }
@@ -190,6 +190,7 @@ impl<'a> TokenReader<'a> {
         self.getc();
         Ok(Token::String(start, self.pos - 1))
     }
+    
     fn err(&mut self, message: &str) -> Result<Token, E> {
         Err(E::new(message))
     }

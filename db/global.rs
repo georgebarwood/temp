@@ -21,13 +21,15 @@ impl Database {
     pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
         self.inner.lock().unwrap().get_ps_and_dict_read()
     }
-    pub fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) {
-        self.inner.lock().unwrap().commit(ps, dict, new_dict);
+    pub fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
+        self.inner.lock().unwrap().commit(ps, dict, new_dict)
     }
     pub fn shutdown(&self) {
         self.inner.lock().unwrap().shutdown();
     }
-    pub fn run(&self, source: &str, tr: &mut dyn Transaction, readonly: bool) {
+
+    /// Run a transaction. Returns number of changed pages.
+    pub fn run(&self, source: &str, tr: &mut dyn Transaction, readonly: bool) -> usize {
         let (mut ps, mut dict) = if readonly {
             self.get_ps_and_dict_read()
         } else {
@@ -59,10 +61,12 @@ impl Database {
                 break;
             }
         }
+        let mut result = 0;
         if !readonly
         {
-            self.commit(ps, dict, dict_changed);
+            result = self.commit(ps, dict, dict_changed);
         }
+        result
     }
 }
 
@@ -115,8 +119,8 @@ impl DatabaseInner {
         (ps, dict)
     }
 
-    /// Save dict (if changed), sys_store and any updated tables and pages.
-    pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) {
+    /// Save dict (if changed), sys_store and any updated tables and pages. Returns number of changed pages.
+    pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
         if new_dict {
             println!("DatabaseInner commit new_dict");
             dict.save_to_sys_store(ps);
@@ -124,7 +128,7 @@ impl DatabaseInner {
             self.dict_version += 1;
         }
         save_sys_store(ps);
-        ps.save();
+        ps.save()
     }
 
     /// Called before process terminates to ensure all commits are flushed to permanent storage.

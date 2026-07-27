@@ -831,7 +831,6 @@ impl<'a> Parser<'a> {
                 if exists.is_err() {
                     return Err(E::new("Function not found"));
                 }
-                println!("todo : check fn arg types/ret type have not changed");
             } else if exists.is_ok() {
                 return Err(E::new("Function already exists"));
             }
@@ -868,6 +867,24 @@ impl<'a> Parser<'a> {
                 datatype: typ.clone(),
             });
         }
+
+        if self.pass == 1 && alter
+        {
+           let (fix,_) = self.check_function(schema_id, &fname).unwrap();
+           let f = self.dict.func(fix);
+           if !ret.similar( &f.ret ) {
+               return Err(E::new("Return type cannot change"));
+           }
+           if parms.len() != f.parms.len() {
+               return Err(E::new("Number of parameters cannot change"));
+           }
+           for ( (_,t1), (_,t2) ) in parms.iter().zip( f.parms.iter() )
+           {
+              if !t1.similar(t2) {
+                  return Err(E::new("Params types cannot change"));
+              }
+           }  
+        }  
 
         let block = self.block()?;
         self.locs.truncate(save);
