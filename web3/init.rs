@@ -85,9 +85,9 @@ fn handler.editfn() {
   let k = sys.parseint( sys.arg( 1, 'k' ) )
   let sql = sys.arg(2, 'sql')
   
-  for s=Schema, name=Name from info.function where Id = k
+  for sid =Schema, name=Name from info.function where Id = k
   {
-    let sname = info.sname(s) 
+    let sname = info.sname(sid) 
 
     if sql != '' {
       let x = sys.execute( 'alter ' | sql )
@@ -126,6 +126,7 @@ insert into info.schema( Name ) values ( 'info' )
 insert into info.schema( Name ) values ( 'web' )
 insert into info.schema( Name ) values ( 'handler' )
 
+insert into info.table( Schema, Name ) values (1, 'schema' )
 insert into info.table( Schema, Name ) values (1, 'table' )
 insert into info.table( Schema, Name ) values (1, 'function' )
 
@@ -140,6 +141,7 @@ insert into info.function( Schema, Name ) values ( 3, 'execute' )
 insert into info.function( Schema, Name ) values ( 3, 'showschema' )
 insert into info.function( Schema, Name ) values ( 3, 'editfn' )
 insert into info.function( Schema, Name ) values ( 3, 'showall' )
+insert into info.function( Schema, Name ) values ( 3, 'favicon' )
 
 
 "###;
