@@ -123,7 +123,7 @@ fn main()
             // Process messages that update the database.
             while let Some(mut sm) = update_rx.blocking_recv() {
                 let sql = sm.trans.x.qy.sql.clone();
-                database.run(&sql, &mut sm.trans.x, false);
+                sm.trans.updates = database.run(&sql, &mut sm.trans.x, false);
                 /*
                 if is_master && !sm.trans.no_log() && db.changed() {
                     let ser = bincode::serialize(&sm.trans.x.qy).unwrap();
