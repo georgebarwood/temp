@@ -145,7 +145,8 @@ where
                 let save = sr.names.len();
                 sr.output.push_str("for ");
                 sr.set_table(x.from);
-                for (name, val) in &x.lets {
+                for (i,(name, val)) in x.lets.iter().enumerate() {
+                    if i != 0 { sr.output.push_str(", "); }
                     let name = name.str();
                     sr.names.push(name);
                     sr.output.push_str(name);
@@ -154,11 +155,21 @@ where
                 }
                 sr.output.push_str(" from ");
                 sr.write_table_name();
+
+                sr.names.truncate(save); // To show where and order by
+                
                 if let Some(w) = &x.wher {
                     sr.output.push_str(" where ");
                     w.show(sr)?;
                 }
                 Self::show_order_by(&x.order_by, sr)?;
+
+                // Push the names again for show_block.
+                for (name, _) in &x.lets {
+                    let name = name.str();
+                    sr.names.push(name);
+                }
+                
                 show_block(sr, &x.block)?;
                 sr.names.truncate(save);
             }
