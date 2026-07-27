@@ -131,7 +131,8 @@ where
                     e.show(sr)?;
                 }
                 if x.from.is_some() {
-                    sr.output.push_str(" from ");
+                    sr.newln();
+                    sr.output.push_str("from ");
                     sr.write_table_name();
                     if let Some(w) = &x.wher {
                         sr.output.push_str(" where ");
@@ -170,6 +171,7 @@ where
         if let Some((list, desc)) = ob {
             sr.output.push_str(" order by ");
             for (i, e) in list.iter().enumerate() {
+                if i != 0 { sr.output.push_str(", "); }
                 e.show(sr)?;
                 if desc[i] {
                     sr.output.push_str(" desc ");

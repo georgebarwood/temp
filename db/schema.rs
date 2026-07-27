@@ -406,9 +406,11 @@ impl<S: XString> SFunc<S> {
             write!(&mut sr.output, "{} {}", pname, p.1)?;
             sr.names.push(pname);
         }
+        sr.output.push_str(")");
+        
         if self.ret != DataType::Empty
         {
-            write!(&mut sr.output, ") -> {}", self.ret)?;
+            write!(&mut sr.output, " -> {}", self.ret)?;
         }
 
         show_block(sr, &self.block)?;
@@ -426,10 +428,7 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
     sr.output.push_str(" {");
     sr.indent += 4;
     for s in block {
-        sr.output.push_str("\n");
-        for _ in 0..sr.indent {
-            sr.output.push_str(" ");
-        }
+        sr.newln();
         s.show(sr)?;
     }
     sr.indent -= 4;
@@ -536,12 +535,20 @@ impl<'a> SRun<'a> {
 
     pub fn write_fn_name(&mut self, ix: usize) {
         let f = self.dict.func_info(ix);
-
+        self.write_schema( f.schema_id );
+        self.output.push_str(".");
         self.output.push_str(f.fname.str());
     }
 
     pub fn write_schema(&mut self, schema_id: i64) {
         self.output
             .push_str(self.dict.schema_name(schema_id).unwrap());
+    }
+
+    pub fn newln(&mut self) {
+        self.output.push_str("\n");
+        for _ in 0..self.indent {
+            self.output.push_str(" ");
+        }
     }
 }

@@ -132,7 +132,7 @@ fn execute_schema_updates(
                 Statement::CreateFn(x) => {
                     if pass == 1 && !x.alter {
                         dict.create_fn(x, src);
-                    } else {
+                    } else if pass == 2 {
                         dict.set_fn_block(x, src);
                     }
                 }

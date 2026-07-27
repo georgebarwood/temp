@@ -112,7 +112,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 let args = gvals(args, src);
                 BuiltinCall(*bi, args)
             }
-            _ => todo!(),
+            _ => todo!("Exp eval{:?}", exp),
         }
     }
 

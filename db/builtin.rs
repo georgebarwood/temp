@@ -12,6 +12,7 @@ pub enum Builtin {
     // binlen,
     // binsubstr,
     fn_text,
+    table_text,
     execute,
     arg,
     header,
@@ -28,6 +29,7 @@ impl Builtin {
             b"replace" => Ok(replace),
             b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
+            b"table_text" => Ok(table_text),
             b"execute" => Ok(execute),
             b"arg" => Ok(arg),
             b"header" => Ok(header),
@@ -95,6 +97,20 @@ impl Builtin {
 
                 Value::String(LRc::new(result))
             }
+            table_text => {
+                let tname = run.stack.pop().unwrap();
+                let tname = tname.string();
+                let schema = run.stack.pop().unwrap();
+                let schema = schema.string();
+
+                let sid = run.dict.schema_id(schema).unwrap();
+                let nameid = run.dict.name_id(tname).unwrap();
+                let (_,dt) = run.dict.table(&(*sid, *nameid)).unwrap();
+                let mut result = LString::new();
+                use std::fmt::Write;
+                write!( &mut result, "table {}.{} {}", schema, tname, dt).unwrap();
+                Value::String(LRc::new(result))
+            }
             execute => {
                 run.source = run.stack.pop().unwrap().string_clone();
                 go(run);
@@ -128,7 +144,7 @@ impl Builtin {
         match self {
             execute | contains | header => &DataType::Bool,
             len | parseint  => &DataType::Int,
-            substr | replace | fn_text | arg => &DataType::String(0),
+            substr | replace | fn_text | table_text | arg => &DataType::String(0),
         }
     }
 
@@ -139,7 +155,7 @@ impl Builtin {
             substr => &STR_INT_INT,
             replace => &STR_3,
             contains | header => &STR_2,
-            fn_text => &STR_2,
+            fn_text | table_text => &STR_2,
             execute | parseint => &STR_1,
             arg => &INT_STR,
         }
