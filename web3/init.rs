@@ -31,7 +31,7 @@ fn web.main() {
    let x = sys.execute(sql)
 }
 
-fn web.header() -> string {
+fn web.header() {
    select '<p>Links <a href="/admin">Menu</a> <a href="/execute">Exec</a>'
 }
 
@@ -50,6 +50,7 @@ fn handler.admin() {
   let x = web.header()
   select '<p>Schemas:'
   select '<p><a href="/showschema?k=', Id, '">', Name, '</a>' from info.schema order by Name
+  select '<p><a target=_blank href="/showall">Show All</a>'
 }
 
 fn handler.execute() {
@@ -69,12 +70,13 @@ fn handler.execute() {
 fn handler.showschema() {
   let x = web.header()
   let k = sys.parseint( sys.arg( 1, 'k' ) )
-  select '<p>Schema ', info.sname(k)
+  let sname = info.sname(k)
+  select '<p>Schema ', sname
   select '<p>Functions: '
   select '<p><a href="editfn?k=', Id, '">', Name, '</a>'
     from info.function where Schema = k order by Name
   select '<p>Tables: '
-  select '<p><a href="showtable?k=', Id, '">', Name, '</a>'
+  select '<p>', sys.table_text( sname, Name )
     from info.table where Schema = k order by Name
 }
 
@@ -101,6 +103,23 @@ fn handler.editfn() {
   }   
 }
 
+fn handler.showall()
+{
+   select sys.table_text( info.sname(Schema), Name ), '
+
+' 
+   from info.table order by Schema, Name
+
+   select 'go
+
+'
+
+   select sys.fn_text( info.sname(Schema), Name ), '
+
+'
+  from info.function order by Schema, Name
+} 
+
 go
 
 insert into info.schema( Name ) values ( 'info' )
@@ -120,6 +139,7 @@ insert into info.function( Schema, Name ) values ( 3, 'admin' )
 insert into info.function( Schema, Name ) values ( 3, 'execute' )
 insert into info.function( Schema, Name ) values ( 3, 'showschema' )
 insert into info.function( Schema, Name ) values ( 3, 'editfn' )
+insert into info.function( Schema, Name ) values ( 3, 'showall' )
 
 
 "###;
