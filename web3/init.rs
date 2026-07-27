@@ -1,35 +1,64 @@
 pub const INITSQL: &str = r###"
-schema web go
-schema handler go
-schema info go
-table info.handlers( Schema int, Name string ) go
 
+schema info 
+schema web
+schema handler
 
-fn web.Main() -> string {
+go
+
+table info.schema( Name string )
+table info.table( Schema int, Name string )
+table info.function( Schema int, Name string )
+
+go
+
+fn info.sname( id int ) -> string
+{
+    for x = Name from info.schema where Id = id
+        set result = x
+}
+
+go
+
+fn web.main() {
    let path = sys.arg(0,'')
    let path = sys.substr( path, 1, 99 )
+
+   if path = 'favicon.ico' set path = 'favicon'
+   
    let sql = 'let x = handler.' | path | '()'
 
    let x = sys.execute(sql)
 }
 
-fn web.Header() -> string {
+fn web.header() -> string {
    select '<p>Links <a href="/admin">Menu</a> <a href="/execute">Exec</a>'
+}
+
+fn web.encode( s string ) -> string {
+  set s = sys.replace( s,'&', '&amp;' )
+  set s = sys.replace( s, '<', '&lt;' )
+  set result = s
 }
 
 go 
 
-fn handler.admin() -> string {
-   let x = web.Header()
+fn handler.favicon() {
 }
 
-fn handler.execute() -> string {
-   let x = web.Header()
+fn handler.admin() {
+  let x = web.header()
+  select '<p>Schemas:'
+  select '<p><a href="/showschema?k=', Id, '">', Name, '</a>' from info.schema order by Name
+}
+
+fn handler.execute() {
+   let x = web.header()
    let sql = sys.arg(2, 'sql')
 
    select '<p><b>Execute Sql</b>
   <p><form method=post>
-     <textarea name=sql>', sql, '</textarea>
+     <textarea rows=10 cols=80 name=sql>', web.encode(sql), '</textarea>
   <p><input type=submit value=Go>
   </form><p>
   '
@@ -37,5 +66,61 @@ fn handler.execute() -> string {
   let x = sys.execute(sql)
 }
 
+fn handler.showschema() {
+  let x = web.header()
+  let k = sys.parseint( sys.arg( 1, 'k' ) )
+  select '<p>Schema ', info.sname(k)
+  select '<p>Functions: '
+  select '<p><a href="editfn?k=', Id, '">', Name, '</a>'
+    from info.function where Schema = k order by Name
+  select '<p>Tables: '
+  select '<p><a href="showtable?k=', Id, '">', Name, '</a>'
+    from info.table where Schema = k order by Name
+}
+
+fn handler.editfn() {
+  let x = web.header()
+  let k = sys.parseint( sys.arg( 1, 'k' ) )
+  let sql = sys.arg(2, 'sql')
+  
+  for s=Schema, name=Name from info.function where Id = k
+  {
+    let sname = info.sname(s) 
+
+    if sql != '' {
+      let x = sys.execute( 'alter ' | sql )
+    } else {
+      set sql = sys.fn_text( sname, name )
+    }
+  
+    select '
+      <p><form method=post>
+      <textarea rows=20 cols=80 name=sql>', web.encode(sql), '</textarea>
+      <p><input type=submit value=Alter>
+      </form>'
+  }   
+}
+
+go
+
+insert into info.schema( Name ) values ( 'info' )
+insert into info.schema( Name ) values ( 'web' )
+insert into info.schema( Name ) values ( 'handler' )
+
+insert into info.table( Schema, Name ) values (1, 'table' )
+insert into info.table( Schema, Name ) values (1, 'function' )
+
+insert into info.function( Schema, Name ) values ( 1, 'sname' )
+
+insert into info.function( Schema, Name ) values ( 2, 'main' )
+insert into info.function( Schema, Name ) values ( 2, 'header' )
+insert into info.function( Schema, Name ) values ( 2, 'encode' )
+insert into info.function( Schema, Name ) values ( 3, 'admin' )
+
+insert into info.function( Schema, Name ) values ( 3, 'execute' )
+insert into info.function( Schema, Name ) values ( 3, 'showschema' )
+insert into info.function( Schema, Name ) values ( 3, 'editfn' )
+
 
 "###;
+

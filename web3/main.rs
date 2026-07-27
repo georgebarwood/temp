@@ -107,7 +107,7 @@ fn main()
         */
 
         // Start the task that updates the database.
-        let db = database.clone();
+        let database = ss.database.clone();
         std::thread::spawn(move || {
             // Get write-access to database ( there will only be one writer ).
 
@@ -116,14 +116,14 @@ fn main()
                 let f = std::fs::read_to_string("admin-ScriptAll.txt");
                 let init = if let Ok(f) = &f { f } else { init::INITSQL };
                 let mut tr = GenTransaction::default();
-                db.run(init, &mut tr);
+                database.run(init, &mut tr, false);
                 // db.save();
             }
 
             // Process messages that update the database.
             while let Some(mut sm) = update_rx.blocking_recv() {
                 let sql = sm.trans.x.qy.sql.clone();
-                db.run(&sql, &mut sm.trans.x);
+                database.run(&sql, &mut sm.trans.x, false);
                 /*
                 if is_master && !sm.trans.no_log() && db.changed() {
                     let ser = bincode::serialize(&sm.trans.x.qy).unwrap();

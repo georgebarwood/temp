@@ -159,18 +159,18 @@ impl SharedState {
     pub async fn process(&self, mut trans: Trans) -> Trans {
         let start = std::time::SystemTime::now();
         let mut trans = if trans.readonly {
-            // println!("Processing readonly");
+            println!("Processing readonly");
             // Readonly request, use read-only copy of database.
             let database = self.database.clone();
             let task = tokio::task::spawn_blocking(move || {
             
                 let sql = trans.x.qy.sql.clone();
-                database.run(&sql, &mut trans.x);
+                database.run(&sql, &mut trans.x, true);
                 trans
             });
             task.await.unwrap()
         } else {
-            // println!("Processing non-readonly");
+            println!("Processing non-readonly");
             let (reply, rx) = oneshot::channel::<Trans>();
             let _ = self.update_tx.send(UpdateMessage { trans, reply }).await;
             rx.await.unwrap()
