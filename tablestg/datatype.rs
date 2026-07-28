@@ -34,13 +34,13 @@ pub enum DataType {
     Binary(usize),
 
     /// e.g. `struct{ name: string, email: string, created: date }`
-    Struct(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
+    Struct(GVec<(GString, DataType)>),
 
     /// e.g. `( string, string, int )`
-    Tuple(GVec<DataType>), // Maybe use Arc to make cloning cheap.
+    Tuple(GVec<DataType>),
 
     /// e.g. `enum{ leaf: int, node: [int] }`
-    Enum(GVec<(GString, DataType)>), // Maybe use Arc to make cloning cheap.
+    Enum(GVec<(GString, DataType)>),
 
     // Array of values.
     // Array(usize, LBox<DataType>),
@@ -73,12 +73,28 @@ impl DataType {
     pub fn similar(&self, other: &DataType) -> bool
     {
         match (self,other) {
+           (DataType::Empty,DataType::Empty) => true,
            (DataType::Bool,DataType::Bool) => true,
            (DataType::Int,DataType::Int) => true,
            (DataType::Float,DataType::Float) => true,
            (DataType::String(_), DataType::String(_)) => true,
            (DataType::Binary(_), DataType::Binary(_)) => true,
-           _ => false, // More ToDo
+           (DataType::Tuple(x), DataType::Tuple(y)) =>
+           {
+              for (x,y) in x.iter().zip(y.iter())
+              {
+                 if !x.similar(y) {return false;}
+              }
+              true
+           }
+           _ => false
+        }
+    }
+
+    pub fn struc( &self ) -> &[(GString, DataType)] {
+        match self {
+            DataType::Struct(x) => &x,
+            _ => panic!()
         }
     }
 
@@ -926,6 +942,15 @@ impl Display for DataType
                 if *x > 0 { 
                     write!( f, "({})", x )?;
                 }
+            }
+            Struct(x) => {
+                f.write_str("(")?;
+                for (i,(name,dt)) in x.iter().skip(1).enumerate()
+                {
+                    if i != 0 { f.write_str(", ")?; }
+                    write!( f, "{} {}", name, dt)?;
+                }
+                f.write_str(")")?;
             }
             _ => todo!(),
         }
