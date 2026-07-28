@@ -20,6 +20,7 @@ pub enum Builtin {
     arg,
     header,
     parseint,
+    error,
     // More to do...
 }
 
@@ -40,6 +41,7 @@ impl Builtin {
             b"parseint" => Ok(parseint),
             b"table_literal" => Ok(table_literal),
             b"string_literal" => Ok(string_literal),
+            b"error" => Ok(error),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -200,6 +202,9 @@ impl Builtin {
                 } else { 0 };
                 Value::Int(i)
             }
+            error => {
+                Value::String( run.tr.get_error() )
+            }
         }
     }
     pub fn result_type(&self) -> &'static DataType {
@@ -208,7 +213,7 @@ impl Builtin {
             execute | contains | header => &DataType::Bool,
             len | parseint  => &DataType::Int,
             substr | replace | fn_text | table_text | arg | table_literal 
-              | table_col_names | string_literal
+              | table_col_names | string_literal | error
                 => &DataType::String(0),
         }
     }
@@ -223,6 +228,7 @@ impl Builtin {
             fn_text | table_text | table_col_names | table_literal => &STR_2,
             execute | parseint => &STR_1,
             arg => &INT_STR,
+            error => &[],
         }
     }
 }

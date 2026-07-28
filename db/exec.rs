@@ -75,12 +75,12 @@ pub fn go(run: &mut Run) -> Option<usize> {
         match parser.pass(pass) {
             Err(e) => {
                 let pos = parser.position();
-                println!(
-                    "Pass {} Error {} at input position {}",
-                    pass, e.message, pos
+                let src = tos(&run.source.as_bytes()[0..pos]);
+                let errmsg = format!( "Pass {} Error {} at input position {} Source: {}",
+                    pass, e.message, pos, src
                 );
-                println!("Source: {}", tos(&run.source.as_bytes()[0..pos]));
-                println!();
+                run.tr.set_error( &errmsg );
+                println!( "{}", &errmsg );
                 return None;
             }
             Ok(mut slist) => {
@@ -118,13 +118,13 @@ fn execute_schema_updates(
                 Statement::CreateSchema(x) => {
                     let sname = x.sname.sstr(src);
                     dict.create_schema(sname);
-                    println!("Schema '{}' created", sname);
+                    // println!("Schema '{}' created", sname);
                 }
 
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
                     dict.create_table(x.schema_id, tname, &x.col_defs);
-                    println!("Table '{}' created", tname);
+                    // println!("Table '{}' created", tname);
                 }
 
                 Statement::RenameTable(x) => dict.rename_table(x, src),

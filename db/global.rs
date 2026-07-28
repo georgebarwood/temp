@@ -10,38 +10,31 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create Database from SharedPagedData. 
     pub fn new(spd: Arc<SharedPagedData>, is_new: bool) -> Self {
         Self {
             inner: Arc::new(Mutex::new(DatabaseInner::new(spd, is_new))),
         }
     }
-    pub fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
-        self.inner.lock().unwrap().get_ps_and_dict_write()
+    
+    fn get_ps_and_dict(&self, readonly: bool) -> (PageSet, Arc<Dict>) {
+        self.inner.lock().unwrap().get_ps_and_dict(readonly)
     }
-    pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
-        self.inner.lock().unwrap().get_ps_and_dict_read()
-    }
-    pub fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
+    
+    fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
         self.inner.lock().unwrap().commit(ps, dict, new_dict)
-    }
-    pub fn shutdown(&self) {
-        self.inner.lock().unwrap().shutdown();
     }
 
     /// Run a transaction. Returns number of changed pages.
     pub fn run(&self, source: &str, tr: &mut dyn Transaction, readonly: bool) -> usize {
-        let (mut ps, mut dict) = if readonly {
-            self.get_ps_and_dict_read()
-        } else {
-            self.get_ps_and_dict_write()
-        };
+        let (mut ps, mut dict) = self.get_ps_and_dict(readonly);
         let ps = &mut ps;
         let mut dict_changed = false;
-        let mut new_dict = dict.clone();
+        let mut new_dict = dict.clone(); // dict is Arc, so this is cheap operation.
         let mut start_pos = 0;
-        let mut end_pos;
         loop 
         {
+            let end_pos;
             let changed = {
                 let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 let src = &source[start_pos..];
@@ -68,9 +61,15 @@ impl Database {
         }
         result
     }
+
+    /// Called before process terminates to ensure all commits are flushed to permanent storage.
+    pub fn shutdown(&self) {
+        self.inner.lock().unwrap().shutdown();
+    }
+
 }
 
-pub struct DatabaseInner {
+struct DatabaseInner {
     spd: Arc<SharedPagedData>,
     dict: Arc<Dict>,
     dict_version: i64,
@@ -86,7 +85,6 @@ impl DatabaseInner {
             assert!(ps.new_page() == SYS_STORE_PAGE);
             let ssc = ps.sys_store.clone();
             *ssc.borrow_mut() = Store::new(&mut ps);
-            println!("Calling save_sys_store");
             save_sys_store(&mut ps);
             ps.save();
             Arc::new(Dict::new())
@@ -97,30 +95,19 @@ impl DatabaseInner {
         Self { spd, dict, dict_version: 1 }
     }
 
-    /// Get PageSet and Dict for writing.
-    fn get_ps_and_dict_write(&self) -> (PageSet, Arc<Dict>) {
-        // println!("get_ps_and_dict_write dict version={}", self.dict_version);
-        
-        let apd = self.spd.new_writer();
+    /// Get PageSet and Dict.
+    fn get_ps_and_dict(&self, readonly: bool) -> (PageSet, Arc<Dict>) {
+        let apd = if readonly { self.spd.new_reader() } else { self.spd.new_writer() };
         let mut ps = PageSet::new(apd);
-        // println!("Calling load_sys_store");
         load_sys_store(&mut ps);
         let dict = self.dict.clone();
         (ps, dict)
     }
 
-    /// Get PageSet and Dict for reading.
-    pub fn get_ps_and_dict_read(&self) -> (PageSet, Arc<Dict>) {
-        // println!("get_ps_and_dict_read dict version={}", self.dict_version);
-        let apd = self.spd.new_reader();
-        let mut ps = PageSet::new(apd);
-        load_sys_store(&mut ps);
-        let dict = self.dict.clone();
-        (ps, dict)
-    }
+
 
     /// Save dict (if changed), sys_store and any updated tables and pages. Returns number of changed pages.
-    pub fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
+    fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
         if new_dict {
             println!("DatabaseInner commit new_dict");
             dict.save_to_sys_store(ps);
@@ -132,13 +119,13 @@ impl DatabaseInner {
     }
 
     /// Called before process terminates to ensure all commits are flushed to permanent storage.
-    pub fn shutdown(&self) {
+    fn shutdown(&self) {
         self.spd.shutdown();
     }
 }
 
 /// Save ps.sys_store to data page SYS_STORE_PAGE.
-pub fn save_sys_store(ps: &mut PageSet) {
+fn save_sys_store(ps: &mut PageSet) {
     // println!("save sys store, store = {:?}", ps.sys_store.borrow() );
 
     let bytes = ps.sys_store.borrow_mut().save_to_bytes();
@@ -151,7 +138,7 @@ pub fn save_sys_store(ps: &mut PageSet) {
 }
 
 /// Loads ps.sys_store from data page SYS_STORE_PAGE.
-pub fn load_sys_store(ps: &mut PageSet) {
+fn load_sys_store(ps: &mut PageSet) {
     let pdata = ps.load(SYS_STORE_PAGE);
     let pdata = pdata.borrow();
     let store = Store::load_from_bytes(&pdata.data);
@@ -163,7 +150,8 @@ pub fn load_sys_store(ps: &mut PageSet) {
     *sys_store = store;
 }
 
-/// Constructs page storage. Bool result indicates whether database file is newly created.
+/// Constructs test page storage. Bool result indicates whether database file is newly created.
+#[test]
 pub fn get_spd() -> (bool, Arc<SharedPagedData>) {
     use page_store::*;
     let limits = Limits::default();

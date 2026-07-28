@@ -152,7 +152,7 @@ use token::*;
 
 /// [Dict]ionary of schemas, tables, functions. [`SFunc`].
 mod schema;
-pub use schema::*;
+use schema::*;
 
 /// [`Statement`].
 pub mod statement;
@@ -164,15 +164,15 @@ use operator::*;
 
 /// [`Builtin`] functions.
 mod builtin;
-pub use builtin::*;
+use builtin::*;
 
 /// [`Exp`]ressions.
 pub mod exp;
 use exp::*;
 
-/// [`Database`] - global shared state, [SharedPagedData] + [Dict].
+/// [`Database`].
 pub mod global;
-pub use global::*;
+pub use global::Database;
 
 /// Execution of statements.
 mod exec;
