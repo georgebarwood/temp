@@ -1,5 +1,5 @@
 use crate::share::{Error, SharedState, Trans, U_COUNT, U_CPU, U_READ, U_WRITE, UseInfo};
-use db::*;
+use db::{GVec,Part,GBTreeMap,GString,GenQuery};
 use std::{str, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

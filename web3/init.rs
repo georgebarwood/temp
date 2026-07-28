@@ -136,7 +136,7 @@ fn handler.newfn() {
     if show {
         select '
 <p><form method=post>
-Name: <input name=name value=', name, '> 
+Function Name: <input name=name value=', name, '> 
 <p><textarea rows=20 cols=80 name=body>', web.encode(body), '</textarea>
 <p><input type=submit value=Create>
 </form>', '<p>', err
