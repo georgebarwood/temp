@@ -14,8 +14,8 @@ go
 
 fn info.sname( id int ) -> string
 {
-    for x = Name from info.schema where Id = id
-        set result = x
+    for n = Name from info.schema where Id = id
+        set result = n
 }
 
 go
@@ -63,10 +63,10 @@ fn handler.execute() {
   <p><form method=post>
      <textarea rows=10 cols=80 name=sql>', web.encode(sql), '</textarea>
   <p><input type=submit value=Go>
-  </form><p>
+  </form>
   '
-
   let x = sys.execute(sql)
+  select '<p>', sys.error()
 }
 
 fn handler.showschema() {
@@ -136,6 +136,7 @@ fn handler.editfn() {
       <textarea rows=20 cols=80 name=sql>', web.encode(sql), '</textarea>
       <p><input type=submit value=Alter>
       </form>'
+    select '<p>', sys.error()
   }   
 }
 

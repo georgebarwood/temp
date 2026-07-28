@@ -267,7 +267,7 @@ struct Args {
     tracedos: bool,
 
     /// Block Capacity
-    #[arg(long, value_parser, default_value_t = 27720*5)]
+    #[arg(long, value_parser, default_value_t = 27720*1)]
     blk_cap: u64,
 
     /// Number of different page sizes - max page size must be < 64kb
