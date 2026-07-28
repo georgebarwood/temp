@@ -13,6 +13,9 @@ pub enum Builtin {
     // binsubstr,
     fn_text,
     table_text,
+    table_col_names,
+    table_literal,
+    string_literal,
     execute,
     arg,
     header,
@@ -30,10 +33,13 @@ impl Builtin {
             b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
             b"table_text" => Ok(table_text),
+            b"table_col_names" => Ok(table_col_names), 
             b"execute" => Ok(execute),
             b"arg" => Ok(arg),
             b"header" => Ok(header),
             b"parseint" => Ok(parseint),
+            b"table_literal" => Ok(table_literal),
+            b"string_literal" => Ok(string_literal),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -111,6 +117,63 @@ impl Builtin {
                 write!( &mut result, "table {}.{} {}", schema, tname, dt).unwrap();
                 Value::String(LRc::new(result))
             }
+            table_col_names => {
+                let tname = run.stack.pop().unwrap();
+                let tname = tname.string();
+                let schema = run.stack.pop().unwrap();
+                let schema = schema.string();
+
+                let sid = run.dict.schema_id(schema).unwrap();
+                let nameid = run.dict.name_id(tname).unwrap();
+                let (_,dt) = run.dict.table(&(*sid, *nameid)).unwrap();
+                let mut result = LString::new();
+                let dt = dt.struc();
+                for (i, (name,_)) in dt.iter().enumerate()
+                {
+                    if i != 0 { result.push_str(", "); }
+                    result.push_str(name);
+                }
+                Value::String(LRc::new(result))
+            }
+            
+            table_literal => {
+                let tname = run.stack.pop().unwrap();
+                let tname = tname.string();
+                let schema = run.stack.pop().unwrap();
+                let schema = schema.string();
+
+                let sid = run.dict.schema_id(schema).unwrap();
+                let nameid = run.dict.name_id(tname).unwrap();
+                let (_,dt) = run.dict.table(&(*sid, *nameid)).unwrap();
+                let mut result = LString::new();
+                let dt = dt.struc();
+                use std::fmt::Write;
+                for (i, (name,typ)) in dt.iter().enumerate()
+                {
+                    if i != 0 { result.push_str(",',', "); }
+                    match typ {
+                        DataType::String(_) =>
+                           write!( &mut result, "sys.string_literal({})", name ).unwrap(),
+                        _ => write!( &mut result, "{}", name).unwrap(),
+                    }
+                }
+                Value::String(LRc::new(result))
+            }
+            string_literal => {
+                let str = run.stack.pop().unwrap();
+                let str = str.string();
+                let mut result = LString::new();
+                use std::fmt::Write;
+                if !str.contains('\'')
+                {
+                   write!(&mut result, "'{}'", str).unwrap();
+                } else if !str.contains('"') {
+                   write!(&mut result, "\"{}\"", str).unwrap();
+                } else {  
+                   write!(&mut result, "#s{}'{}'", str.len(), str).unwrap();
+                }
+                Value::String(LRc::new(result))
+            } 
             execute => {
                 run.source = run.stack.pop().unwrap().string_clone();
                 go(run);
@@ -144,18 +207,20 @@ impl Builtin {
         match self {
             execute | contains | header => &DataType::Bool,
             len | parseint  => &DataType::Int,
-            substr | replace | fn_text | table_text | arg => &DataType::String(0),
+            substr | replace | fn_text | table_text | arg | table_literal 
+              | table_col_names | string_literal
+                => &DataType::String(0),
         }
     }
 
     pub fn arg_types(&self) -> &'static [DataType] {
         use Builtin::*;
         match self {
-            len => &STR_1,
+            len | string_literal => &STR_1,
             substr => &STR_INT_INT,
             replace => &STR_3,
             contains | header => &STR_2,
-            fn_text | table_text => &STR_2,
+            fn_text | table_text | table_col_names | table_literal => &STR_2,
             execute | parseint => &STR_1,
             arg => &INT_STR,
         }
