@@ -74,7 +74,7 @@ fn handler.showschema() {
   let k = sys.parseint( sys.arg( 1, 'k' ) )
   let sname = info.sname(k)
   select '<p>Schema ', sname
-  select '<p>Functions: '
+  select '<p>Functions <a href=/newfn?k=', k, '>new</a> :'
   select '<p><a href="editfn?k=', Id, '">', Name, '</a>'
     from info.function where Schema = k order by Name
   select '<p>Tables: '
@@ -107,11 +107,42 @@ fn handler.renamefn() {
         
   } else {
     select '
-      <p><form method=post>
-      New Name: <input name=name>
-      <p><input type=submit value=Rename>
-      </form>'
+<p><form method=post>
+New Name: <input name=name>
+<p><input type=submit value=Rename>
+</form>'
   }
+}
+
+fn handler.newfn() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let sn = info.sname(k)
+    let name = sys.arg(2, 'name')
+    let body = sys.arg(2, 'body')
+    let err = ''
+    let show = true
+    if name != '' and body != '' {
+        let sql = 'fn ' | sn | '.' | name | body
+        let x = sys.execute(sql)
+        insert into info.function(Schema, Name) values (k, name)
+        set err = sys.error()
+        set show = err != ''
+    } else  {
+        if body = '' {
+            set body = '(){}'
+        }
+    }
+    if show {
+        select '
+<p><form method=post>
+Name: <input name=name value=', name, '> 
+<p><textarea rows=20 cols=80 name=body>', web.encode(body), '</textarea>
+<p><input type=submit value=Create>
+</form>', '<p>', err
+    } else  {
+        select '<p>Function created'
+    }
 }
   
 
@@ -184,6 +215,7 @@ insert into info.function( Schema, Name ) values ( 3, 'admin' )
 insert into info.function( Schema, Name ) values ( 3, 'execute' )
 insert into info.function( Schema, Name ) values ( 3, 'showschema' )
 insert into info.function( Schema, Name ) values ( 3, 'editfn' )
+insert into info.function( Schema, Name ) values ( 3, 'newfn' )
 insert into info.function( Schema, Name ) values ( 3, 'renamefn' )
 insert into info.function( Schema, Name ) values ( 3, 'showall' )
 insert into info.function( Schema, Name ) values ( 3, 'favicon' )

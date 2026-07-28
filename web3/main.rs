@@ -1,3 +1,6 @@
+//! Web server based on [db] [Database].
+
+
 use db::*;
 
 /*
