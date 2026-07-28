@@ -179,7 +179,7 @@ impl SharedState {
             self.new_trans();
         }
         trans.run_time = start.elapsed().unwrap();
-        println!("trans.run_time={:?} path={} rdonly={} updates={}", trans.run_time, &trans.x.arg(0,""), trans.readonly, trans.updates);
+        println!("trans.run_time={:?} path={} rdonly={} updates={}", trans.run_time, trans.x.arg(0,""), trans.readonly, trans.updates);
 
         let ext = trans.x.get_extension();
         if let Some(ext) = ext.downcast_ref::<TransExt>() {

@@ -45,8 +45,6 @@ fn web.single_quote( s string ) -> string {
    set result = "'" | s | "'"
 }
 
-go 
-
 fn handler.favicon() {
 }
 
@@ -98,20 +96,22 @@ fn handler.renamefn() {
   }
   
   if new_name != '' {
-     let sql1 = 'update info.function set Name = ' 
-        | web.single_quote(new_name) | ' where Schema = ' | k | ' and Name = ' | web.single_quote(name)
+     let sql1 = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name 
 
-    let sql2 = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name 
+     let sql2 = 'update info.function set Name = ' 
+        | web.single_quote(new_name) | ' where Id = ' | k
 
-    let x = sys.execute(sql2)
-    let x = sys.execute(sql1)
+     let x = sys.execute(sql1)
+     let x = sys.execute(sql2)
+     select '<p>Function ', name, ' renamed to ', new_name
         
-  }
-  select '
+  } else {
+    select '
       <p><form method=post>
       New Name: <input name=name>
       <p><input type=submit value=Rename>
       </form>'
+  }
 }
   
 
@@ -139,22 +139,28 @@ fn handler.editfn() {
   }   
 }
 
-fn handler.showall()
-{
-   select sys.table_text( info.sname(Schema), Name ), '
-
-' 
-   from info.table order by Schema, Name
-
-   select 'go
-
+fn handler.showall() {
+    let nl = '
 '
-
-   select sys.fn_text( info.sname(Schema), Name ), '
-
-'
-  from info.function order by Schema, Name
-} 
+    select 'schema ', Name, nl
+    from info.schema order by Id
+    select 'go', nl
+    select sys.table_text(info.sname(Schema), Name), nl
+    from info.table order by Id
+    select 'go', nl
+    select sys.fn_text(info.sname(Schema), Name), nl
+    from info.function order by Id
+    for s = Schema, n = Name from info.table order by Id {
+        let s = info.sname(s)
+        let t = s | '.' | n
+        let cols = sys.table_col_names(s, n)
+        let ins = 'insert into ' | t | '(' | cols | ') values ('
+        let sel = " '" | ins | "' | " | sys.table_literal(s, n) | " | ')" | nl | "'"
+        let sql = 'select ' | sel | ' from ' | t | ' order by Id'
+        let x = sys.execute(sql)
+        select nl
+    }
+}
 
 go
 
@@ -171,8 +177,9 @@ insert into info.function( Schema, Name ) values ( 1, 'sname' )
 insert into info.function( Schema, Name ) values ( 2, 'main' )
 insert into info.function( Schema, Name ) values ( 2, 'header' )
 insert into info.function( Schema, Name ) values ( 2, 'encode' )
-insert into info.function( Schema, Name ) values ( 3, 'admin' )
+insert into info.function( Schema, Name ) values ( 2, 'single_quote' )
 
+insert into info.function( Schema, Name ) values ( 3, 'admin' )
 insert into info.function( Schema, Name ) values ( 3, 'execute' )
 insert into info.function( Schema, Name ) values ( 3, 'showschema' )
 insert into info.function( Schema, Name ) values ( 3, 'editfn' )

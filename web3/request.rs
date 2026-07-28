@@ -355,7 +355,7 @@ async fn get_multipart<'a>(br: &mut Buffer<'a>, q: &mut GenQuery) -> Result<(), 
     let mut boundary = GVec::new();
     let n = br.read_until(10, &mut boundary).await?;
     if n < 4 {
-        return Err(eof())?;
+        return Err(eof());
     }
 
     let bn = boundary.len() - 2;
