@@ -86,12 +86,14 @@ where
                 sr.set_table(x.table);
                 sr.write_table_name();
                 sr.output.push_str("(");
-                for i in &x.cols {
-                    sr.write_col_name(*i);
+                for (i,c) in x.cols.iter().enumerate() {
+                    if i != 0 { sr.output.push_str(", "); }
+                    sr.write_col_name(*c);
                 }
                 sr.output.push_str(") values (");
                 sr.table = None; // Optional
-                for e in &x.vals {
+                for (i,e) in x.vals.iter().enumerate() {
+                    if i != 0 { sr.output.push_str(", "); }
                     e.show(sr)?;
                 }
                 sr.output.push_str(")");

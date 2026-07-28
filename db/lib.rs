@@ -134,13 +134,16 @@ make into lib, web server
    Just after restore, modify nodes from integers to Arcs.
 */
 
-pub use datatype::DataType;
-// pub use page_store::*;
-pub use pstd::{BoxA, VecA, alloc::Allocator};
+use datatype::DataType;
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Mutex;
-pub use tablestg::*;
+use tablestg::*;
+use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
+use pstd::{BoxA, VecA, alloc::Allocator};
+
+pub use tablestg::{AtomicFile, BlockPageStg, FastFileStorage, HashMap, Limits, MultiFileStorage,
+    PageStorage, SharedPagedData, GVec, GString };
 
 /// SQL(-like) parsing. [`Parser`]
 mod parser;
@@ -155,7 +158,7 @@ mod schema;
 use schema::*;
 
 /// [`Statement`].
-pub mod statement;
+mod statement;
 use statement::*;
 
 /// [`Operator`].
@@ -167,7 +170,7 @@ mod builtin;
 use builtin::*;
 
 /// [`Exp`]ressions.
-pub mod exp;
+mod exp;
 use exp::*;
 
 /// [`Database`].
@@ -186,6 +189,5 @@ pub use transaction::*;
 #[cfg(test)]
 mod test;
 
-pub use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
-
+/// BTreeMap allocated from GTemp.
 pub type GBTreeMap<K, V> = BTreeMapA<K, V, CustomTuning<GTemp>>;

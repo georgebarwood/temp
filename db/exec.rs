@@ -8,6 +8,7 @@ pub struct Run<'a> {
     pub ps: &'a mut PageSet,
     pub source: LRc<LString>, // For string constants when executing batch.
     pub dict_changed: bool,
+    pub error: bool,
     pub new_dict: &'a mut Arc<Dict>,
     pub tr: &'a mut dyn Transaction,
 }
@@ -27,6 +28,7 @@ impl<'a> Run<'a> {
             source: LRc::new(LString::new()),
             new_dict,
             dict_changed: false,
+            error: false,
             tr,
         }
     }
@@ -80,6 +82,7 @@ pub fn go(run: &mut Run) -> Option<usize> {
                     pass, e.message, pos, src
                 );
                 run.tr.set_error( &errmsg );
+                run.error = true;
                 println!( "{}", &errmsg );
                 return None;
             }

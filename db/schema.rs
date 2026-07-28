@@ -53,7 +53,7 @@ struct DictMain {
     table_dt: GVec<STable>,
 
     /// List of stored functions (no display data)
-    funcs: GVec<SFunc<NoString>>,
+    funcs: GVec<Arc<SFunc<NoString>>>,
 
     last_schema_id: i64,
     last_name_id: i64,
@@ -63,7 +63,7 @@ struct DictMain {
 /// Extra info, such as parameter and local variable names for functions.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct DictInfo {
-    funcs: GVec<SFunc<YesString>>,
+    funcs: GVec<Arc<SFunc<YesString>>>,
 }
 
 impl DictInfo {
@@ -252,7 +252,7 @@ impl Dict {
             parms,
             block: GVec::new(), // Dummy block on pass 1
         };
-        self.main.funcs.push(func);
+        self.main.funcs.push(Arc::new(func));
         self.main.func_lookup.insert((x.schema_id, nid), func_id);
 
         let mut parms = GVec::new();
@@ -267,7 +267,7 @@ impl Dict {
             parms,
             block: GVec::new(), // Dummy block on pass 1
         };
-        self.info.funcs.push(info_func);
+        self.info.funcs.push(Arc::new(info_func));
     }
 
     /// Set Function block.
@@ -277,27 +277,32 @@ impl Dict {
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
         
         let f = &mut self.main.funcs[*fid];
-        f.block = gblock(&x.block, src);
-        encode_block(&mut f.block);
+        let fm = Arc::make_mut(f);
+        fm.block = gblock(&x.block, src);
+        encode_block(&mut fm.block);
 
         let f = &mut self.info.funcs[*fid];
-        f.block = gblock(&x.block, src);
+        let fm = Arc::make_mut(f);
+        fm.block = gblock(&x.block, src);
         // info func is not encoded.
     }
 
     /// Rename Function.
     pub fn rename_fn(&mut self, x: &RenameFn, src: &[u8]) {
-        let f: usize = self
+        let fid: usize = self
             .main
             .func_lookup
             .remove(&(x.old_schema_id, x.old_nid))
             .unwrap();
         let new_fname = x.new_fname.sstr(src);
         let new_nid = self.new_name_id(new_fname);
-        self.main.func_lookup.insert((x.new_schema_id, new_nid), f);
+
+        self.main.func_lookup.insert((x.new_schema_id, new_nid), fid);
 
         // Update name in self.info.
-        self.info.funcs[f].fname = YesString::from_str(new_fname);
+        let f = &mut self.info.funcs[fid];
+        let fm = Arc::make_mut(f);
+        fm.fname = YesString::from_str(new_fname);
     }
 
     /// Save dict to sys store.

@@ -40,6 +40,7 @@ impl Database {
                 let src = &source[start_pos..];
                 run.source = LRc::new(LString::from(src));
                 end_pos = go(&mut run);
+                if run.error { return 0; }
                 run.dict_changed
             };
             if changed {
