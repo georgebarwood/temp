@@ -163,17 +163,8 @@ impl Builtin {
             }
             string_literal => {
                 let str = run.stack.pop().unwrap();
-                let str = str.string();
                 let mut result = LString::new();
-                use std::fmt::Write;
-                if !str.contains('\'')
-                {
-                   write!(&mut result, "'{}'", str).unwrap();
-                } else if !str.contains('"') {
-                   write!(&mut result, "\"{}\"", str).unwrap();
-                } else {  
-                   write!(&mut result, "#s{}'{}'", str.len(), str).unwrap();
-                }
+                str_literal( str.string(), &mut result );
                 Value::String(LRc::new(result))
             } 
             execute => {
@@ -242,3 +233,16 @@ const STR_3: [DataType; 3] = [
 ];
 const STR_INT_INT: [DataType; 3] = [DataType::String(0), DataType::Int, DataType::Int];
 const INT_STR: [DataType; 2] = [DataType::Int, DataType::String(0)];
+
+pub fn str_literal( s: &str, to: &mut LString )
+{
+    use std::fmt::Write;
+    if !s.contains('\'')
+    {
+        write!(to, "'{}'", s).unwrap();
+    } else if !s.contains('"') {
+        write!(to, "\"{}\"", s).unwrap();
+    } else {  
+        write!(to, "#s{}'{}'", s.len(), s).unwrap(); // Details and parsing for this are todo...
+    }
+}               

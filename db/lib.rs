@@ -1,6 +1,8 @@
 /* What next plan..
 
-Display errors in execute and alter fn. Handle refcell errors.
+Display errors in execute and alter fn. DONE
+
+Handle refcell errors.
 
 Rename fn, drop fn ( with checks ).
 
@@ -8,16 +10,13 @@ Alter fn checks done.
 
 Optimise select from .... where Id = x 
 
-Finish ShowAll to show table data.
-
-Can execute be used to modify schema? Yes, but newly defined tables and functions are not acvailable
-until whole query finishes. Batch mode "go" is special, and used for database initialisation.
+Finish ShowAll to show table data. DON
 
 
-Creaate web server!
-sys.execute function. Executes string.
+Creaate web server! DOME
+sys.execute function. Executes string. DONE
 
-Have "system tables", but they are not part of the system, they are created and managed by SQL code.
+Have "system tables", but they are not part of the system, they are created and managed by SQL code. DONE
 
 So on initialisation we do
 
@@ -174,8 +173,8 @@ mod exp;
 use exp::*;
 
 /// [`Database`].
-pub mod global;
-pub use global::Database;
+pub mod database;
+pub use database::Database;
 
 /// Execution of statements.
 mod exec;

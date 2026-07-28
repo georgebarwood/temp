@@ -486,11 +486,7 @@ impl<A: Allocator + Debug + Default> StrExp<A> {
     pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
         match self {
             StrExp::Str(x) => {
-                let x = x.as_str();
-                let delim = if x.contains("'") { "\"" } else { "'" };
-                sr.output.push_str(delim);
-                sr.output.push_str(x);
-                sr.output.push_str(delim);
+                str_literal( x.as_str(), &mut sr.output );
             }
             _ => todo!(),
         }
