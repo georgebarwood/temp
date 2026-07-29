@@ -205,7 +205,7 @@ impl Dict {
     }
 
     /// Create Table.
-    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) -> (usize,STable) {
+    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) -> (usize, STable) {
         let id = self.main.new_table_id();
         let nid = self.new_name_id(name);
         self.main.table_lookup.insert((schema_id, nid), id);
@@ -216,13 +216,13 @@ impl Dict {
     }
 
     /// Add Column.
-    pub fn add_column(&mut self, table_id: usize, col_name: &str, col_dt: &DataType)
-    {
+    pub fn add_column(&mut self, table_id: usize, col_name: &str, col_dt: &DataType) -> STable {
         let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
-        let dt = Arc::make_mut(dt);
-        let dt = dt.struc_mut();
-        dt.push( ( GString::from(col_name), col_dt.clone() ) ); 
-    }   
+        let dtm = Arc::make_mut(dt);
+        let dtm = dtm.struc_mut();
+        dtm.push((GString::from(col_name), col_dt.clone()));
+        dt.clone()
+    }
 
     /// Rename Table.
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
@@ -286,7 +286,7 @@ impl Dict {
         let fname = x.fname.sstr(src);
         let nid = self.main.names.get(fname).unwrap();
         let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
-        
+
         let f = &mut self.main.funcs[*fid];
         let fm = Arc::make_mut(f);
         fm.block = gblock(&x.block, src);
@@ -308,7 +308,9 @@ impl Dict {
         let new_fname = x.new_fname.sstr(src);
         let new_nid = self.new_name_id(new_fname);
 
-        self.main.func_lookup.insert((x.new_schema_id, new_nid), fid);
+        self.main
+            .func_lookup
+            .insert((x.new_schema_id, new_nid), fid);
 
         // Update name in self.info.
         let f = &mut self.info.funcs[fid];
@@ -328,7 +330,11 @@ impl Dict {
         Self::save(id, &bytes2, ps);
 
         // println!("Dict::Save_to_sys_store, saved info={:?}.", self.info);
-        println!("Dict:save_to_sys_store main bytes={} info bytes={}", bytes1.len(), bytes2.len() );
+        println!(
+            "Dict:save_to_sys_store main bytes={} info bytes={}",
+            bytes1.len(),
+            bytes2.len()
+        );
     }
 
     /// Load dict from sys store ( eventually may want to delay info load until it is needed ).
@@ -424,9 +430,8 @@ impl<S: XString> SFunc<S> {
             sr.names.push(pname);
         }
         sr.output.push_str(")");
-        
-        if self.ret != DataType::Empty
-        {
+
+        if self.ret != DataType::Empty {
             write!(&mut sr.output, " -> {}", self.ret)?;
         }
 
@@ -552,7 +557,7 @@ impl<'a> SRun<'a> {
 
     pub fn write_fn_name(&mut self, ix: usize) {
         let f = self.dict.func_info(ix);
-        self.write_schema( f.schema_id );
+        self.write_schema(f.schema_id);
         self.output.push_str(".");
         self.output.push_str(f.fname.str());
     }

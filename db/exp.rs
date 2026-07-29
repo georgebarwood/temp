@@ -175,12 +175,14 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 // println!("encoded exp!");
                 *self = re;
             }
-            FnCall(_fid, args) => { // Could have typed versions of FnCall.
+            FnCall(_fid, args) => {
+                // Could have typed versions of FnCall.
                 for e in args {
                     e.encode();
                 }
             }
-            BuiltinCall(_bi, args) => { // Could have typed versions of BuilinCall.
+            BuiltinCall(_bi, args) => {
+                // Could have typed versions of BuilinCall.
                 for e in args {
                     e.encode();
                 }
@@ -374,7 +376,7 @@ impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
             IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
             IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
             IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
-            
+
             StrEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
             StrNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
             StrLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
@@ -486,7 +488,7 @@ impl<A: Allocator + Debug + Default> StrExp<A> {
     pub fn show(&self, sr: &mut SRun) -> Result<(), std::fmt::Error> {
         match self {
             StrExp::Str(x) => {
-                str_literal( x.as_str(), &mut sr.output );
+                str_literal(x.as_str(), &mut sr.output);
             }
             _ => todo!(),
         }

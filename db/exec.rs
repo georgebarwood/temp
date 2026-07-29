@@ -11,6 +11,7 @@ pub struct Run<'a> {
     pub error: bool,
     pub new_dict: &'a mut Arc<Dict>,
     pub tr: &'a mut dyn Transaction,
+    pub batch: LVec< LRc<LString>>, // Executed after normal execution.
 }
 
 impl<'a> Run<'a> {
@@ -30,6 +31,7 @@ impl<'a> Run<'a> {
             dict_changed: false,
             error: false,
             tr,
+            batch: LVec::new(),
         }
     }
 
@@ -40,7 +42,7 @@ impl<'a> Run<'a> {
             Value::Binary(v) => self.tr.output(v),
             _ => {
                 let s = val_to_str(v);
-                self.tr.output( s.as_bytes() );
+                self.tr.output(s.as_bytes());
             }
         }
     }
@@ -78,22 +80,24 @@ pub fn go(run: &mut Run) -> Option<usize> {
             Err(e) => {
                 let pos = parser.position();
                 let src = tos(&run.source.as_bytes()[0..pos]);
-                let errmsg = format!( "Pass {} Error {} at input position {} Source: {}",
+                let errmsg = format!(
+                    "Pass {} Error {} at input position {} Source: {}",
                     pass, e.message, pos, src
                 );
-                run.tr.set_error( &errmsg );
+                run.tr.set_error(&errmsg);
                 run.error = true;
-                println!( "{}", &errmsg );
+                println!("{}", errmsg);
                 return None;
             }
             Ok(mut slist) => {
                 if parser.schema_updates {
                     // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
-                    if let Err(e)  = execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps)
+                    if let Err(e) =
+                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps)
                     {
-                        run.tr.set_error( &e.message);
-                        println!( "{}", &e.message );
+                        run.tr.set_error(&e.message);
+                        println!("{}", e.message);
                         run.error = true;
                         return None;
                     }
@@ -103,8 +107,7 @@ pub fn go(run: &mut Run) -> Option<usize> {
                     // println!("Executing {:?}", slist);
                     execute_block(&slist, run);
                 }
-                if pass == 2 
-                {
+                if pass == 2 {
                     return Some(parser.tr.pos);
                 }
             }
@@ -119,11 +122,12 @@ fn execute_schema_updates(
     src: &[u8],
     dict: &mut Dict,
     ps: &mut PageSet,
-) -> Result<(),E> {
+) -> Result<(), E> {
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         if pass == 1 || matches!(s, Statement::CreateFn(_)) {
             match s {
+                Statement::Null => {}
                 Statement::CreateSchema(x) => {
                     let sname = x.sname.sstr(src);
                     dict.create_schema(sname);
@@ -132,7 +136,7 @@ fn execute_schema_updates(
 
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
-                    let (id,dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
+                    let (id, dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
                     let _ = ps.load_table(id as i64, &dt); // Trigger creation of table or reading it will produce an error later.
                     // println!("Table '{}' created", tname);
                 }
@@ -142,11 +146,12 @@ fn execute_schema_updates(
                     let table_dt = dict.table_datatype(tid);
                     let t = ps.load_table(tid as i64, table_dt);
                     let recs = t.borrow().record_count();
-                    if recs > 0 { 
-                         return Err(E::new( "Add Col, record count > 0" ));
+                    if recs > 0 {
+                        return Err(E::new("Add Col, record count > 0"));
                     }
                     let col_name = x.col_name.sstr(src);
-                    dict.add_column(tid, col_name, &x.col_dt);
+                    let dt = dict.add_column(tid, col_name, &x.col_dt);
+                    t.borrow_mut().set_datatype( dt );
                 }
 
                 Statement::RenameTable(x) => dict.rename_table(x, src),
@@ -168,7 +173,7 @@ fn execute_schema_updates(
                     // Remove record from sys_schema using x.table_id and ps.
                     Table::drop(t as i64, dt, ps);
                 }
-                _  => {
+                _ => {
                     println!("s={:?}", s);
                     panic!();
                 }

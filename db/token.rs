@@ -181,7 +181,9 @@ impl<'a> TokenReader<'a> {
         let mut c = self.getc();
         let start = self.pos;
         loop {
-            if c == term { break; }
+            if c == term {
+                break;
+            }
             match c {
                 0 => return self.err("EOF reached in string"),
                 _ => c = self.getc(),
@@ -190,7 +192,7 @@ impl<'a> TokenReader<'a> {
         self.getc();
         Ok(Token::String(start, self.pos - 1))
     }
-    
+
     fn err(&mut self, message: &str) -> Result<Token, E> {
         Err(E::new(message))
     }

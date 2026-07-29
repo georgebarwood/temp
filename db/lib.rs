@@ -6,7 +6,6 @@
 //! This takes a [Transaction] parameter which accumulates select results and which also has methods
 //! for accessing input parameters and controlling output.
 
-
 /* What next plan..
 
 alter table add column : if table has records, copy records to a temp table, delete the records, add column, copy records from temp table.
@@ -21,7 +20,7 @@ Rename fn, drop fn ( with checks ).
 
 Alter fn checks done.
 
-Optimise select from .... where Id = x 
+Optimise select from .... where Id = x
 
 Finish ShowAll to show table data. DON
 
@@ -147,16 +146,18 @@ make into lib, web server
 */
 
 use datatype::DataType;
+use pstd::{BoxA, VecA, alloc::Allocator};
+use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Mutex;
 use tablestg::*;
-use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
-use pstd::{BoxA, VecA, alloc::Allocator};
 
 pub use tablestg;
-pub use tablestg::{AtomicFile, BlockPageStg, FastFileStorage, HashMap, Limits, MultiFileStorage,
-    PageStorage, SharedPagedData, GVec, GString };
+pub use tablestg::{
+    AtomicFile, BlockPageStg, FastFileStorage, GString, GVec, HashMap, Limits, MultiFileStorage,
+    PageStorage, SharedPagedData,
+};
 
 /// SQL(-like) parsing. [`Parser`]
 mod parser;

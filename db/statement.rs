@@ -4,6 +4,8 @@ use serde::*;
 /// Statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Statement<A: Allocator + Debug + Default, S: XString> {
+    /// Null statement ( nothing to do on pass 2 )
+    Null,
     /// Declare and initialise a local variable.
     Let(Let<A, S>),
     /// Assign a local variable.
@@ -88,14 +90,18 @@ where
                 sr.set_table(x.table);
                 sr.write_table_name();
                 sr.output.push_str("(");
-                for (i,c) in x.cols.iter().enumerate() {
-                    if i != 0 { sr.output.push_str(", "); }
+                for (i, c) in x.cols.iter().enumerate() {
+                    if i != 0 {
+                        sr.output.push_str(", ");
+                    }
                     sr.write_col_name(*c);
                 }
                 sr.output.push_str(") values (");
                 sr.table = None; // Optional
-                for (i,e) in x.vals.iter().enumerate() {
-                    if i != 0 { sr.output.push_str(", "); }
+                for (i, e) in x.vals.iter().enumerate() {
+                    if i != 0 {
+                        sr.output.push_str(", ");
+                    }
                     e.show(sr)?;
                 }
                 sr.output.push_str(")");
@@ -149,8 +155,10 @@ where
                 let save = sr.names.len();
                 sr.output.push_str("for ");
                 sr.set_table(x.from);
-                for (i,(name, val)) in x.lets.iter().enumerate() {
-                    if i != 0 { sr.output.push_str(", "); }
+                for (i, (name, val)) in x.lets.iter().enumerate() {
+                    if i != 0 {
+                        sr.output.push_str(", ");
+                    }
                     let name = name.str();
                     sr.names.push(name);
                     sr.output.push_str(name);
@@ -161,7 +169,7 @@ where
                 sr.write_table_name();
 
                 sr.names.truncate(save); // To show where and order by
-                
+
                 if let Some(w) = &x.wher {
                     sr.output.push_str(" where ");
                     w.show(sr)?;
@@ -173,7 +181,7 @@ where
                     let name = name.str();
                     sr.names.push(name);
                 }
-                
+
                 show_block(sr, &x.block)?;
                 sr.names.truncate(save);
             }
@@ -186,7 +194,9 @@ where
         if let Some((list, desc)) = ob {
             sr.output.push_str(" order by ");
             for (i, e) in list.iter().enumerate() {
-                if i != 0 { sr.output.push_str(", "); }
+                if i != 0 {
+                    sr.output.push_str(", ");
+                }
                 e.show(sr)?;
                 if desc[i] {
                     sr.output.push_str(" desc ");
@@ -658,7 +668,7 @@ where
             Select(x) => x.exec(run),
             For(x) => x.exec(run),
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
-            | DropTable(_) | AddColumn(_) => panic!(),
+            | DropTable(_) | AddColumn(_) | Null => panic!(),
         };
     }
 }

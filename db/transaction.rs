@@ -3,7 +3,7 @@ use crate::*;
 /// Input/Output message. Query and Response.
 pub trait Transaction: Any {
     /// Output bytes.
-    fn output(&mut self, _bytes: &[u8] ) {}
+    fn output(&mut self, _bytes: &[u8]) {}
 
     /// STATUSCODE builtin function. sets the response status code.
     fn status_code(&mut self, _code: i64) {}
@@ -143,11 +143,10 @@ impl GenTransaction {
 }
 
 impl Transaction for GenTransaction {
-
-    fn output(&mut self, bytes: &[u8] ) {
-       self.rp.output.extend_from_slice(bytes);
+    fn output(&mut self, bytes: &[u8]) {
+        self.rp.output.extend_from_slice(bytes);
     }
-    
+
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {
         let s: Option<&str> = match kind {
             0 => {

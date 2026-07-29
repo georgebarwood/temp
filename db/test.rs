@@ -2,7 +2,7 @@ use crate::*;
 
 #[test]
 pub fn test() {
-        let _sql1: [&str; 1] = [ "
+    let _sql1: [&str; 1] = [ "
 let x=5 set x=10*13 select x, ' ', sys.len('hello')
 go
 schema dbo 
@@ -56,7 +56,8 @@ select dbo.test(1,'')
         "select dbo.yy(100)",
     ];
 
-    let _sql3: [&str; 2] = [ "schema test go table test.users (name string, age int) go
+    let _sql3: [&str; 2] = [
+        "schema test go table test.users (name string, age int) go
          let i = 8192
          while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
         "let total=0 for x = age from test.users set total = total + x select total",
@@ -86,8 +87,10 @@ select dbo.test(1,'')
         let start = std::time::Instant::now();
 
         let mut tr = GenTransaction::new();
-        tr.qy.params.insert( GString::from("k"), GString::from("george") );
-        
+        tr.qy
+            .params
+            .insert(GString::from("k"), GString::from("george"));
+
         db.run(s, &mut tr);
 
         println!(

@@ -399,7 +399,7 @@ impl<'a> Parser<'a> {
                 None
             };
             let order_by = self.order_by(&table_dt)?;
-            
+
             {
                 let lctx = RContext::Local(&self.locs);
                 let tctx = RContext::Table(&table_dt, &lctx);
@@ -804,18 +804,22 @@ impl<'a> Parser<'a> {
         let schema_id = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table_id,_,_dt) = self.check_table(schema_id, &tname)?;
+        let (table_id, _, _dt) = self.check_table(schema_id, &tname)?;
         // ToDo : check col name is new.
         // ToDo : check table has no records.
         self.expect_ident(b"add")?;
         self.expect_ident(b"column")?;
         let col_name = self.read_ident()?;
         let col_dt = self.datatype()?;
-        let result = AddColumn{ table_id, col_name, col_dt };
+        let result = AddColumn {
+            table_id,
+            col_name,
+            col_dt,
+        };
         let result = Statement::AddColumn(result);
         self.schema_updates = true;
         Ok(result)
-    }  
+    }
 
     fn create_table(&mut self) -> Result<LStatement, E> {
         let schema = self.read_ident()?;
@@ -837,7 +841,7 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn create_fn(&mut self, alter:bool) -> Result<LStatement, E> {
+    fn create_fn(&mut self, alter: bool) -> Result<LStatement, E> {
         // create fn schema.name ( param1 type1, param2 type2... ) -> rtyp as tatement
         let schema = self.read_ident()?;
         let schema_id = self.check_schema(&schema)?;
@@ -887,23 +891,21 @@ impl<'a> Parser<'a> {
             });
         }
 
-        if self.pass == 1 && alter
-        {
-           let (fix,_) = self.check_function(schema_id, &fname).unwrap();
-           let f = self.dict.func(fix);
-           if !ret.similar( &f.ret ) {
-               return Err(E::new("Return type cannot change"));
-           }
-           if parms.len() != f.parms.len() {
-               return Err(E::new("Number of parameters cannot change"));
-           }
-           for ( (_,t1), (_,t2) ) in parms.iter().zip( f.parms.iter() )
-           {
-              if !t1.similar(t2) {
-                  return Err(E::new("Params types cannot change"));
-              }
-           }  
-        }  
+        if self.pass == 1 && alter {
+            let (fix, _) = self.check_function(schema_id, &fname).unwrap();
+            let f = self.dict.func(fix);
+            if !ret.similar(&f.ret) {
+                return Err(E::new("Return type cannot change"));
+            }
+            if parms.len() != f.parms.len() {
+                return Err(E::new("Number of parameters cannot change"));
+            }
+            for ((_, t1), (_, t2)) in parms.iter().zip(f.parms.iter()) {
+                if !t1.similar(t2) {
+                    return Err(E::new("Params types cannot change"));
+                }
+            }
+        }
 
         let block = self.block()?;
         self.locs.truncate(save);
@@ -914,7 +916,7 @@ impl<'a> Parser<'a> {
             parms,
             ret,
             block,
-            alter
+            alter,
         };
 
         let result = Statement::CreateFn(result);
@@ -953,14 +955,20 @@ impl<'a> Parser<'a> {
     }
 
     fn drop_table(&mut self) -> Result<LStatement, E> {
-        let (table, schema_id, name_id, _table_dt) = self.table()?;
+        let t = self.table();
+        self.schema_updates = true;
+
+        if self.pass == 2 {
+           return Ok( Statement::Null )
+        }
+        
+        let (table, schema_id, name_id, _table_dt) = t?;
         let result = DropTable {
             table,
             schema_id,
             name_id,
         };
         let result = Statement::DropTable(result);
-        self.schema_updates = true;
         Ok(result)
     }
 
