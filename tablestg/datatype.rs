@@ -98,6 +98,13 @@ impl DataType {
         }
     }
 
+    pub fn struc_mut( &mut self ) -> &mut GVec<(GString, DataType)> {
+        match self {
+            DataType::Struct(x) => x,
+            _ => panic!()
+        }
+    }
+
     /// Encode value (which must match DataType) as bytes. DataType will later be used to decode the bytes.
     pub fn value_to_bytes0(&self, val: &Value) -> LVec<u8> {
         let mut w = LVec::new();

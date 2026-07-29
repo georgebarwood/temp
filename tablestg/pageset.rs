@@ -106,17 +106,19 @@ impl PageSet {
         }
     }
 
-    /// Save all the changed tables and pages.
-    pub fn save(&mut self) {
+    /// Save all the changed tables and pages. Returns number of changed pages.
+    pub fn save(&mut self) -> usize {
         let tables = std::mem::take(&mut self.tables);
         for (tid, table) in &tables {
             table.borrow_mut().save(*tid, self);
         }
         self.tables = tables;
 
+        let mut result = 0;
         for (pnum, data) in self.pages.drain() {
             if data.borrow().changed {
-                if false {
+                result += 1;
+                if true {
                     println!(
                         "PageSet save pnum={} len={}",
                         pnum,
@@ -126,7 +128,10 @@ impl PageSet {
                 self.wapd.set_data(pnum - 1, take_data(&data));
             }
         }
-        self.wapd.save(SaveOp::Save);
+        if result > 0 {
+            self.wapd.save(SaveOp::Save);
+        }
+        result
     }
 }
 

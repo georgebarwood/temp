@@ -6,7 +6,7 @@ use std::cell::RefCell;
 /// The first field (column) of the stored value must be a 64-bit id.
 ///
 /// Table has methods to fetch only specific columns. This is perticularly 
-/// useful when a table many columns or large columns that are stored indirectly.
+/// useful when a table has many columns or large columns that are stored indirectly.
 #[derive(Debug)]
 pub struct Table {
     /// Part that needs to be serialised.
@@ -53,6 +53,12 @@ impl Table {
             datatype,
             changed: true,
         }
+    }
+
+    /// Update datatype.
+    pub fn set_datatype( &mut self, dt: Arc<DataType> )
+    {
+        self.datatype = dt;
     }
 
     /// Get the next record id.
