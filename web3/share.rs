@@ -13,22 +13,22 @@ pub struct SharedState {
     pub update_tx: mpsc::Sender<UpdateMessage>,
 
     /// For notifying email loop that emails are in Queue ready to be sent.
-    pub email_tx: mpsc::UnboundedSender<()>,
+    pub _email_tx: mpsc::UnboundedSender<()>,
 
     /// For setting sleep time.
-    pub sleep_tx: mpsc::UnboundedSender<u64>,
+    pub _sleep_tx: mpsc::UnboundedSender<u64>,
 
     /// For notifying tasks waiting for update transaction.
-    pub wait_tx: broadcast::Sender<()>,
+    pub _wait_tx: broadcast::Sender<()>,
 
     /// Server is master ( not replicating another database ).
     pub is_master: bool,
 
     /// URL of master server.
-    pub replicate_source: String,
+    pub _replicate_source: String,
 
     /// Cookies for replication.
-    pub replicate_credentials: String,
+    pub _replicate_credentials: String,
 
     /// Denial of service limits.
     pub dos_limit: UA,
@@ -43,7 +43,7 @@ pub struct SharedState {
     pub tracedos: bool,
 
     /// Trace memory
-    pub tracemem: bool,
+    pub _tracemem: bool,
 }
 
 /// Usage array ( total or limit ).
@@ -123,7 +123,7 @@ impl SharedState {
     }
 
     /// Set the limits for specified user. Result is no limit exceeded.
-    pub fn u_set_limits(&self, uid: String, limit: UA) -> bool {
+    pub fn _u_set_limits(&self, uid: String, limit: UA) -> bool {
         let mut m = self.dos.lock().unwrap();
         let info = m.entry(uid).or_default();
         info.limit = limit;
@@ -136,7 +136,7 @@ impl SharedState {
     }
 
     /// Deflate old usage by 10% periodically. Items with zero usage are removed.
-    pub fn u_decay(&self) {
+    pub fn _u_decay(&self) {
         let mut m = self.dos.lock().unwrap();
         m.retain(|_uid, info| {
             let mut nz = false;
@@ -152,7 +152,7 @@ impl SharedState {
 
     /// Called to notify tasks waiting for new transaction.
     pub fn new_trans(&self) {
-        let _ = self.wait_tx.send(());
+        let _ = self._wait_tx.send(());
     }
 
     /// Process a server transaction.
@@ -186,14 +186,14 @@ impl SharedState {
             trans.uid = ext.uid.clone();
             if self.is_master {
                 if ext.sleep > 0 {
-                    let _ = self.sleep_tx.send(ext.sleep);
+                    let _ = self._sleep_tx.send(ext.sleep);
                 }
                 if ext.tx_email {
-                    let _ = self.email_tx.send(());
+                    let _ = self._email_tx.send(());
                 }
             }
             if ext.trans_wait {
-                let mut wait_rx = self.wait_tx.subscribe();
+                let mut wait_rx = self._wait_tx.subscribe();
                 tokio::select! {
                    _ = wait_rx.recv() => {}
                    _ = tokio::time::sleep(Duration::from_secs(600)) => {}
@@ -230,7 +230,7 @@ pub struct Trans {
     /// RustDB transaction
     pub x: GenTransaction,
     /// Log transaction for replication
-    pub log: bool,
+    pub _log: bool,
     /// Read only transaction - database will not be updated
     pub readonly: bool,
     /// Database processing time
@@ -245,7 +245,7 @@ impl Trans {
     fn make() -> Self {
         Self {
             x: GenTransaction::new(),
-            log: true,
+            _log: true,
             readonly: false,
             run_time: Duration::from_micros(0),
             updates: 0,
@@ -282,11 +282,11 @@ impl Trans {
     */
     }
 
-    pub fn no_log(&mut self) -> bool {
+    pub fn _no_log(&mut self) -> bool {
         let mut result = false;
         let ext = self.x.get_extension();
         if let Some(ext) = ext.downcast_ref::<TransExt>() {
-            result = ext.no_log;
+            result = ext._no_log;
         }
         self.x.set_extension(ext);
         result
@@ -318,11 +318,11 @@ pub struct TransExt {
     /// Signals wait for new transaction to be logged
     pub trans_wait: bool,
     /// Signals wait for transactions to be flushed
-    pub trans_flush: bool,
+    pub _trans_flush: bool,
     /// Transform html output to pdf.
     pub to_pdf: bool,
     /// Do not log transaction.
-    pub no_log: bool,
+    pub _no_log: bool,
 }
 
 impl TransExt {
@@ -333,16 +333,16 @@ impl TransExt {
             tx_email: false,
             sleep: 0,
             trans_wait: false,
-            trans_flush: false,
+            _trans_flush: false,
             to_pdf: false,
-            no_log: false,
+            _no_log: false,
         })
     }
 
     /// Set limits, returns false if limit exceeded.
-    pub fn set_dos(&self, uid: String, to: UA) -> bool {
+    pub fn _set_dos(&self, uid: String, to: UA) -> bool {
         if let Some(ss) = &self.ss {
-            ss.u_set_limits(uid, to)
+            ss._u_set_limits(uid, to)
         } else {
             true
         }
@@ -381,11 +381,11 @@ impl core::fmt::Display for Error {
     }
 }
 
-struct PdfFetcher;
+struct _PdfFetcher;
 
 use pdf_min::{ Writer, image::{ Image, ImageSpec } };
 
-impl pdf_min::writer::Fetcher for PdfFetcher
+impl pdf_min::writer::Fetcher for _PdfFetcher
 {
     fn image(&mut self, w: &mut Writer, name: &str) -> Image { 
        let resp = reqwest::blocking::get(name).unwrap();
@@ -399,13 +399,13 @@ impl pdf_min::writer::Fetcher for PdfFetcher
        let bytes = resp.bytes().unwrap();
        match image_kind
        {
-           1 => jpg_to_image( w, &bytes ),
+           1 => _jpg_to_image( w, &bytes ),
            _ => panic!()
        }
     }
 }
 
-fn jpg_to_image( w: &mut Writer, file_bytes: &[u8] ) -> Image
+fn _jpg_to_image( w: &mut Writer, file_bytes: &[u8] ) -> Image
 {
    // Use jpeg_decoder::Decoder to get jpg info ( color space, bits_per_component, width, height ).
    let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(file_bytes));

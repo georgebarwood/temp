@@ -37,42 +37,38 @@ fn main()
     limits.af_lim.swbuf = args.swbuf;
     limits.af_lim.uwbuf = args.uwbuf;
 
-    // Construct BlockPageStg.
+    // Construct Database.
     let file = MultiFileStorage::new("web3.db");
     let upd = FastFileStorage::new("web3.upd");
     let stg = AtomicFile::new_with_limits(file, upd, &limits.af_lim);
-    let ps = BlockPageStg::new(stg, &limits);
-    let is_new = ps.is_new();
-
-    // SharedPagedData allows for one writer and multiple readers.
-    // Note that readers never have to wait, they get a "virtual" read-only copy of the database.
-    let spd = SharedPagedData::new_from_ps(ps);
-
+    let bps = BlockPageStg::new(stg, &limits);
+    let is_new = bps.is_new();
+    let spd = SharedPagedData::new_from_ps(bps);
     let database = Database::new(spd, is_new);
 
     // Construct tokio task communication channels.
     let (update_tx, mut update_rx) = mpsc::channel::<share::UpdateMessage>(1);
     
-    let (email_tx, _email_rx) = mpsc::unbounded_channel::<()>();
-    let (sleep_tx, _sleep_rx) = mpsc::unbounded_channel::<u64>();
-    let (wait_tx, _wait_rx) = broadcast::channel::<()>(16);
+    let (_email_tx, _email_rx) = mpsc::unbounded_channel::<()>();
+    let (_sleep_tx, _sleep_rx) = mpsc::unbounded_channel::<u64>();
+    let (_wait_tx, _wait_rx) = broadcast::channel::<()>(16);
 
     // Construct shared state.
     let ss = Arc::new(share::SharedState {
         database: database.clone(),
         // bmap: bmap.clone(),
         update_tx,
-        email_tx,
-        sleep_tx,
-        wait_tx,
+        _email_tx,
+        _sleep_tx,
+        _wait_tx,
         is_master,
-        replicate_source: args.rep,
-        replicate_credentials: args.login,
+        _replicate_source: args.rep,
+        _replicate_credentials: args.login,
         dos_limit: [args.dos_count, args.dos_read, args.dos_cpu, args.dos_write],
         dos: Mutex::new(HashMap::default()),
         tracetime: args.tracetime,
         tracedos: args.tracedos,
-        tracemem: args.tracemem,
+        _tracemem: args.tracemem,
     });
 
     // let rt = tokio::runtime::Runtime::new().unwrap();
