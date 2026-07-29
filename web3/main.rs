@@ -1,13 +1,9 @@
 //! Web server based on [db] [Database].
 
-
-use db::
-{
-    AtomicFile, BlockPageStg, Database, FastFileStorage, HashMap, Limits, MultiFileStorage,
-    PageStorage, SharedPagedData,
-    GenTransaction
+use db::{
+    AtomicFile, BlockPageStg, Database, FastFileStorage, GenTransaction, HashMap, Limits,
+    MultiFileStorage, PageStorage, SharedPagedData,
 };
-
 
 use std::sync::{Arc, Mutex};
 use tokio::sync::{broadcast, mpsc};
@@ -21,8 +17,7 @@ static GLOBAL_ALLOC: rustdb::alloc::Perm = rustdb::alloc::Perm;
 // static ALLOC: numalloc::NumaAlloc = numalloc::NumaAlloc;
 
 /// Program entry point
-fn main()
-{
+fn main() {
     // Read program arguments.
     let args = Args::parse();
     let listen = format!("{}:{}", args.ip, args.port);
@@ -48,7 +43,7 @@ fn main()
 
     // Construct tokio task communication channels.
     let (update_tx, mut update_rx) = mpsc::channel::<share::UpdateMessage>(1);
-    
+
     let (_email_tx, _email_rx) = mpsc::unbounded_channel::<()>();
     let (_sleep_tx, _sleep_rx) = mpsc::unbounded_channel::<u64>();
     let (_wait_tx, _wait_rx) = broadcast::channel::<()>(16);
@@ -144,7 +139,7 @@ fn main()
                         if let Err(x) = request::process(stream, src.ip().to_string(), ssc).await {
                             println!("End request process error={:?}", x);
                         }
-                    });  
+                    });
                 }
                 _ = tokio::signal::ctrl_c() =>
                 {

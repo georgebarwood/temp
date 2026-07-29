@@ -1,5 +1,5 @@
 use crate::share::{Error, SharedState, Trans, U_COUNT, U_CPU, U_READ, U_WRITE, UseInfo};
-use db::{GVec,Part,GBTreeMap,GString,GenQuery};
+use db::{GBTreeMap, GString, GVec, GenQuery, Part};
 use std::{str, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -61,7 +61,7 @@ pub async fn process(
         if t.x.rp.status_code == 200 {
             t.readonly = readonly;
             t = ss.process(t).await;
-            
+
             r.uid = t.uid.clone();
             r.u.used[U_CPU] = t.run_time.as_micros() as u64;
             if ss.tracetime {

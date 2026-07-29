@@ -1,5 +1,5 @@
 use crate::HashMap;
-use db::{GenTransaction, Transaction, Database};
+use db::{Database, GenTransaction, Transaction};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -179,7 +179,13 @@ impl SharedState {
             self.new_trans();
         }
         trans.run_time = start.elapsed().unwrap();
-        println!("trans.run_time={:?} path={} rdonly={} updates={}", trans.run_time, trans.x.arg(0,""), trans.readonly, trans.updates);
+        println!(
+            "trans.run_time={:?} path={} rdonly={} updates={}",
+            trans.run_time,
+            trans.x.arg(0, ""),
+            trans.readonly,
+            trans.updates
+        );
 
         let ext = trans.x.get_extension();
         if let Some(ext) = ext.downcast_ref::<TransExt>() {
@@ -217,11 +223,10 @@ impl SharedState {
     }
 
     /// Shutdown and terminate process.
-    pub fn terminate( &self, code: i64 )
-    {
-       self.database.shutdown();
-       println!("Terminating code = {}", code);
-       std::process::exit(code as i32)
+    pub fn terminate(&self, code: i64) {
+        self.database.shutdown();
+        println!("Terminating code = {}", code);
+        std::process::exit(code as i32)
     }
 }
 
@@ -269,17 +274,17 @@ impl Trans {
     }
 
     pub async fn convert_to_pdf(&mut self) {
-    /*
-        let source = std::mem::take(&mut self.x.rp.output);
-        let task = tokio::task::spawn_blocking(move || {
-            let mut w = pdf_min::Writer { fetcher: Some(Box::new(PdfFetcher)), ..Default::default() };
-            pdf_min::html(&mut w, &source);
-            w.finish();
-            w.b.b
-            });
-        let pdf = task.await.unwrap();
-        self.x.rp.output = pdf;
-    */
+        /*
+            let source = std::mem::take(&mut self.x.rp.output);
+            let task = tokio::task::spawn_blocking(move || {
+                let mut w = pdf_min::Writer { fetcher: Some(Box::new(PdfFetcher)), ..Default::default() };
+                pdf_min::html(&mut w, &source);
+                w.finish();
+                w.b.b
+                });
+            let pdf = task.await.unwrap();
+            self.x.rp.output = pdf;
+        */
     }
 
     pub fn _no_log(&mut self) -> bool {
@@ -383,59 +388,58 @@ impl core::fmt::Display for Error {
 
 struct _PdfFetcher;
 
-use pdf_min::{ Writer, image::{ Image, ImageSpec } };
+use pdf_min::{
+    Writer,
+    image::{Image, ImageSpec},
+};
 
-impl pdf_min::writer::Fetcher for _PdfFetcher
-{
-    fn image(&mut self, w: &mut Writer, name: &str) -> Image { 
-       let resp = reqwest::blocking::get(name).unwrap();
-       let ct = resp.headers().get(reqwest::header::CONTENT_TYPE).unwrap();
-       // println!("ct={:?}", ct);
-       let image_kind = match ct.as_bytes()
-       {
-           b"image/jpeg" => 1,
-           _ => panic!()
-       };
-       let bytes = resp.bytes().unwrap();
-       match image_kind
-       {
-           1 => _jpg_to_image( w, &bytes ),
-           _ => panic!()
-       }
+impl pdf_min::writer::Fetcher for _PdfFetcher {
+    fn image(&mut self, w: &mut Writer, name: &str) -> Image {
+        let resp = reqwest::blocking::get(name).unwrap();
+        let ct = resp.headers().get(reqwest::header::CONTENT_TYPE).unwrap();
+        // println!("ct={:?}", ct);
+        let image_kind = match ct.as_bytes() {
+            b"image/jpeg" => 1,
+            _ => panic!(),
+        };
+        let bytes = resp.bytes().unwrap();
+        match image_kind {
+            1 => _jpg_to_image(w, &bytes),
+            _ => panic!(),
+        }
     }
 }
 
-fn _jpg_to_image( w: &mut Writer, file_bytes: &[u8] ) -> Image
-{
-   // Use jpeg_decoder::Decoder to get jpg info ( color space, bits_per_component, width, height ).
-   let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(file_bytes));
-   decoder.read_info().unwrap();
-   let info = decoder.info().unwrap();
+fn _jpg_to_image(w: &mut Writer, file_bytes: &[u8]) -> Image {
+    // Use jpeg_decoder::Decoder to get jpg info ( color space, bits_per_component, width, height ).
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(file_bytes));
+    decoder.read_info().unwrap();
+    let info = decoder.info().unwrap();
 
-   use jpeg_decoder::{PixelFormat};
-   
-   let color_space: &[u8] = match info.pixel_format {
-       PixelFormat::RGB24 => b"/DeviceRGB",
-       PixelFormat::CMYK32 => b"/DeviceCMYK",
-       PixelFormat::L8 | PixelFormat::L16 => b"/DeviceGray",
-   };
+    use jpeg_decoder::PixelFormat;
 
-   let bits_per_component = match info.pixel_format {
-       PixelFormat::L16 => 16,
-       _ => 8
-   };
+    let color_space: &[u8] = match info.pixel_format {
+        PixelFormat::RGB24 => b"/DeviceRGB",
+        PixelFormat::CMYK32 => b"/DeviceCMYK",
+        PixelFormat::L8 | PixelFormat::L16 => b"/DeviceGray",
+    };
 
-   // Make the ImageSpec.
-   use pdf_min::Px;
-   let ims = ImageSpec {
-       data: file_bytes,
-       width: info.width as Px,
-       height: info.height as Px,
-       color_space,
-       bits_per_component,
-       other: b"/Filter/DCT",
-   };
-   
-   // Make the PDF Image from the ImageSpec.
-   Image::new(&ims, &mut w.b)
+    let bits_per_component = match info.pixel_format {
+        PixelFormat::L16 => 16,
+        _ => 8,
+    };
+
+    // Make the ImageSpec.
+    use pdf_min::Px;
+    let ims = ImageSpec {
+        data: file_bytes,
+        width: info.width as Px,
+        height: info.height as Px,
+        color_space,
+        bits_per_component,
+        other: b"/Filter/DCT",
+    };
+
+    // Make the PDF Image from the ImageSpec.
+    Image::new(&ims, &mut w.b)
 }
