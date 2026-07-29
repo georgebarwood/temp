@@ -308,15 +308,16 @@ impl Dict {
     /// Save dict to sys store.
     pub fn save_to_sys_store(&self, ps: &mut PageSet) {
         let id = DICT_ID;
-        let bytes = self.main.to_bytes_id(id);
+        let bytes1 = self.main.to_bytes_id(id);
 
-        Self::save(id, &bytes, ps);
+        Self::save(id, &bytes1, ps);
 
         let id = INFO_ID;
-        let bytes = self.info.to_bytes_id(id);
-        Self::save(id, &bytes, ps);
+        let bytes2 = self.info.to_bytes_id(id);
+        Self::save(id, &bytes2, ps);
 
         // println!("Dict::Save_to_sys_store, saved info={:?}.", self.info);
+        println!("Dict:save_to_sys_store main bytes={} info bytes={}", bytes1.len(), bytes2.len() );
     }
 
     /// Load dict from sys store ( eventually may want to delay info load until it is needed ).

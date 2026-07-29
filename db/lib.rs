@@ -1,4 +1,15 @@
+//! [Database] based on [tablestg] crate.
+
+//!# Interface
+//!
+//! The method [Database::run] is called to execute an SQL query.
+//! This takes a [Transaction] parameter which accumulates select results and which also has methods
+//! for accessing input parameters and controlling output.
+
+
 /* What next plan..
+
+Case expressions.
 
 Display errors in execute and alter fn. DONE
 
@@ -141,6 +152,7 @@ use tablestg::*;
 use pstd::{collections::BTreeMapA, collections::btree_map::CustomTuning, localalloc::GTemp};
 use pstd::{BoxA, VecA, alloc::Allocator};
 
+pub use tablestg;
 pub use tablestg::{AtomicFile, BlockPageStg, FastFileStorage, HashMap, Limits, MultiFileStorage,
     PageStorage, SharedPagedData, GVec, GString };
 
