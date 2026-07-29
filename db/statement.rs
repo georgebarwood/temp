@@ -30,6 +30,8 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     CreateTable(CreateTable),
     /// Rename Table.
     RenameTable(RenameTable),
+    /// Alter Table Add Column.
+    AddColumn(AddColumn),
     /// Create Function.
     CreateFn(CreateFn<A>),
     /// Rename Function.
@@ -609,6 +611,14 @@ pub struct RenameFn {
     pub new_fname: SrcPos,
 }
 
+/// add column statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddColumn {
+    pub table_id: usize,
+    pub col_name: SrcPos,
+    pub col_dt: DataType,
+}
+
 /// DROP TABLE statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropTable {
@@ -648,7 +658,7 @@ where
             Select(x) => x.exec(run),
             For(x) => x.exec(run),
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
-            | DropTable(_) => panic!(),
+            | DropTable(_) | AddColumn(_) => panic!(),
         };
     }
 }

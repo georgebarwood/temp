@@ -9,6 +9,8 @@
 
 /* What next plan..
 
+alter table add column : if table has records, copy records to a temp table, delete the records, add column, copy records from temp table.
+
 Case expressions.
 
 Display errors in execute and alter fn. DONE

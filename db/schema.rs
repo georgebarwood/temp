@@ -205,13 +205,24 @@ impl Dict {
     }
 
     /// Create Table.
-    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) {
+    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) -> (usize,STable) {
         let id = self.main.new_table_id();
         let nid = self.new_name_id(name);
         self.main.table_lookup.insert((schema_id, nid), id);
-        self.main.table_dt.push(Arc::new(dt.clone()));
+        let dt = Arc::new(dt.clone());
+        self.main.table_dt.push(dt.clone());
         self.table_names.insert(id, (schema_id, nid));
+        (id, dt)
     }
+
+    /// Add Column.
+    pub fn add_column(&mut self, table_id: usize, col_name: &str, col_dt: &DataType)
+    {
+        let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
+        let dt = Arc::make_mut(dt);
+        let dt = dt.struc_mut();
+        dt.push( ( GString::from(col_name), col_dt.clone() ) ); 
+    }   
 
     /// Rename Table.
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {

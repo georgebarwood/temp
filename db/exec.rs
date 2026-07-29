@@ -90,7 +90,13 @@ pub fn go(run: &mut Run) -> Option<usize> {
                 if parser.schema_updates {
                     // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
-                    execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps);
+                    if let Err(e)  = execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps)
+                    {
+                        run.tr.set_error( &e.message);
+                        println!( "{}", &e.message );
+                        run.error = true;
+                        return None;
+                    }
                     run.dict_changed = true;
                 } else if pass == 2 {
                     encode_block(&mut slist);
@@ -113,7 +119,7 @@ fn execute_schema_updates(
     src: &[u8],
     dict: &mut Dict,
     ps: &mut PageSet,
-) {
+) -> Result<(),E> {
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         if pass == 1 || matches!(s, Statement::CreateFn(_)) {
@@ -126,8 +132,21 @@ fn execute_schema_updates(
 
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
-                    dict.create_table(x.schema_id, tname, &x.col_defs);
+                    let (id,dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
+                    let _ = ps.load_table(id as i64, &dt); // Trigger creation of table or reading it will produce an error later.
                     // println!("Table '{}' created", tname);
+                }
+
+                Statement::AddColumn(x) => {
+                    let tid = x.table_id;
+                    let table_dt = dict.table_datatype(tid);
+                    let t = ps.load_table(tid as i64, table_dt);
+                    let recs = t.borrow().record_count();
+                    if recs > 0 { 
+                         return Err(E::new( "Add Col, record count > 0" ));
+                    }
+                    let col_name = x.col_name.sstr(src);
+                    dict.add_column(tid, col_name, &x.col_dt);
                 }
 
                 Statement::RenameTable(x) => dict.rename_table(x, src),
@@ -156,6 +175,7 @@ fn execute_schema_updates(
             }
         }
     }
+    Ok(())
 }
 
 /// Encode a list of statements.

@@ -281,6 +281,7 @@ impl<'a> Parser<'a> {
         let ident = self.read_ident()?;
         match self.str(&ident) {
             b"fn" => self.create_fn(true),
+            b"table" => self.alter_table(),
             _ => Err(E::new("Expected fn...")),
         }
     }
@@ -797,6 +798,24 @@ impl<'a> Parser<'a> {
         self.schema_updates = true;
         Ok(result)
     }
+
+    fn alter_table(&mut self) -> Result<LStatement, E> {
+        let schema = self.read_ident()?;
+        let schema_id = self.check_schema(&schema)?;
+        self.expect_token(Token::Dot)?;
+        let tname = self.read_ident()?;
+        let (table_id,_,_dt) = self.check_table(schema_id, &tname)?;
+        // ToDo : check col name is new.
+        // ToDo : check table has no records.
+        self.expect_ident(b"add")?;
+        self.expect_ident(b"column")?;
+        let col_name = self.read_ident()?;
+        let col_dt = self.datatype()?;
+        let result = AddColumn{ table_id, col_name, col_dt };
+        let result = Statement::AddColumn(result);
+        self.schema_updates = true;
+        Ok(result)
+    }  
 
     fn create_table(&mut self) -> Result<LStatement, E> {
         let schema = self.read_ident()?;
