@@ -30,20 +30,26 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     CreateSchema(CreateSchema),
     /// Create Table.
     CreateTable(CreateTable),
-    /// Rename Table.
-    RenameTable(RenameTable),
+
     /// alter table add Column.
     AddColumn(AddColumn),
-    /// alter Table drop column.
-    DropColumn(DropColumn),
+
     /// Create Function.
     CreateFn(CreateFn<A>),
+
+    /// Rename Table.
+    RenameTable(RenameTable),
     /// Rename Function.
     RenameFn(RenameFn),
+    /// Rename Column.
+    RenameColumn(RenameColumn),
+
     /// drop schema.
     DropSchema(DropSchema),
     /// Drop Table.
     DropTable(DropTable),
+    /// alter Table drop column.
+    DropColumn(DropColumn),
     /// Drop Function.
     DropFn(DropFn),
 }
@@ -142,6 +148,7 @@ where
                 }
                 for (i, e) in x.vals.iter().enumerate() {
                     if i != 0 {
+                        if sr.col() > 50 { sr.newln(); }
                         sr.output.push_str(", ");
                     }
                     e.show(sr)?;
@@ -642,6 +649,14 @@ pub struct DropColumn {
     pub col_num: usize,
 }
 
+/// rename column statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameColumn {
+    pub table_id: usize,
+    pub col_num: usize,
+    pub new_name: SrcPos,
+}
+
 /// drop schema statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropSchema {
@@ -692,8 +707,9 @@ where
             Delete(x) => x.exec(run),
             Select(x) => x.exec(run),
             For(x) => x.exec(run),
-            CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_) | DropFn(_)
-            | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_) | Null => panic!(),
+            CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
+            | DropFn(_) | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_)
+            | RenameColumn(_) | Null => panic!(),
         };
     }
 }

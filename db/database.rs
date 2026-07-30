@@ -32,7 +32,7 @@ impl Database {
         let mut dict_changed = false;
         let mut new_dict = dict.clone(); // dict is Arc, so this is cheap operation.
         let mut start_pos = 0;
-        
+
         let mut batch = LVec::new();
         loop {
             let end_pos;
@@ -44,7 +44,7 @@ impl Database {
                 if run.error {
                     return 0;
                 }
-                batch.append( &mut run.batch );
+                batch.append(&mut run.batch);
                 run.dict_changed
             };
             if changed {
@@ -60,12 +60,11 @@ impl Database {
                 break;
             }
         }
-        
+
         // if batch.len() > 0 { println!("batch len={}... todo batch={:?}", batch.len(), batch ); }
         // Exexcute the batch strings.
-        for source in &batch
-        {
-           let changed = {
+        for source in &batch {
+            let changed = {
                 let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 run.source = LRc::new(LString::from(source.as_str()));
                 // println!("running batch item {}", source.as_str());
@@ -81,7 +80,7 @@ impl Database {
                 dict_changed = true;
             }
         }
-        
+
         let mut result = 0;
         if !readonly {
             result = self.commit(ps, dict, dict_changed);

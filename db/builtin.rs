@@ -154,11 +154,11 @@ impl Builtin {
                 let sid = run.dict.schema_id(schema).unwrap();
                 let nameid = run.dict.name_id(tname).unwrap();
                 let (tid, dt) = run.dict.table(&(*sid, *nameid)).unwrap();
-                let cid = dt.lookup_col(&cname).unwrap();
-                let result = run.dict.col_is_referenced( tid, cid );
-                Value::Bool( result )
+                let cid = dt.lookup_col(cname).unwrap();
+                let result = run.dict.col_is_referenced(tid, cid);
+                Value::Bool(result)
             }
-            
+
             table_literal => {
                 let tname = run.stack.pop().unwrap();
                 let tname = tname.string();
@@ -197,9 +197,9 @@ impl Builtin {
             }
             batch => {
                 let source = run.stack.pop().unwrap().string_clone();
-                run.batch.push( source );
+                run.batch.push(source);
                 Value::Empty
-            }    
+            }
             arg => {
                 let name = run.stack.pop().unwrap();
                 let kind = run.stack.pop().unwrap();

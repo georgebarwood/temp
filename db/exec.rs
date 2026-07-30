@@ -11,7 +11,7 @@ pub struct Run<'a> {
     pub error: bool,
     pub new_dict: &'a mut Arc<Dict>,
     pub tr: &'a mut dyn Transaction,
-    pub batch: LVec< LRc<LString>>, // Executed after normal execution.
+    pub batch: LVec<LRc<LString>>, // Executed after normal execution.
 }
 
 impl<'a> Run<'a> {
@@ -79,10 +79,13 @@ pub fn go(run: &mut Run) -> Option<usize> {
         match parser.pass(pass) {
             Err(e) => {
                 let pos = parser.position();
-                let src = tos(&run.source.as_bytes()[0..pos]);
+                let start = if pos < 80 { 0 } else { pos- 100 };
+                let src = tos(&run.source.as_bytes()[start..pos]);
+                let dots = if start > 0 { "..." } else { "" };
+                
                 let errmsg = format!(
-                    "Pass {} Error {} at input position {} Source: {}",
-                    pass, e.message, pos, src
+                    "Pass {} Error {} at input position {}<br>Source: {}{}",
+                    pass, e.message, pos, dots, src
                 );
                 run.tr.set_error(&errmsg);
                 run.error = true;
@@ -151,17 +154,23 @@ fn execute_schema_updates(
                     }
                     let col_name = x.col_name.sstr(src);
                     let dt = dict.add_column(tid, col_name, &x.col_dt);
-                    t.borrow_mut().set_datatype( dt );
+                    t.borrow_mut().set_datatype(dt);
+                }
+
+                Statement::RenameColumn(x) => {
+                    let new_name = x.new_name.sstr(src);
+                    let dt = dict.rename_column(x.table_id, x.col_num, new_name);
+                    let t = ps.load_table(x.table_id as i64, &dt);
+                    t.borrow_mut().set_datatype(dt);
                 }
 
                 Statement::DropColumn(x) => {
-                    if dict.col_is_referenced( x.table_id, x.col_num  )
-                    {
-                        return Err( E::new("Cannot drop referenced column") );
+                    if dict.col_is_referenced(x.table_id, x.col_num) {
+                        return Err(E::new("Cannot drop referenced column"));
                     }
                     let dt = dict.drop_column(x.table_id, x.col_num);
                     let t = ps.load_table(x.table_id as i64, &dt);
-                    t.borrow_mut().set_datatype( dt );
+                    t.borrow_mut().set_datatype(dt);
                 }
 
                 Statement::RenameTable(x) => dict.rename_table(x, src),
@@ -177,25 +186,22 @@ fn execute_schema_updates(
                 Statement::RenameFn(x) => dict.rename_fn(x, src),
 
                 Statement::DropSchema(x) => {
-                    if dict.schema_is_referenced( x.schema_id )
-                    {
-                        return Err( E::new("Cannot drop referenced schema") );
+                    if dict.schema_is_referenced(x.schema_id) {
+                        return Err(E::new("Cannot drop referenced schema"));
                     }
-                    dict.drop_schema( x.schema_id );
+                    dict.drop_schema(x.schema_id);
                 }
 
                 Statement::DropFn(x) => {
-                    if dict.fn_is_referenced( x.function_id )
-                    {
-                        return Err( E::new("Cannot drop referenced function") );
+                    if dict.fn_is_referenced(x.function_id) {
+                        return Err(E::new("Cannot drop referenced function"));
                     }
-                    dict.drop_fn( x.function_id );
+                    dict.drop_fn(x.function_id);
                 }
-                    
+
                 Statement::DropTable(x) => {
-                    if dict.table_is_referenced( x.table )
-                    {
-                        return Err( E::new("Cannot drop referenced table") );
+                    if dict.table_is_referenced(x.table) {
+                        return Err(E::new("Cannot drop referenced table"));
                     }
                     let t = x.table;
                     let dt = dict.table_datatype(t).clone();
