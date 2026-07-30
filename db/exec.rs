@@ -79,7 +79,7 @@ pub fn go(run: &mut Run) -> Option<usize> {
         match parser.pass(pass) {
             Err(e) => {
                 let pos = parser.position();
-                let start = if pos < 80 { 0 } else { pos- 100 };
+                let start = if pos < 80 { 0 } else { pos - 80 };
                 let src = tos(&run.source.as_bytes()[start..pos]);
                 let dots = if start > 0 { "..." } else { "" };
                 
