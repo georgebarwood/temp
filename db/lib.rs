@@ -7,6 +7,13 @@
 //! for accessing input parameters and controlling output.
 
 /* What next plan..
+Finish implementing drop column.
+
+Have a bitmap that stores which columns have non-default values.
+This means that adding/removing columns can be done without modifying table, just change the datatype.
+The bitmap has a count followed by bytes which represent the bitmap (8 bits per byte).
+After dropping a column, the column number is reserved until all the values for the col have been removed.
+After that, the columnnumber can be re-used.
 
 alter table add column : if table has records, copy records to a temp table, delete the records, add column, copy records from temp table.
 

@@ -32,14 +32,20 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     CreateTable(CreateTable),
     /// Rename Table.
     RenameTable(RenameTable),
-    /// Alter Table Add Column.
+    /// alter table add Column.
     AddColumn(AddColumn),
+    /// alter Table drop column.
+    DropColumn(DropColumn),
     /// Create Function.
     CreateFn(CreateFn<A>),
     /// Rename Function.
     RenameFn(RenameFn),
+    /// drop schema.
+    DropSchema(DropSchema),
     /// Drop Table.
     DropTable(DropTable),
+    /// Drop Function.
+    DropFn(DropFn),
 }
 
 use std::fmt::Write;
@@ -629,12 +635,31 @@ pub struct AddColumn {
     pub col_dt: DataType,
 }
 
-/// DROP TABLE statement.
+/// drop column statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DropColumn {
+    pub table_id: usize,
+    pub col_num: usize,
+}
+
+/// drop schema statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DropSchema {
+    pub schema_id: i64,
+}
+
+/// drop table statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropTable {
     pub schema_id: i64,
     pub name_id: i64,
     pub table: usize,
+}
+
+/// drop function statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DropFn {
+    pub function_id: usize,
 }
 
 /// Execute list of statements, restoring stack to original len.
@@ -667,8 +692,8 @@ where
             Delete(x) => x.exec(run),
             Select(x) => x.exec(run),
             For(x) => x.exec(run),
-            CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
-            | DropTable(_) | AddColumn(_) | Null => panic!(),
+            CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_) | DropFn(_)
+            | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_) | Null => panic!(),
         };
     }
 }

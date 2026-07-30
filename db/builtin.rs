@@ -14,6 +14,7 @@ pub enum Builtin {
     fn_text,
     table_text,
     table_col_names,
+    col_is_referenced,
     table_literal,
     string_literal,
     execute,
@@ -36,6 +37,7 @@ impl Builtin {
             b"fn_text" => Ok(fn_text),
             b"table_text" => Ok(table_text),
             b"table_col_names" => Ok(table_col_names),
+            b"col_is_referenced" => Ok(col_is_referenced),
             b"execute" => Ok(execute),
             b"batch" => Ok(batch),
             b"arg" => Ok(arg),
@@ -141,6 +143,22 @@ impl Builtin {
                 Value::String(LRc::new(result))
             }
 
+            col_is_referenced => {
+                let cname = run.stack.pop().unwrap();
+                let cname = cname.string();
+                let tname = run.stack.pop().unwrap();
+                let tname = tname.string();
+                let schema = run.stack.pop().unwrap();
+                let schema = schema.string();
+
+                let sid = run.dict.schema_id(schema).unwrap();
+                let nameid = run.dict.name_id(tname).unwrap();
+                let (tid, dt) = run.dict.table(&(*sid, *nameid)).unwrap();
+                let cid = dt.lookup_col(&cname).unwrap();
+                let result = run.dict.col_is_referenced( tid, cid );
+                Value::Bool( result )
+            }
+            
             table_literal => {
                 let tname = run.stack.pop().unwrap();
                 let tname = tname.string();
@@ -175,12 +193,12 @@ impl Builtin {
             execute => {
                 run.source = run.stack.pop().unwrap().string_clone();
                 go(run);
-                Value::Bool(true)
+                Value::Empty
             }
             batch => {
                 let source = run.stack.pop().unwrap().string_clone();
                 run.batch.push( source );
-                Value::Bool(true) // Should be Value::Empty
+                Value::Empty
             }    
             arg => {
                 let name = run.stack.pop().unwrap();
@@ -192,7 +210,7 @@ impl Builtin {
                 let value = run.stack.pop().unwrap();
                 let name = run.stack.pop().unwrap();
                 run.tr.header(name.string(), value.string());
-                Value::Bool(true)
+                Value::Empty
             }
             parseint => {
                 let str = run.stack.pop().unwrap();
@@ -206,7 +224,8 @@ impl Builtin {
     pub fn result_type(&self) -> &'static DataType {
         use Builtin::*;
         match self {
-            execute | batch | contains | header => &DataType::Bool,
+            execute | batch | header => &DataType::Empty,
+            contains | col_is_referenced => &DataType::Bool,
             len | parseint => &DataType::Int,
             substr | replace | fn_text | table_text | arg | table_literal | table_col_names
             | string_literal | error => &DataType::String(0),
@@ -218,9 +237,8 @@ impl Builtin {
         match self {
             len | string_literal => &STR_1,
             substr => &STR_INT_INT,
-            replace => &STR_3,
-            contains | header => &STR_2,
-            fn_text | table_text | table_col_names | table_literal => &STR_2,
+            replace | col_is_referenced => &STR_3,
+            contains | header | fn_text | table_text | table_col_names | table_literal => &STR_2,
             execute | batch | parseint => &STR_1,
             arg => &INT_STR,
             error => &[],

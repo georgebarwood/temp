@@ -141,6 +141,20 @@ impl Dict {
         self.schema_names.get(&id).map(|v| &**v)
     }
 
+    /// Check if schema is referenced.
+    pub fn schema_is_referenced(&self, schema_id: i64) -> bool
+    {
+        for (sid,_) in self.main.table_lookup.keys()
+        {
+            if *sid == schema_id { return true; }
+        }
+        for f in &self.info.funcs
+        {
+            if f.schema_id == schema_id { return true; }
+        }
+        false
+    }
+
     /// Get table name id or function name id from name.
     pub fn name_id(&self, name: &str) -> Option<&i64> {
         self.main.names.get(name)
@@ -204,6 +218,14 @@ impl Dict {
         self.main.schemas.insert(name, schema_id);
     }
 
+  /// Drop Schema.
+    pub fn drop_schema(&mut self, schema_id: i64) {
+        let sname = self.schema_name(schema_id).unwrap();
+        let sname = LString::from(sname);
+        self.main.schemas.remove(sname.as_str());
+        self.schema_names.remove(&schema_id);
+    }
+
     /// Create Table.
     pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) -> (usize, STable) {
         let id = self.main.new_table_id();
@@ -221,6 +243,15 @@ impl Dict {
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
         dtm.push((GString::from(col_name), col_dt.clone()));
+        dt.clone()
+    }
+
+    /// Drop Column.
+    pub fn drop_column(&mut self, table_id: usize, col_num: usize) -> STable {
+        let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
+        let dtm = Arc::make_mut(dt);
+        let dtm = dtm.struc_mut();
+        dtm.remove(col_num);
         dt.clone()
     }
 
@@ -244,6 +275,48 @@ impl Dict {
             .remove(&(x.schema_id, x.name_id))
             .unwrap();
         self.main.table_dt[ix - RESVD_ID as usize] = Arc::new(DataType::Empty); // Now an empty slot.
+        // ToDo : insert into set of free table ids for re-use.
+    }
+
+    /// Drop Function.
+    pub fn drop_fn(&mut self, function_id: usize) {
+       let f = &mut self.info.funcs[ function_id ];
+       let nid = self.main.names[f.fname.str()];
+       self.main.func_lookup.remove( &(f.schema_id, nid) );
+       *f = Arc::new(SFunc::default());
+       let f = &mut self.main.funcs[ function_id ];
+       *f = Arc::new(SFunc::default());
+        // ToDo : insert into set of free function ids for re-use.
+    }
+
+    /// Check if table is referenced.
+    pub fn table_is_referenced(&self, table_id: usize) -> bool
+    {
+        for f in &self.info.funcs
+        {
+            if f.references_table(table_id, self) { return true; }
+        }
+        false
+    }
+
+    /// Check if column is referenced.
+    pub fn col_is_referenced(&self, table_id: usize, col_num: usize) -> bool
+    {
+        for f in &self.info.funcs
+        {
+            if f.references_col(table_id, col_num, self) { return true; }
+        }
+        false
+    }
+
+    /// Check if function is referenced.
+    pub fn fn_is_referenced(&self, func_id: usize) -> bool
+    {
+        for f in &self.info.funcs
+        {
+            if f.references_function(func_id, self) { return true; }
+        }
+        false
     }
 
     /// Create Function.
@@ -392,7 +465,7 @@ impl Dict {
 pub type STable = Arc<DataType>;
 
 /// Schema Stored Function - result DataType, Param types and Statements.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct SFunc<S: XString> {
     pub schema_id: i64,
     pub fname: S,
@@ -411,6 +484,31 @@ impl<S: XString> SFunc<S> {
         self.show(&mut sr).unwrap();
 
         std::mem::take(&mut sr.output)
+    }
+
+    pub fn references_table(&self, table_id: usize, dict: &Dict) -> bool {
+        if self.schema_id == 0 { return false; }
+        let mut sr = SRun::new(dict);
+        sr.target_table = table_id;
+        self.show(&mut sr).unwrap();
+        sr.table_referenced
+    }
+
+    pub fn references_col(&self, table_id: usize, col_id: usize, dict: &Dict) -> bool {
+        if self.schema_id == 0 { return false; }
+        let mut sr = SRun::new(dict);
+        sr.target_table = table_id;
+        sr.target_col = col_id;
+        self.show(&mut sr).unwrap();
+        sr.col_referenced
+    }
+
+    pub fn references_function(&self, func_id: usize, dict: &Dict) -> bool {
+        if self.schema_id == 0 { return false; }
+        let mut sr = SRun::new(dict);
+        sr.target_function = func_id;
+        self.show(&mut sr).unwrap();
+        sr.function_referenced
     }
 
     /// Get source text for function.
@@ -476,7 +574,7 @@ pub trait XString {
 }
 
 /// String that stores extra info such as local variable or parameter names.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct YesString {
     s: GString,
 }
@@ -493,7 +591,7 @@ impl XString for YesString {
 }
 
 /// Dummy string for MainDict, local variable names not stored.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct NoString {}
 
 impl XString for NoString {
@@ -514,6 +612,12 @@ pub struct SRun<'a> {
     pub output: LString,
     pub dict: &'a Dict,
     pub table: Option<(usize, &'a STable)>, // For table name and column names.
+    pub target_table: usize,
+    pub target_col: usize,
+    pub table_referenced: bool,
+    pub col_referenced: bool,
+    pub target_function: usize,
+    pub function_referenced: bool,
 }
 
 impl<'a> SRun<'a> {
@@ -525,12 +629,21 @@ impl<'a> SRun<'a> {
             output: LString::new(),
             dict,
             table: None,
+            target_table: 0,
+            target_col: 0,
+            table_referenced: false,
+            col_referenced: false,
+            target_function: 0,
+            function_referenced: false,
         }
     }
 
     pub fn set_table(&mut self, table_ix: usize) {
         let dt = self.dict.table_datatype(table_ix);
         self.table = Some((table_ix, dt));
+        if table_ix == self.target_table {
+            self.table_referenced = true;
+        }
     }
 
     pub fn write_name(&mut self, ix: usize) {
@@ -540,9 +653,14 @@ impl<'a> SRun<'a> {
         self.output.push_str(self.names[ix]);
     }
 
-    pub fn write_col_name(&mut self, ix: usize) {
-        let (_id, dt) = self.table.as_ref().unwrap();
-        let name = dt.name_struct(ix);
+    pub fn write_col_name(&mut self, col_ix: usize) {
+        let (id, dt) = self.table.as_ref().unwrap();
+
+        if col_ix == self.target_col && *id == self.target_table {
+           self.col_referenced = true;
+        }
+                
+        let name = dt.name_struct(col_ix);
 
         write!(&mut self.output, "{}", name).unwrap();
     }
@@ -556,6 +674,10 @@ impl<'a> SRun<'a> {
     }
 
     pub fn write_fn_name(&mut self, ix: usize) {
+        if ix == self.target_function
+        {
+            self.function_referenced = true;
+        }
         let f = self.dict.func_info(ix);
         self.write_schema(f.schema_id);
         self.output.push_str(".");

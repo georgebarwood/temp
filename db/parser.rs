@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
         match self.str(&ident) {
             b"table" => self.rename_table(),
             b"fn" => self.rename_fn(),
-            // "schema" => self.drop_schema(),
+            // "schema" => self.rename_schema(),
             _ => Err(E::new("Expected table, fn...")),
         }
     }
@@ -289,7 +289,10 @@ impl<'a> Parser<'a> {
     fn drop(&mut self) -> Result<LStatement, E> {
         let ident = self.read_ident()?;
         match self.str(&ident) {
+            b"schema" => self.drop_schema(),
             b"table" => self.drop_table(),
+            b"fn" => self.drop_fn(),
+            
             // "schema" => self.drop_schema(),
             _ => Err(E::new("Expected table...")),
         }
@@ -804,21 +807,52 @@ impl<'a> Parser<'a> {
         let schema_id = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table_id, _, _dt) = self.check_table(schema_id, &tname)?;
-        // ToDo : check col name is new.
-        // ToDo : check table has no records.
-        self.expect_ident(b"add")?;
-        self.expect_ident(b"column")?;
-        let col_name = self.read_ident()?;
-        let col_dt = self.datatype()?;
-        let result = AddColumn {
-            table_id,
-            col_name,
-            col_dt,
-        };
-        let result = Statement::AddColumn(result);
-        self.schema_updates = true;
-        Ok(result)
+
+        if self.test_ident(b"add")?
+        {
+            self.expect_ident(b"column")?;
+            let col_name = self.read_ident()?;
+
+            let (table_id, _, dt) = self.check_table(schema_id, &tname)?;
+            if self.pass == 1 && dt.lookup_col( tos(self.str(&col_name)) ).is_some()
+            {
+                return Err( E::new("Duplicate column name") );
+            }
+        
+            let col_dt = self.datatype()?;
+            let result = AddColumn {
+                table_id,
+                col_name,
+                col_dt,
+            };
+            let result = Statement::AddColumn(result);
+            self.schema_updates = true;
+            Ok(result)
+        } else {
+            self.expect_ident(b"drop")?;
+            self.expect_ident(b"column")?;
+            let col_name = self.read_ident()?;
+            let (table_id, _, dt) = self.check_table(schema_id, &tname)?;
+            let mut col_num = 0;
+            if let Some(col) = dt.lookup_col( tos(self.str(&col_name)) )
+            {
+                col_num = col;
+            } else if self.pass == 1 {
+                 return Err( E::new("Column name not found") );
+            }
+            if self.pass == 1 && col_num == 0
+            {
+                return Err( E::new("Id column cannot be dropped") );
+            }
+            // ToDo: check no references to column.
+            let result = DropColumn {
+                table_id,
+                col_num,
+            };
+            let result = Statement::DropColumn(result);
+            self.schema_updates = true;
+            Ok(result)
+        }   
     }
 
     fn create_table(&mut self) -> Result<LStatement, E> {
@@ -954,6 +988,20 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
+    fn drop_schema(&mut self) -> Result<LStatement, E> {
+        let schema = self.read_ident()?;
+        self.schema_updates = true;
+        
+        if self.pass == 2 {
+           return Ok( Statement::Null )
+        }
+        let schema_id = self.check_schema(&schema)?;
+        let result = DropSchema{schema_id};
+        let result = Statement::DropSchema(result);
+
+        Ok(result)
+    }
+
     fn drop_table(&mut self) -> Result<LStatement, E> {
         let t = self.table();
         self.schema_updates = true;
@@ -969,6 +1017,22 @@ impl<'a> Parser<'a> {
             name_id,
         };
         let result = Statement::DropTable(result);
+        Ok(result)
+    }
+
+    fn drop_fn(&mut self) -> Result<LStatement, E> {
+        let f = self.function();
+        self.schema_updates = true;
+
+        if self.pass == 2 {
+           return Ok( Statement::Null )
+        }
+        
+        let (function_id,_,_) = f?;
+        let result = DropFn {
+            function_id,
+        };
+        let result = Statement::DropFn(result);
         Ok(result)
     }
 
