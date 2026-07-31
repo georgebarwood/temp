@@ -69,22 +69,22 @@ impl<'a> Run<'a> {
 }
 
 /// Executes a batch of statements. Result is None is there was an error, otherwise position in source.
-pub fn go(run: &mut Run) -> Option<usize> {
+pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
     let source = run.source.clone();
+
     for pass in 1..=2
-    // If we know there are no schema updates, could skip pass 1.
     {
         let temp_dict = run.new_dict.clone();
         let mut parser = Parser::new(source.as_bytes(), &temp_dict);
-        match parser.pass(pass) {
+        match parser.pass(pass, nested) {
             Err(e) => {
                 let pos = parser.position();
-                let start = if pos < 80 { 0 } else { pos - 80 };
+                let start = if pos < 100 { 0 } else { pos - 90 };
                 let src = tos(&run.source.as_bytes()[start..pos]);
                 let dots = if start > 0 { "..." } else { "" };
                 
                 let errmsg = format!(
-                    "Pass {} Error {} at input position {}<br>Source: {}{}",
+                    "Pass {} Error {} at input position {}. Source: {}{}",
                     pass, e.message, pos, dots, src
                 );
                 run.tr.set_error(&errmsg);
@@ -134,14 +134,16 @@ fn execute_schema_updates(
                 Statement::CreateSchema(x) => {
                     let sname = x.sname.sstr(src);
                     dict.create_schema(sname);
-                    // println!("Schema '{}' created", sname);
+                }
+                Statement::RenameSchema(x) => {
+                    let new_name = x.new_name.sstr(src);
+                    dict.rename_schema(x.schema_id, new_name);
                 }
 
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
                     let (id, dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
                     let _ = ps.load_table(id as i64, &dt); // Trigger creation of table or reading it will produce an error later.
-                    // println!("Table '{}' created", tname);
                 }
 
                 Statement::AddColumn(x) => {

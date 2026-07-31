@@ -37,6 +37,8 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     /// Create Function.
     CreateFn(CreateFn<A>),
 
+    /// Rename Schema.
+    RenameSchema(RenameSchema),
     /// Rename Table.
     RenameTable(RenameTable),
     /// Rename Function.
@@ -44,7 +46,7 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     /// Rename Column.
     RenameColumn(RenameColumn),
 
-    /// drop schema.
+    /// Drop Schema.
     DropSchema(DropSchema),
     /// Drop Table.
     DropTable(DropTable),
@@ -148,7 +150,9 @@ where
                 }
                 for (i, e) in x.vals.iter().enumerate() {
                     if i != 0 {
-                        if sr.col() > 50 { sr.newln(); }
+                        if sr.col() > 50 {
+                            sr.newln();
+                        }
                         sr.output.push_str(", ");
                     }
                     e.show(sr)?;
@@ -591,13 +595,20 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
     }
 }
 
-/// CREATE SCHEMA statement.
+/// Create Schema statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSchema {
     pub sname: SrcPos,
 }
 
-/// CREATE TABLE statement.
+/// Rename Schema statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenameSchema {
+    pub schema_id: i64,
+    pub new_name: SrcPos,
+}
+
+/// Create Table statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTable {
     pub schema_id: i64,
@@ -605,7 +616,7 @@ pub struct CreateTable {
     pub col_defs: DataType,
 }
 
-/// RENAME TABLE statement.
+/// Rename Table statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameTable {
     pub old_schema_id: i64,
@@ -709,7 +720,7 @@ where
             For(x) => x.exec(run),
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
             | DropFn(_) | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_)
-            | RenameColumn(_) | Null => panic!(),
+            | RenameSchema(_) | RenameColumn(_) | Null => panic!(),
         };
     }
 }

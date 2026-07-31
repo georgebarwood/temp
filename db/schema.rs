@@ -219,6 +219,14 @@ impl Dict {
         self.main.schemas.insert(name, schema_id);
     }
 
+    /// Rename Schema.
+    pub fn rename_schema(&mut self, schema_id: i64, new_name: &str) {
+        let new_name = GString::from(new_name);
+        let old_name = self.schema_names.insert(schema_id, new_name.clone()).unwrap();
+        self.main.schemas.remove(&old_name);
+        self.main.schemas.insert(new_name, schema_id);
+    }
+
     /// Drop Schema.
     pub fn drop_schema(&mut self, schema_id: i64) {
         let sname = self.schema_name(schema_id).unwrap();
@@ -246,7 +254,7 @@ impl Dict {
         dtm.push((GString::from(col_name), col_dt.clone()));
         dt.clone()
     }
-    
+
     /// Rename Column.
     pub fn rename_column(&mut self, table_id: usize, col_num: usize, new_name: &str) -> STable {
         let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
@@ -255,7 +263,6 @@ impl Dict {
         dtm[col_num].0 = GString::from(new_name);
         dt.clone()
     }
-
 
     /// Drop Column.
     pub fn drop_column(&mut self, table_id: usize, col_num: usize) -> STable {

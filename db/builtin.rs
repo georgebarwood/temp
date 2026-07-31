@@ -9,10 +9,8 @@ pub enum Builtin {
     substr,
     replace,
     contains,
-    // binlen,
-    // binsubstr,
     fn_text,
-    table_text,
+    table_col_defs,
     table_col_names,
     col_is_referenced,
     table_literal,
@@ -23,7 +21,7 @@ pub enum Builtin {
     header,
     parseint,
     error,
-    // More to do...
+    // More to do... note: add new functions at end for compatibility.
 }
 
 impl Builtin {
@@ -35,7 +33,7 @@ impl Builtin {
             b"replace" => Ok(replace),
             b"contains" => Ok(contains),
             b"fn_text" => Ok(fn_text),
-            b"table_text" => Ok(table_text),
+            b"table_col_defs" => Ok(table_col_defs),
             b"table_col_names" => Ok(table_col_names),
             b"col_is_referenced" => Ok(col_is_referenced),
             b"execute" => Ok(execute),
@@ -109,7 +107,7 @@ impl Builtin {
 
                 Value::String(LRc::new(result))
             }
-            table_text => {
+            table_col_defs => {
                 let tname = run.stack.pop().unwrap();
                 let tname = tname.string();
                 let schema = run.stack.pop().unwrap();
@@ -120,7 +118,7 @@ impl Builtin {
                 let (_, dt) = run.dict.table(&(*sid, *nameid)).unwrap();
                 let mut result = LString::new();
                 use std::fmt::Write;
-                write!(&mut result, "table {}.{} {}", schema, tname, dt).unwrap();
+                write!(&mut result, "{}", dt).unwrap();
                 Value::String(LRc::new(result))
             }
             table_col_names => {
@@ -192,7 +190,7 @@ impl Builtin {
             }
             execute => {
                 run.source = run.stack.pop().unwrap().string_clone();
-                go(run);
+                go(run, true);
                 Value::Empty
             }
             batch => {
@@ -227,7 +225,7 @@ impl Builtin {
             execute | batch | header => &DataType::Empty,
             contains | col_is_referenced => &DataType::Bool,
             len | parseint => &DataType::Int,
-            substr | replace | fn_text | table_text | arg | table_literal | table_col_names
+            substr | replace | fn_text | table_col_defs | arg | table_literal | table_col_names
             | string_literal | error => &DataType::String(0),
         }
     }
@@ -238,7 +236,7 @@ impl Builtin {
             len | string_literal => &STR_1,
             substr => &STR_INT_INT,
             replace | col_is_referenced => &STR_3,
-            contains | header | fn_text | table_text | table_col_names | table_literal => &STR_2,
+            contains | header | fn_text | table_col_defs | table_col_names | table_literal => &STR_2,
             execute | batch | parseint => &STR_1,
             arg => &INT_STR,
             error => &[],
