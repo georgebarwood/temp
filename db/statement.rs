@@ -311,9 +311,10 @@ pub struct Let<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> Let<A, S> {
-    fn exec(&self, run: &mut Run) {
-        let v = self.exp.eval(run);
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
+        let v = self.exp.eval(run)?;
         run.stack.push(v);
+        Ok(())
     }
 }
 
@@ -325,9 +326,10 @@ pub struct Set<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Set<A> {
-    fn exec(&self, run: &mut Run) {
-        let v = self.exp.eval(run);
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
+        let v = self.exp.eval(run)?;
         *run.local(self.i) = v;
+        Ok(())
     }
 }
 
@@ -339,9 +341,10 @@ pub struct Append<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Append<A> {
-    fn exec(&self, run: &mut Run) {
-        let v = self.exp.eval(run);
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
+        let v = self.exp.eval(run)?;
         append(run.local(self.i), &v);
+        Ok(())
     }
 }
 
@@ -353,10 +356,11 @@ pub struct While<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> While<A, S> {
-    fn exec(&self, run: &mut Run) {
-        while self.exp.eval(run).bool() {
-            execute_block(&self.block, run);
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
+        while self.exp.eval(run)?.bool() {
+            execute_block(&self.block, run)?;
         }
+        Ok(())
     }
 }
 
@@ -369,12 +373,13 @@ pub struct If<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> If<A, S> {
-    fn exec(&self, run: &mut Run) {
-        if self.exp.eval(run).bool() {
-            execute_block(&self.block, run);
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
+        if self.exp.eval(run)?.bool() {
+            execute_block(&self.block, run)?;
         } else if let Some(els) = &self.els {
-            execute_block(els, run);
+            execute_block(els, run)?;
         }
+        Ok(())
     }
 }
 
@@ -387,14 +392,14 @@ pub struct Insert<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Insert<A> {
-    fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
         for e in &self.vals {
-            ee.push(e.eval(run));
+            ee.push(e.eval(run)?);
         }
         let t = run.load_table(self.table);
-        let mut table = t.borrow_mut();
+        let mut table = t.try_borrow_mut()?;
 
         let mut row = table.datatype.default_value();
 
@@ -431,6 +436,7 @@ impl<A: Allocator + Debug + Default> Insert<A> {
             row
         );
         */
+        Ok(())
     }
 }
 
@@ -443,16 +449,16 @@ pub struct Update<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Update<A> {
-    fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
         let t = run.load_table(self.table);
-        let ids = ids(&t, &self.wher, run);
-        let mut table = t.borrow_mut();
+        let ids = ids(&t, &self.wher, run)?;
+        let mut table = t.try_borrow_mut()?;
         for id in &ids {
             let mut row = table.fetch(*id, run.ps).unwrap();
             let mut vals = LVec::with_capacity(self.assigns.len());
             {
                 for (_col, e) in &self.assigns {
-                    let v = e.eval_vals(run, row.list());
+                    let v = e.eval_vals(run, row.list())?;
                     vals.push(v);
                 }
             }
@@ -462,6 +468,7 @@ impl<A: Allocator + Debug + Default> Update<A> {
             }
             table.update(*id, &row, run.ps);
         }
+        Ok(())
     }
 }
 
@@ -473,13 +480,14 @@ pub struct Delete<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Delete<A> {
-    fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
         let t = run.load_table(self.table);
-        let ids = ids(&t, &self.wher, run);
-        let mut table = t.borrow_mut();
+        let ids = ids(&t, &self.wher, run)?;
+        let mut table = t.try_borrow_mut()?;
         for id in &ids {
             table.remove(*id, run.ps);
         }
+        Ok(())
     }
 }
 
@@ -496,24 +504,24 @@ pub struct Select<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Select<A> {
-    fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
         if self.order_by.is_some() {
-            self.exec_order_by(run)
+            self.exec_order_by(run)?;
         } else if let Some(f) = &self.from {
             let t = run.load_table(*f);
-            let table = t.borrow();
+            let table = t.try_borrow()?;
             let mut iter = table.iter(run.ps);
             while let Some(b) = iter.next_ref(run.ps) {
                 // print!("got a row :");
                 let mut lr = table.lazy_row(b);
                 let ok = if let Some(wher) = &self.wher {
-                    wher.ev(run, &mut lr).bool()
+                    wher.ev(run, &mut lr)?.bool()
                 } else {
                     true
                 };
                 if ok {
                     for e in &self.vals {
-                        let v = e.ev(run, &mut lr);
+                        let v = e.ev(run, &mut lr)?;
                         run.output(&v);
                     }
                 }
@@ -521,14 +529,15 @@ impl<A: Allocator + Debug + Default> Select<A> {
         } else {
             // SELECT with no FROM
             for e in &self.vals {
-                let v = e.eval(run);
+                let v = e.eval(run)?;
                 run.output(&v);
             }
         }
+        Ok(())
     }
-    pub fn exec_order_by(&self, run: &mut Run) {
+    pub fn exec_order_by(&self, run: &mut Run)  -> Result<(),E>{
         let f = self.from.unwrap();
-        let temp = get_temp(f, &self.vals, &self.wher, &self.order_by, run);
+        let temp = get_temp(f, &self.vals, &self.wher, &self.order_by, run)?;
 
         let n = self.order_by.as_ref().unwrap().0.len();
         for row in &temp {
@@ -536,6 +545,7 @@ impl<A: Allocator + Debug + Default> Select<A> {
                 run.output(v);
             }
         }
+        Ok(())
     }
 }
 
@@ -550,18 +560,18 @@ pub struct For<A: Allocator + Debug + Default, S: XString> {
 }
 
 impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
-    fn exec(&self, run: &mut Run) {
+    fn exec(&self, run: &mut Run)  -> Result<(),E>{
         if self.order_by.is_some() {
-            self.exec_order_by(run);
+            self.exec_order_by(run)
         } else {
             let t = run.load_table(self.from);
-            let table = t.borrow();
+            let table = t.try_borrow()?;
             let mut iter = table.iter(run.ps);
             while let Some(b) = iter.next_ref(run.ps) {
                 let mut lr = table.lazy_row(b);
 
                 let ok = if let Some(wher) = &self.wher {
-                    let v = wher.ev(run, &mut lr);
+                    let v = wher.ev(run, &mut lr)?;
                     v.bool()
                 } else {
                     true
@@ -570,17 +580,18 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
                 if ok {
                     let len = run.stack.len();
                     for (_, e) in &self.lets {
-                        let v = e.ev(run, &mut lr);
+                        let v = e.ev(run, &mut lr)?;
                         run.stack.push(v);
                     }
-                    execute_block_no_restore(&self.block, run);
+                    execute_block_no_restore(&self.block, run)?;
                     run.stack.truncate(len);
                 }
             }
+            Ok(())
         }
     }
-    pub fn exec_order_by(&self, run: &mut Run) {
-        let temp = get_for_temp(self.from, &self.lets, &self.wher, &self.order_by, run);
+    pub fn exec_order_by(&self, run: &mut Run)  -> Result<(),E>{
+        let temp = get_for_temp(self.from, &self.lets, &self.wher, &self.order_by, run)?;
 
         let n = self.order_by.as_ref().unwrap().0.len();
 
@@ -589,9 +600,10 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
             for v in &row[n..] {
                 run.stack.push(v.clone());
             }
-            execute_block_no_restore(&self.block, run);
+            execute_block_no_restore(&self.block, run)?;
             run.stack.truncate(len);
         }
+        Ok(())
     }
 }
 
@@ -689,18 +701,19 @@ pub struct DropFn {
 }
 
 /// Execute list of statements, restoring stack to original len.
-pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run)
+pub fn execute_block<A, S>(slist: &[Statement<A, S>], run: &mut Run) -> Result<(),E>
 where
     A: Allocator + Debug + Default,
     S: XString,
 {
     let slen = run.stack.len(); // At end restore stack to this length.
-    execute_block_no_restore(slist, run);
+    execute_block_no_restore(slist, run)?;
     run.stack.truncate(slen); // pop local variables from stack.
+    Ok(())
 }
 
 /// Execute list of statements ( caller must restore stack ).
-pub fn execute_block_no_restore<A, S>(slist: &[Statement<A, S>], run: &mut Run)
+pub fn execute_block_no_restore<A, S>(slist: &[Statement<A, S>], run: &mut Run) -> Result<(),E>
 where
     A: Allocator + Debug + Default,
     S: XString,
@@ -721,26 +734,27 @@ where
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
             | DropFn(_) | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_)
             | RenameSchema(_) | RenameColumn(_) | Null => panic!(),
-        };
+        }?;
     }
+    Ok(())
 }
 
 /// Get a list of ids for records from table that satisfy where condition.
-fn ids<A>(t: &RTable, wher: &Exp<A>, run: &mut Run) -> LVec<i64>
+fn ids<A>(t: &RTable, wher: &Exp<A>, run: &mut Run) -> Result<LVec<i64>,E>
 where
     A: Allocator + Debug + Default,
 {
     let mut result = LVec::new();
-    let table = t.borrow();
+    let table = t.try_borrow()?;
     let mut iter = table.iter(run.ps);
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
-        if wher.ev(run, &mut lr).bool() {
+        if wher.ev(run, &mut lr)?.bool() {
             let id = lr.item(0, run.ps).int();
             result.push(id);
         }
     }
-    result
+    Ok(result)
 }
 
 /// Convert list of local expressions to new allocator.
@@ -804,35 +818,35 @@ fn get_for_temp<A: Allocator + Debug + Default, S>(
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
     run: &mut Run,
-) -> LVec<LVec<Value>> {
+) -> Result<LVec<LVec<Value>>,E> {
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.load_table(table_id);
-    let table = table.borrow();
+    let table = table.try_borrow()?;
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
         let ok = if let Some(wher) = &wher {
-            wher.ev(run, &mut lr).bool()
+            wher.ev(run, &mut lr)?.bool()
         } else {
             true
         };
         if ok {
             let mut row = LVec::with_capacity(ob.len() + lets.len());
             for e in ob {
-                let v = e.ev(run, &mut lr);
+                let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }
             for (_, e) in lets {
-                let v = e.ev(run, &mut lr);
+                let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }
             temp.push(row);
         }
     }
     temp.sort_by(|a, b| row_compare(a, b, desc));
-    temp
+    Ok(temp)
 }
 
 /// Get filtered, sorted temporary table.
@@ -842,36 +856,37 @@ fn get_temp<A>(
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
     run: &mut Run,
-) -> LVec<LVec<Value>>
+) -> Result<LVec<LVec<Value>>,E>
 where
     A: Allocator + Debug + Default,
 {
     let (ob, desc) = order_by.as_ref().unwrap();
     let table = run.load_table(table_id);
-    let table = table.borrow();
+    let table = table.try_borrow()?;
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
     while let Some(b) = iter.next_ref(run.ps) {
         let mut lr = table.lazy_row(b);
         let ok = if let Some(wher) = &wher {
-            wher.ev(run, &mut lr).bool()
+            wher.ev(run, &mut lr)?.bool()
         } else {
             true
         };
         if ok {
             let mut row = LVec::with_capacity(ob.len() + vals.len());
             for e in ob {
-                let v = e.ev(run, &mut lr);
+                let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }
             for e in vals {
-                let v = e.ev(run, &mut lr);
+                let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }
             temp.push(row);
         }
     }
     temp.sort_by(|a, b| row_compare(a, b, desc));
-    temp
+    Ok(temp)
 }
+ 

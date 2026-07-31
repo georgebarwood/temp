@@ -23,6 +23,7 @@ pub struct Parser<'a> {
     pub schema_updates: bool,
     not_schema: bool,
     level: usize,
+    pub statement_pos: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -37,6 +38,7 @@ impl<'a> Parser<'a> {
             schema_updates: false,
             not_schema: false,
             level: 0,
+            statement_pos: 0,
         }
     }
 
@@ -92,6 +94,7 @@ impl<'a> Parser<'a> {
 
     fn stat(&mut self) -> Result<LStatement, E> {
         if let Token::Ident(x, y) = &self.token {
+            self.statement_pos = *x;
             let ident = &self.tr.input[*x..*y];
             self.next()?;
             self.statement(ident)
@@ -106,6 +109,7 @@ impl<'a> Parser<'a> {
         loop {
             match &self.token {
                 Token::Ident(x, y) => {
+                    self.statement_pos = *x;
                     let ident = &self.tr.input[*x..*y];
                     if ident == b"go" {
                         if self.level > 0 {

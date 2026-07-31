@@ -79,7 +79,7 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
         match parser.pass(pass, nested) {
             Err(e) => {
                 let pos = parser.position();
-                let start = if pos < 100 { 0 } else { pos - 90 };
+                let start = parser.statement_pos;
                 let src = tos(&run.source.as_bytes()[start..pos]);
                 let dots = if start > 0 { "..." } else { "" };
                 
@@ -108,7 +108,12 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                 } else if pass == 2 {
                     encode_block(&mut slist);
                     // println!("Executing {:?}", slist);
-                    execute_block(&slist, run);
+                    if let Err(e) = execute_block(&slist, run) {
+                        run.tr.set_error(&e.message);
+                        println!("{}", e.message);
+                        run.error = true;
+                        return None;
+                    }
                 }
                 if pass == 2 {
                     return Some(parser.tr.pos);

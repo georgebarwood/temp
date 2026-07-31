@@ -23,11 +23,17 @@ use serde::*;
 pub enum Exp<A: Allocator + Debug + Default> {
     #[default]
     None,
+
+    /// Boolean constant.
     Bool(BoolExp<A>),
+
+    /// Integer constant.
     Int(IntExp<A>),
+
+    /// String constant.
     Str(StrExp<A>),
 
-    /// Name (unresolved). Resolves to Local or Col.
+    /// Unresolved Name, changes to Local or Col.
     Name(SrcPos),
 
     /// Local variable.
@@ -39,44 +45,44 @@ pub enum Exp<A: Allocator + Debug + Default> {
     /// Binary expression.
     Binary(Operator, BoxA<Exp<A>, A>, BoxA<Exp<A>, A>),
 
-    /// Function call (unresolved). Schema, fname, args.
+    /// Unresolved function call. Schema, fname, args.
     FnCallByName(SrcPos, SrcPos, VecA<Exp<A>, A>),
 
     /// Function call (resolved). Function id and args.
     FnCall(usize, VecA<Exp<A>, A>),
 
-    /// Built-in call. Build-in operation and args.
+    /// Built-in call. Builtin operation and args.
     BuiltinCall(Builtin, VecA<Exp<A>, A>),
 }
 
 impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Value {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<Value,E> {
         use Exp::*;
-        match self {
-            Bool(x) => Value::Bool(x.ev(run, rc)),
-            Int(x) => Value::Int(x.ev(run, rc)),
-            Str(x) => Value::String(LRc::new(x.ev(run, rc))),
+        Ok(match self {
+            Bool(x) => Value::Bool(x.ev(run, rc)?),
+            Int(x) => Value::Int(x.ev(run, rc)?),
+            Str(x) => Value::String(LRc::new(x.ev(run, rc)?)),
             Local(x) => run.local(*x).clone(),
             Col(x) => rc.item(*x, run.ps),
             Binary(op, x, y) => {
-                let x = x.ev(run, rc);
-                let y = y.ev(run, rc);
+                let x = x.ev(run, rc)?;
+                let y = y.ev(run, rc)?;
                 op.eval(&x, &y)
             }
             FnCall(f, args) => {
                 let f = run.call_init(*f);
                 let save = run.stack.len();
                 for e in args {
-                    let v = e.ev(run, rc);
+                    let v = e.ev(run, rc)?;
                     run.stack.push(v);
                 }
-                execute_block_no_restore(&f.block, run);
+                execute_block_no_restore(&f.block, run)?;
                 run.stack.truncate(save);
                 run.stack.pop().unwrap() // Pop return value.
             }
             BuiltinCall(bi, args) => {
                 for e in args {
-                    let v = e.ev(run, rc);
+                    let v = e.ev(run, rc)?;
                     run.stack.push(v);
                 }
                 bi.eval(run)
@@ -85,7 +91,7 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 println!("problem exp={:?}", self);
                 panic!()
             }
-        }
+        })
     }
 }
 
@@ -318,15 +324,15 @@ impl<'a> RowContext for ValsRowContext<'a> {
 
 pub trait Eval<T> {
     /// Evaluate the expression with specified row context.
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> T;
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<T,E>;
 
     /// Evaluate the expression, no row context.
-    fn eval(&self, run: &mut Run) -> T {
+    fn eval(&self, run: &mut Run) -> Result<T,E> {
         self.ev(run, &mut NoRowContext)
     }
 
     /// Evaluate the expression using specified row values.
-    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> T {
+    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Result<T,E> {
         let mut vc = ValsRowContext { vals };
         self.ev(run, &mut vc)
     }
@@ -361,29 +367,29 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> bool {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<bool,E> {
         use BoolExp::*;
-        match self {
+        Ok(match self {
             None => panic!(),
             Bool(x) => *x,
             Local(x) => run.local(*x).bool(),
             Col(x) => rc.item(*x, run.ps).bool(),
-            And(x, y) => x.ev(run, rc) && y.ev(run, rc),
-            Or(x, y) => x.ev(run, rc) || y.ev(run, rc),
-            IntEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
-            IntNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
-            IntLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
-            IntGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
-            IntLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
-            IntGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
+            And(x, y) => x.ev(run, rc)? && y.ev(run, rc)?,
+            Or(x, y) => x.ev(run, rc)? || y.ev(run, rc)?,
+            IntEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
+            IntNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
+            IntLt(x, y) => x.ev(run, rc)? < y.ev(run, rc)?,
+            IntGt(x, y) => x.ev(run, rc)? > y.ev(run, rc)?,
+            IntLe(x, y) => x.ev(run, rc)? <= y.ev(run, rc)?,
+            IntGe(x, y) => x.ev(run, rc)? >= y.ev(run, rc)?,
 
-            StrEq(x, y) => x.ev(run, rc) == y.ev(run, rc),
-            StrNe(x, y) => x.ev(run, rc) != y.ev(run, rc),
-            StrLt(x, y) => x.ev(run, rc) < y.ev(run, rc),
-            StrGt(x, y) => x.ev(run, rc) > y.ev(run, rc),
-            StrLe(x, y) => x.ev(run, rc) <= y.ev(run, rc),
-            StrGe(x, y) => x.ev(run, rc) >= y.ev(run, rc),
-        }
+            StrEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
+            StrNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
+            StrLt(x, y) => x.ev(run, rc)? < y.ev(run, rc)?,
+            StrGt(x, y) => x.ev(run, rc)? > y.ev(run, rc)?,
+            StrLe(x, y) => x.ev(run, rc)? <= y.ev(run, rc)?,
+            StrGe(x, y) => x.ev(run, rc)? >= y.ev(run, rc)?,
+        })
     }
 }
 
@@ -414,19 +420,29 @@ pub enum IntExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<i64> for IntExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> i64 {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<i64,E> {
         use IntExp::*;
-        match self {
+        Ok(match self {
             None => panic!(),
             Int(x) => *x,
             Local(x) => run.local(*x).int(),
             Col(x) => rc.item(*x, run.ps).int(),
-            Add(lhs, rhs) => lhs.ev(run, rc) + rhs.ev(run, rc),
-            Sub(lhs, rhs) => lhs.ev(run, rc) - rhs.ev(run, rc),
-            Mul(lhs, rhs) => lhs.ev(run, rc) * rhs.ev(run, rc),
-            Div(lhs, rhs) => lhs.ev(run, rc) / rhs.ev(run, rc),
-            Rem(lhs, rhs) => lhs.ev(run, rc) % rhs.ev(run, rc),
-        }
+            Add(lhs, rhs) => lhs.ev(run, rc)? + rhs.ev(run, rc)?,
+            Sub(lhs, rhs) => lhs.ev(run, rc)? - rhs.ev(run, rc)?,
+            Mul(lhs, rhs) => lhs.ev(run, rc)? * rhs.ev(run, rc)?,
+            Div(lhs, rhs) => {
+               let lhs = lhs.ev(run, rc)?;
+               let rhs = rhs.ev(run, rc)?;
+               if rhs == 0 { return Err(E::new("Divide by zero")); }
+               lhs / rhs
+            }
+            Rem(lhs, rhs) => {
+               let lhs = lhs.ev(run, rc)?;
+               let rhs = rhs.ev(run, rc)?;
+               if rhs == 0 { return Err(E::new("Divide by zero")); }
+               lhs % rhs
+            }
+        })
     }
 }
 
@@ -455,21 +471,21 @@ pub enum StrExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<LString> for StrExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> LString {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<LString,E> {
         use StrExp::*;
-        match self {
+        Ok(match self {
             None => panic!(),
             Local(x) => LString::from(run.local(*x).string().as_str()),
             Col(x) => LString::from(rc.item(*x, run.ps).string().as_str()),
             Str(x) => LString::from(x.as_str()),
             StrPos(x) => LString::from(x.sstr(run.source.as_bytes())),
             Concat(lhs, rhs) => {
-                let mut lhs = lhs.ev(run, rc);
-                let rhs = rhs.ev(run, rc);
+                let mut lhs = lhs.ev(run, rc)?;
+                let rhs = rhs.ev(run, rc)?;
                 lhs.push_str(&rhs);
                 lhs
             }
-        }
+        })
     }
 }
 

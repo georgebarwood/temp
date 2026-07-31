@@ -209,3 +209,19 @@ impl E {
         }
     }
 }
+
+use std::cell::BorrowMutError;
+impl From<BorrowMutError> for E
+{
+    fn from(_be: BorrowMutError) -> Self {
+       Self::new("Borrow mut error, cannot write table while reading it, try using order by")
+    }
+}
+
+use std::cell::BorrowError;
+impl From<BorrowError> for E
+{
+    fn from(_be: BorrowError) -> Self {
+       Self::new("Borrow error, cannot read table while writing it.")
+    }
+}
