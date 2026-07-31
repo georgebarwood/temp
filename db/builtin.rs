@@ -236,7 +236,9 @@ impl Builtin {
             len | string_literal => &STR_1,
             substr => &STR_INT_INT,
             replace | col_is_referenced => &STR_3,
-            contains | header | fn_text | table_col_defs | table_col_names | table_literal => &STR_2,
+            contains | header | fn_text | table_col_defs | table_col_names | table_literal => {
+                &STR_2
+            }
             execute | batch | parseint => &STR_1,
             arg => &INT_STR,
             error => &[],

@@ -198,6 +198,7 @@ impl<'a> TokenReader<'a> {
     }
 }
 
+/// Error type.
 #[derive(Debug)]
 pub struct E {
     pub message: LString,
@@ -211,17 +212,17 @@ impl E {
 }
 
 use std::cell::BorrowMutError;
-impl From<BorrowMutError> for E
-{
+impl From<BorrowMutError> for E {
     fn from(_be: BorrowMutError) -> Self {
-       Self::new("Borrow mut error, cannot write table while reading it, try using order by")
+        Self::new(
+            "Borrow mut error, cannot write table while reading it, try using order by to force a copy",
+        )
     }
 }
 
 use std::cell::BorrowError;
-impl From<BorrowError> for E
-{
+impl From<BorrowError> for E {
     fn from(_be: BorrowError) -> Self {
-       Self::new("Borrow error, cannot read table while writing it.")
+        Self::new("Borrow error, cannot read table while writing it.")
     }
 }

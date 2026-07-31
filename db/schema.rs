@@ -222,7 +222,10 @@ impl Dict {
     /// Rename Schema.
     pub fn rename_schema(&mut self, schema_id: i64, new_name: &str) {
         let new_name = GString::from(new_name);
-        let old_name = self.schema_names.insert(schema_id, new_name.clone()).unwrap();
+        let old_name = self
+            .schema_names
+            .insert(schema_id, new_name.clone())
+            .unwrap();
         self.main.schemas.remove(&old_name);
         self.main.schemas.insert(new_name, schema_id);
     }

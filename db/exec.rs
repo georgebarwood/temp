@@ -72,8 +72,7 @@ impl<'a> Run<'a> {
 pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
     let source = run.source.clone();
 
-    for pass in 1..=2
-    {
+    for pass in 1..=2 {
         let temp_dict = run.new_dict.clone();
         let mut parser = Parser::new(source.as_bytes(), &temp_dict);
         match parser.pass(pass, nested) {
@@ -82,10 +81,10 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                 let start = parser.statement_pos;
                 let src = tos(&run.source.as_bytes()[start..pos]);
                 let dots = if start > 0 { "..." } else { "" };
-                
+
                 let errmsg = format!(
-                    "Pass {} Error {} at input position {}. Source: {}{}",
-                    pass, e.message, pos, dots, src
+                    "Error {} at input position {}. Source: {}{}",
+                    e.message, pos, dots, src
                 );
                 run.tr.set_error(&errmsg);
                 run.error = true;
@@ -100,7 +99,7 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                         execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps)
                     {
                         run.tr.set_error(&e.message);
-                        println!("{}", e.message);
+                        println!("Error {}", e.message);
                         run.error = true;
                         return None;
                     }
@@ -110,7 +109,7 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                     // println!("Executing {:?}", slist);
                     if let Err(e) = execute_block(&slist, run) {
                         run.tr.set_error(&e.message);
-                        println!("{}", e.message);
+                        println!("Run error {}", e.message);
                         run.error = true;
                         return None;
                     }

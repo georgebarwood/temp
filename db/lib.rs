@@ -21,16 +21,15 @@ Case expressions.
 
 Display errors in execute and alter fn. DONE
 
-Handle refcell errors.
+Handle refcell errors.  DONE
 
-Rename fn, drop fn ( with checks ).
+Rename fn, drop fn ( with checks ). DONE
 
 Alter fn checks done.
 
 Optimise select from .... where Id = x
 
-Finish ShowAll to show table data. DON
-
+Finish ShowAll to show table data. DONE
 
 Creaate web server! DOME
 sys.execute function. Executes string. DONE

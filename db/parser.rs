@@ -45,7 +45,7 @@ impl<'a> Parser<'a> {
     pub fn pass(&mut self, pass: u8, nested: bool) -> Result<LVec<LStatement>, E> {
         self.pass = pass;
         self.schema_updates = false;
-        self.level = if nested {1} else {0};
+        self.level = if nested { 1 } else { 0 };
         self.tr.pos = 0;
         self.locs.clear();
         self.statements()
@@ -119,12 +119,14 @@ impl<'a> Parser<'a> {
                     }
                     self.next()?;
                     let s = self.statement(ident)?;
+                    if self.pass == 1 && !self.schema_updates {
+                        break; // Abort as pass 1 is only needed for schema updates.
+                    }
                     result.push(s);
                 }
                 Token::Eof => break,
                 _ => return Err(E::new("Statement keyword expected")),
             }
-            self.check_schema_updates()?;
         }
         Ok(result)
     }
@@ -214,7 +216,8 @@ impl<'a> Parser<'a> {
                 Ok(Statement::Set(Set { i, exp }))
             }
         } else {
-            Err(E::new("Local variable name not found"))
+            let msg = format!("Local variable {:?} not found", tos(self.str(&name)));
+            Err(E::new(&msg))
         }
     }
 
@@ -535,7 +538,6 @@ impl<'a> Parser<'a> {
                 }
                 RContext::Local(locs) => {
                     if let Some((i, typ)) = self.local(locs, name) {
-                        // println!("name={} aos={}", name, aos);
                         *e = Exp::local(i + aos, typ);
                         typ
                     } else {
@@ -595,7 +597,10 @@ impl<'a> Parser<'a> {
 
                     &f.ret
                 } else {
-                    return Err(E::new(&format!("Function {}.{} not found", sname, fname)));
+                    return Err(E::new(&format!(
+                        "Function \"{}.{}\" not found",
+                        sname, fname
+                    )));
                 }
             }
             Exp::BuiltinCall(builtin, args) => {
@@ -811,13 +816,18 @@ impl<'a> Parser<'a> {
         let schema = self.read_ident()?;
         self.expect_ident(b"to")?;
         let new_name = self.read_ident()?;
-        if self.pass == 2 { return Ok( Statement::Null ); }
-        
+        if self.pass == 2 {
+            return Ok(Statement::Null);
+        }
+
         let schema_id = self.check_schema(&schema)?;
         if self.check_schema(&new_name).is_ok() {
             return Err(E::new("Schema already exists"));
         }
-        let result = RenameSchema { schema_id, new_name };
+        let result = RenameSchema {
+            schema_id,
+            new_name,
+        };
         let result = Statement::RenameSchema(result);
         Ok(result)
     }
@@ -828,10 +838,12 @@ impl<'a> Parser<'a> {
         let new_schema = self.read_ident()?;
         self.expect_token(Token::Dot)?;
         let new_tname = self.read_ident()?;
-        
-        if self.pass == 2 { return Ok( Statement::Null ); }
-        
-        let (_,old_schema_id, old_nid,_) = t?;
+
+        if self.pass == 2 {
+            return Ok(Statement::Null);
+        }
+
+        let (_, old_schema_id, old_nid, _) = t?;
         let new_schema_id = self.check_schema(&new_schema)?;
 
         if self.check_table(new_schema_id, &new_tname).is_ok() {
@@ -860,14 +872,16 @@ impl<'a> Parser<'a> {
             b"add" => {
                 let col_name = self.read_ident()?;
                 let col_dt = self.datatype()?;
-                
-                if self.pass == 2 { return Ok( Statement::Null ); }
+
+                if self.pass == 2 {
+                    return Ok(Statement::Null);
+                }
 
                 let (table_id, _, dt) = self.check_table(schema_id, &tname)?;
                 if dt.lookup_col(tos(self.str(&col_name))).is_some() {
                     return Err(E::new("Duplicate column name"));
                 }
-               
+
                 let result = AddColumn {
                     table_id,
                     col_name,
@@ -879,7 +893,9 @@ impl<'a> Parser<'a> {
                 let col_name = self.read_ident()?;
                 self.expect_ident(b"to")?;
                 let new_name = self.read_ident()?;
-                if self.pass == 2 { return Ok( Statement::Null ); }
+                if self.pass == 2 {
+                    return Ok(Statement::Null);
+                }
 
                 let (table_id, _, dt) = self.check_table(schema_id, &tname)?;
                 let col_num = if let Some(col) = dt.lookup_col(tos(self.str(&col_name))) {
@@ -902,7 +918,9 @@ impl<'a> Parser<'a> {
             b"drop" => {
                 let col_name = self.read_ident()?;
                 let (table_id, _, dt) = self.check_table(schema_id, &tname)?;
-                if self.pass == 2 { return Ok( Statement::Null ); }
+                if self.pass == 2 {
+                    return Ok(Statement::Null);
+                }
 
                 let col_num = if let Some(col) = dt.lookup_col(tos(self.str(&col_name))) {
                     col
@@ -1259,19 +1277,6 @@ impl<'a> Parser<'a> {
                 format!("{:?}", self.token)
             }
         }
-    }
-
-    fn check_schema_updates(&mut self) -> Result<(), E> {
-        /*
-            if self.not_schema && self.schema_updates {
-                Err(E::new(
-                    "cannot have both schema updates and other statements",
-                ))
-            } else {
-                Ok(())
-            }
-        */
-        Ok(())
     }
 
     /// Get index (reverse order) and datatype of latest local with specified name.

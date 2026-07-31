@@ -56,7 +56,7 @@ pub enum Exp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<Value,E> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<Value, E> {
         use Exp::*;
         Ok(match self {
             Bool(x) => Value::Bool(x.ev(run, rc)?),
@@ -324,15 +324,15 @@ impl<'a> RowContext for ValsRowContext<'a> {
 
 pub trait Eval<T> {
     /// Evaluate the expression with specified row context.
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<T,E>;
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<T, E>;
 
     /// Evaluate the expression, no row context.
-    fn eval(&self, run: &mut Run) -> Result<T,E> {
+    fn eval(&self, run: &mut Run) -> Result<T, E> {
         self.ev(run, &mut NoRowContext)
     }
 
     /// Evaluate the expression using specified row values.
-    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Result<T,E> {
+    fn eval_vals(&self, run: &mut Run, vals: &[Value]) -> Result<T, E> {
         let mut vc = ValsRowContext { vals };
         self.ev(run, &mut vc)
     }
@@ -367,7 +367,7 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<bool,E> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<bool, E> {
         use BoolExp::*;
         Ok(match self {
             None => panic!(),
@@ -420,7 +420,7 @@ pub enum IntExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<i64> for IntExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<i64,E> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<i64, E> {
         use IntExp::*;
         Ok(match self {
             None => panic!(),
@@ -431,16 +431,20 @@ impl<A: Allocator + Debug + Default> Eval<i64> for IntExp<A> {
             Sub(lhs, rhs) => lhs.ev(run, rc)? - rhs.ev(run, rc)?,
             Mul(lhs, rhs) => lhs.ev(run, rc)? * rhs.ev(run, rc)?,
             Div(lhs, rhs) => {
-               let lhs = lhs.ev(run, rc)?;
-               let rhs = rhs.ev(run, rc)?;
-               if rhs == 0 { return Err(E::new("Divide by zero")); }
-               lhs / rhs
+                let lhs = lhs.ev(run, rc)?;
+                let rhs = rhs.ev(run, rc)?;
+                if rhs == 0 {
+                    return Err(E::new("Divide by zero"));
+                }
+                lhs / rhs
             }
             Rem(lhs, rhs) => {
-               let lhs = lhs.ev(run, rc)?;
-               let rhs = rhs.ev(run, rc)?;
-               if rhs == 0 { return Err(E::new("Divide by zero")); }
-               lhs % rhs
+                let lhs = lhs.ev(run, rc)?;
+                let rhs = rhs.ev(run, rc)?;
+                if rhs == 0 {
+                    return Err(E::new("Divide by zero"));
+                }
+                lhs % rhs
             }
         })
     }
@@ -471,7 +475,7 @@ pub enum StrExp<A: Allocator + Debug + Default> {
 }
 
 impl<A: Allocator + Debug + Default> Eval<LString> for StrExp<A> {
-    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<LString,E> {
+    fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<LString, E> {
         use StrExp::*;
         Ok(match self {
             None => panic!(),

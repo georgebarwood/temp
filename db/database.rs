@@ -40,7 +40,7 @@ impl Database {
                 let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 let src = &source[start_pos..];
                 run.source = LRc::new(LString::from(src));
-                end_pos = go(&mut run,false);
+                end_pos = go(&mut run, false);
                 if run.error {
                     return 0;
                 }
@@ -68,7 +68,7 @@ impl Database {
                 let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 run.source = LRc::new(LString::from(source.as_str()));
                 // println!("running batch item {}", source.as_str());
-                go(&mut run,false);
+                go(&mut run, false);
                 if run.error {
                     return 0;
                 }
