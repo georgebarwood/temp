@@ -129,6 +129,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         use Exp::*;
         match self {
             Binary(op, x, y) => {
+                if *op == Operator::Concat { return; }
                 x.encode();
                 y.encode();
                 let re = match (op, &mut **x, &mut **y) {

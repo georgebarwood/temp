@@ -57,6 +57,27 @@ impl Operator {
         )
     }
 
+    pub fn applies_to(self, t: &DataType) -> bool
+    {
+        use Operator::*;
+        if self == Concat { return true; }
+        match t {
+           DataType::Bool => {
+              match self {
+                 And | Or => true,
+                 _ => false
+              }
+           }
+           DataType::Int => {
+              match self {
+                And | Or => false,
+                _ => true
+              }
+           }
+           _ => false
+        }
+    }            
+
     pub fn precedence(&self) -> u8 {
         use Operator::*;
         match self {
@@ -77,7 +98,24 @@ impl Operator {
 
         // println!("Operator::eval self={:?}", self);
 
-        if let Value::Int(x) = &x
+        if *self == Concat {
+            if let Value::String(x) = &x {
+                if let Value::String(y) = &y {
+                    concat(x, y)
+                } else {
+                    let temp = val_to_str(y);
+                    concat(x, &temp)
+                }
+            } else {
+                let temp = val_to_str(x);
+                if let Value::String(y) = &y {
+                    concat(&temp, y)
+                } else {
+                    let temp2 = val_to_str(y);
+                    concat(&temp, &temp2)
+                }
+            }
+        } else if let Value::Int(x) = &x
             && let Value::Int(y) = &y
         {
             match self {
@@ -102,23 +140,6 @@ impl Operator {
                 And => Value::Bool(*x && *y),
                 Or => Value::Bool(*x || *y),
                 _ => todo!(),
-            }
-        } else if *self == Concat {
-            if let Value::String(x) = &x {
-                if let Value::String(y) = &y {
-                    concat(x, y)
-                } else {
-                    let temp = val_to_str(y);
-                    concat(x, &temp)
-                }
-            } else {
-                let temp = val_to_str(x);
-                if let Value::String(y) = &y {
-                    concat(&temp, y)
-                } else {
-                    let temp2 = val_to_str(y);
-                    concat(&temp, &temp2)
-                }
             }
         } else {
             // println!("self={:?}", self);

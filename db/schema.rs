@@ -280,12 +280,13 @@ impl Dict {
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
         let new_tname = x.new_tname.sstr(src);
         let new_nid = self.new_name_id(new_tname);
-        let t = self
+        let t : usize = self
             .main
             .table_lookup
             .remove(&(x.old_schema_id, x.old_nid))
             .unwrap();
         self.main.table_lookup.insert((x.new_schema_id, new_nid), t);
+        self.table_names.insert(t, (x.new_schema_id, new_nid));
     }
 
     /// Drop Table.
