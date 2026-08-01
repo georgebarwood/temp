@@ -26,7 +26,7 @@ pub async fn process(
 
     let (hdrs, outp) = {
         let mut t = Trans::new_with_state(ss.clone(), r.uid.clone());
-        let readonly =
+        let read_only =
             h.method == b"GET" && !h.args.contains_key("save") || h.args.contains_key("readonly");
 
         t.x.qy.path = h.path;
@@ -59,7 +59,7 @@ pub async fn process(
         r.read_complete();
 
         if t.x.rp.status_code == 200 {
-            t.readonly = readonly;
+            t.x.read_only = read_only;
             t = ss.process(t).await;
 
             r.uid = t.uid.clone();
@@ -69,7 +69,7 @@ pub async fn process(
                     "run time={}µs updates={} readonly={} path={} args={:?}",
                     t.run_time.as_micros(),
                     t.updates,
-                    readonly,
+                    read_only,
                     t.x.qy.path,
                     t.x.qy.params,
                 );

@@ -108,14 +108,14 @@ fn main() {
                 let f = std::fs::read_to_string("admin-ScriptAll.txt");
                 let init = if let Ok(f) = &f { f } else { init::INITSQL };
                 let mut tr = GenTransaction::default();
-                database.run(init, &mut tr, false);
+                database.run(init, &mut tr);
                 // db.save();
             }
 
             // Process messages that update the database.
             while let Some(mut sm) = update_rx.blocking_recv() {
                 let sql = sm.trans.x.qy.sql.clone();
-                sm.trans.updates = database.run(&sql, &mut sm.trans.x, false);
+                sm.trans.updates = database.run(&sql, &mut sm.trans.x);
                 /*
                 if is_master && !sm.trans.no_log() && db.changed() {
                     let ser = bincode::serialize(&sm.trans.x.qy).unwrap();

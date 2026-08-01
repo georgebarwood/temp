@@ -158,13 +158,13 @@ impl SharedState {
     /// Process a server transaction.
     pub async fn process(&self, mut trans: Trans) -> Trans {
         let start = std::time::SystemTime::now();
-        let mut trans = if trans.readonly {
+        let mut trans = if trans.x.read_only() {
             // println!("Processing readonly");
             // Readonly request, use read-only copy of database.
             let database = self.database.clone();
             let task = tokio::task::spawn_blocking(move || {
                 let sql = trans.x.qy.sql.clone();
-                trans.updates = database.run(&sql, &mut trans.x, true);
+                trans.updates = database.run(&sql, &mut trans.x);
                 trans
             });
             task.await.unwrap()
@@ -183,7 +183,7 @@ impl SharedState {
             "trans.run_time={:?} path={} rdonly={} updates={}",
             trans.run_time,
             trans.x.arg(0, ""),
-            trans.readonly,
+            trans.x.read_only(),
             trans.updates
         );
 
@@ -236,8 +236,6 @@ pub struct Trans {
     pub x: GenTransaction,
     /// Log transaction for replication
     pub _log: bool,
-    /// Read only transaction - database will not be updated
-    pub readonly: bool,
     /// Database processing time
     pub run_time: core::time::Duration,
     /// Number of database pages updated
@@ -251,7 +249,6 @@ impl Trans {
         Self {
             x: GenTransaction::new(),
             _log: true,
-            readonly: false,
             run_time: Duration::from_micros(0),
             updates: 0,
             uid: String::new(),

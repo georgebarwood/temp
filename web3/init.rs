@@ -2,14 +2,14 @@ pub const INITSQL: &str = r###"
 schema info
 schema web
 schema adm
-schema dbo
+schema test
 go
-table info.schema (Name string, Description string)
-table info.table (Schema int, Name string, Description string)
-table info.function (Schema int, Name string, Description string)
-table info.col (Table int, Name string, Datatype int, Description string)
-table dbo.cust (Name string, Address string, Postcode string, County string, Email string)
-table web.temp_col (Name string)
+table info.schema(Name string, Description string)
+table info.table(Schema int, Name string, Description string)
+table info.function(Schema int, Name string, Description string)
+table info.col(Table int, Name string, Datatype int, Description string)
+table test.cust(Name string, Address string, Postcode string, City string, Email string)
+table web.temp_col(Name string)
 go
 fn info.sch_name(id int) -> string {
     for n = Name from info.schema where Id = id {
@@ -47,29 +47,27 @@ fn web.enc(s string) -> string {
     set s = sys.replace(s, '<', '&lt;')
     set result = s
 }
-fn web.single_quote(s string) -> string {
-    set result = "'" | s | "'"
-}
 fn adm.menu() {
     let x = web.header()
     select '<p>Schemas: <a href=/adm.newschema>new</a>'
-    select '<p><a href="/adm.showschema?k=', Id, '">', Name, '</a> : ', web.enc(Description)
+    select '<p><a href="/adm.showschema?k=', Id, '">'
+    , Name, '</a> : ', web.enc(Description)
     from info.schema order by Name
     select '<p><a target=_blank href="/adm.showall">Show All</a>'
-    select '<p><a href=/dbo.show_cust>Show Cust List</a>'
+    select '<p><a href=/test.show_cust>Show Cust List</a>'
     let x = web.trailer()
 }
 fn adm.execute() {
     let x = web.header()
     let sql = sys.arg(2, 'sql')
-    select '<p><b>Execute Sql</b>
-  <p><form method=post>
-     <textarea rows=10 cols=80 name=sql>', web.enc(sql), '</textarea>
-  <p><input type=submit value=Go>
-  </form>
-  '
+    select '
+<p><b>Execute Sql</b>
+<p><form method=post>
+<textarea rows=10 cols=80 name=sql>' | web.enc(sql) | '</textarea>
+<p><input type=submit value=Go>
+</form>'
     let x = sys.execute(sql)
-    select '<p>', sys.error()
+    select '<p style="color:yellow">', web.enc(sys.error())
     let x = web.trailer()
 }
 fn adm.showschema() {
@@ -81,12 +79,17 @@ fn adm.showschema() {
         set sname = n
         set desc = d
     }
-    select '<p>Schema ', sname, ' : ', web.enc(desc), ' <a href=/adm.editschemadesc?k=', k, '>edit</a>', ' <a href=/adm.dropschema?k=', k, '>drop</a>'
-    select '<p>Functions <a href=/adm.newfn?k=', k, '>new</a> :'
-    select '<p><a href="/adm.editfn?k=', Id, '">', Name, '</a> : ', web.enc(Description)
+    select '<p>Schema ' | sname | ' : ' | web.enc(desc)
+    , ' <a href=/adm.editschemadesc?k=' | k | '>edit</a>'
+    , ' <a href=/adm.renameschema?k=' | k | '>rename</a>'
+    , ' <a href=/adm.dropschema?k=' | k | '>drop</a>'
+    select '<p>Functions <a href=/adm.newfn?k=' | k | '>new</a> :'
+    select '<p><a href="/adm.editfn?k=', Id, '">' | Name | '</a> : '
+    , web.enc(Description)
     from info.function where Schema = k order by Name
-    select '<p>Tables <a href=/adm.newtable?k=', k, '>new</a> : '
-    select '<p>', sys.table_text(sname, Name), ' : ', web.enc(Description), ' <a href=/adm.showtable?k=', Id, '>show</a>'
+    select '<p>Tables <a href=/adm.newtable?k=' | k | '>new</a> : '
+    select '<p><a href=/adm.showtable?k=' | Id | '>' | Name | '</a> '
+    , sys.table_col_defs(sname, Name), ' : ', web.enc(Description)
     from info.table where Schema = k order by Name
     let x = web.trailer()
 }
@@ -113,12 +116,13 @@ fn adm.editfn() {
         set fdef = sys.fn_text(sname, name)
     }
     select '
-      <p><form method=post>
-      <textarea rows=2 cols=80 name=desc>', web.enc(desc), '</textarea>
-      <textarea rows=20 cols=80 name=fdef>', web.enc(fdef), '</textarea>
-      <p><input type=submit value=Alter>
-      </form>
-      <p>', sys.error()
+<p><form method=post>
+<textarea rows=2 cols=80 name=desc>' | web.enc(desc) | '</textarea>
+<textarea rows=20 cols=80 name=fdef>' | web.enc(fdef) | '</textarea>
+<p><input type=submit value=Alter>
+</form>
+<p>'
+    , web.enc(sys.error())
     let x = web.trailer()
 }
 fn adm.newfn() {
@@ -143,10 +147,11 @@ fn adm.newfn() {
     if show {
         select '
 <p><form method=post>
-Function Name:<input name=name value=', web.attr(name), '> 
-<p><textarea rows=20 cols=80 name=body>', web.enc(body), '</textarea>
+Function Name : <input name=name value=' | web.attr(name) | '> 
+<p><textarea rows=20 cols=80 name=body>' | web.enc(body) | '</textarea>
 <p><input type=submit value=Create>
-</form>', '<p>', err
+</form>'
+        , '<p>', err
     } else  {
         select '<p>Function created'
     }
@@ -166,7 +171,8 @@ fn adm.renamefn() {
         let sql = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name
         let x = sys.execute(sql)
         update info.function set Name = new_name where Id = k
-        select '<p>Function ', name, ' renamed to ', new_name
+        select '<p>Function ', name, ' renamed to '
+        , new_name
     } else  {
         select '
 <p><form method=post>
@@ -182,10 +188,11 @@ fn adm.showall() {
     select 'schema ', Name, nl
     from info.schema order by Id
     select 'go', nl
-    select sys.table_text(info.sch_name(Schema), Name), nl
+    select web.table_text(Schema, Name), nl
     from info.table order by Id
     select 'go', nl
-    select sys.fn_text(info.sch_name(Schema), Name), nl
+    select sys.fn_text(info.sch_name(Schema), Name)
+    , nl
     from info.function order by Id
     select 'go', nl
     for s = Schema, n = Name from info.table order by Id {
@@ -212,7 +219,7 @@ fn adm.editschemadesc() {
         let desc = info.sch_desc(k)
         select '
 <p><form method=post>
-New Description: <input size=50 name=desc value=', web.attr(desc), '>
+New Description: <input size=50 name=desc value=' | web.attr(desc) | '>
 <p><input type=submit value=Save>
 </form>'
     }
@@ -243,9 +250,15 @@ fn adm.showtable() {
         set tname = n
         set desc = d
     }
-    select '<p>Table ', sname, '.', tname, ' : ', web.enc(desc), ' <a href=/adm.edittabledesc?k=', k, '>edit</a>', ' <a href=/adm.renametable?k=', k, '>rename</a>', ' <a href=/adm.droptable?k=', k, '>drop</a>'
+    select '<p>Table ', sname, '.', tname, ' : ', web.enc(desc)
+    , ' <a href=/adm.edittabledesc?k=', k, '>edit</a>'
+    , ' <a href=/adm.renametable?k=', k, '>rename</a>'
+    , ' <a href=/adm.droptable?k=', k, '>drop</a>'
     select '<p>Columns <a href=/adm.newcol?k=', k, '>new</a> :'
-    select '<p><a href=/adm.editcol?k=', Id, '>', Name, '</a> : ', web.enc(Description), '<a href=/adm.dropcol?k=', Id, '>drop</a>'
+    select '<p>' | Name | ' : ' | web.enc(Description)
+    , ' <a href=/adm.editcoldesc?k=' | Id | '>edit</a>'
+    , ' <a href=/adm.renamecol?k=' | Id | '>ren</a>'
+    , ' <a href=/adm.dropcol?k=' | Id | '>drop</a>'
     from info.col where Table = k order by Id
     let x = web.trailer()
 }
@@ -261,9 +274,10 @@ fn adm.newschema() {
     if err != '' or name = '' {
         select '
 <p><form method=post>
-Schema Name:<input name=name value=', web.attr(name), '> 
+Schema Name : <input name=name value=' | web.attr(name) | '> 
 <p><input type=submit value=Create>
-</form>', '<p>', err
+</form>'
+        , '<p>', err
     } else  {
         select '<p>Schema created'
     }
@@ -284,7 +298,7 @@ fn adm.newtable() {
     if name = '' or err != '' {
         select '
 <p><form method=post>
-Table Name:<input name=name value=', web.attr(name), '> 
+Table Name:<input name=name value=' | web.attr(name) | '> 
 <p><input type=submit value=Create>
 </form>'
     } else  {
@@ -323,10 +337,11 @@ fn adm.newcol() {
     if cn = '' or dt = '' or err != '' {
         select '
 <p><form method=post>
-Column Name:<input name=cn value=', web.attr(cn), '> 
-<p>Column Datatype:<input name=dt value=', web.attr(dt), '> 
+Column Name : <input name=cn value=' | web.attr(cn) | '> 
+<p>Column Datatype : <input name=dt value=' | web.attr(dt) | '> 
 <p><input type=submit value=Add>
-</form>', '<p>', err
+</form>'
+        , '<p>', err
     } else  {
         select '<p>Column added'
     }
@@ -350,7 +365,7 @@ fn adm.renametable() {
     } else  {
         select '
 <p><form method=post>
-New Name: <input name=name>
+New Table Name: <input name=name>
 <p><input type=submit value=Rename Table>
 </form>'
     }
@@ -367,7 +382,7 @@ fn adm.edittabledesc() {
         let desc = info.table_desc(k)
         select '
 <p><form method=post>
-New Description: <input size=50 name=desc value=', web.attr(desc), '>
+Table Description: <input size=50 name=desc value=' | web.attr(desc) | '>
 <p><input type=submit value=Save>
 </form>'
     }
@@ -386,20 +401,20 @@ fn web.table_save(k int) {
         set tn = n
     }
     delete from web.temp_col where true
-    let c = 1
+    let cx = 'cx_resvd'
     let cols = 'Id'
-    let fors = 'cx0=Id'
-    let vals = 'cx0'
+    let fors = cx | '0=Id'
+    let vals = cx | '0'
+    let c = 0
     for n = Name from info.col where Table = k order by Id {
         insert into web.temp_col(Name) values (n)
-        set cols |= ',' | n
-        set fors |= ',cx' | c | '=' | n
-        set vals |= ',cx' | c
         set c = c + 1
+        set cols |= ',' | n
+        set fors |= ',' | cx | c | '=' | n
+        set vals |= ',' | cx | c
     }
     let ins = 'for ' | fors | ' from ' | sn | '.' | tn | ' insert into web.temp(' | cols | ') values ( ' | vals | ')'
-    let def = sys.table_text(sn, tn)
-    set def = sys.replace(def, sn | '.' | tn, 'web.temp')
+    let def = 'table web.temp ' | sys.table_col_defs(sn, tn)
     let x = sys.batch(def)
     let x = sys.batch(ins)
     let x = sys.batch('delete from ' | sn | '.' | tn | ' where true')
@@ -411,35 +426,26 @@ fn web.table_restore(k int) {
         set sn = info.sch_name(s)
         set tn = n
     }
-    let c = 1
+    let cx = 'cx_resvd'
     let cols = 'Id'
-    let fors = 'cx0=Id'
-    let vals = 'cx0'
+    let fors = cx | '0=Id'
+    let vals = cx | '0'
+    let c = 0
     for n = Name from web.temp_col order by Id {
-        set cols |= ',' | n
-        set fors |= ',cx' | c | '=' | n
-        set vals |= ',cx' | c
         set c = c + 1
+        set cols |= ',' | n
+        set fors |= ',' | cx | c | '=' | n
+        set vals |= ',' | cx | c
     }
     let ins = 'for ' | fors | ' from web.temp insert into ' | sn | '.' | tn | '(' | cols | ') values ( ' | vals | ')'
     let x = sys.batch(ins)
     let x = sys.batch('drop table web.temp')
 }
-fn web.prep_move_table(k int) {
-    let sn = ''
-    let tn = ''
-    for s = Schema, n = Name from info.table where Id = k {
-        set sn = info.sch_name(s)
-        set tn = n
-    }
-    let def = sys.table_text(sn, tn)
-    set def = sys.replace(def, sn | '.' | tn, 'web.temp')
-    let x = sys.execute(def)
-}
-fn dbo.show_cust() {
+fn test.show_cust() {
     let x = web.header()
-    select '<p>', Name, ' ', Postcode, ' ', Email
-    from dbo.cust order by Name
+    select '<p>', Name, ' ', Address, ' ', City, ' '
+    , Postcode, ' ', Email
+    from test.cust order by Name
     let x = web.trailer()
 }
 fn adm.dropfn() {
@@ -463,7 +469,8 @@ fn adm.dropfn() {
       <p><form method=post>
       <p><input type=submit name=submit value="Drop Function">
       </form>
-      <p>', err
+      <p>'
+        , err
     } else  {
         select '<p>Function dropped'
     }
@@ -474,19 +481,19 @@ fn adm.dropcol() {
     let k = sys.parseint(sys.arg(1, 'k'))
     let err = ''
     let submit = sys.arg(2, 'submit')
-    if submit = 'Drop Column' {
-        let sname = ''
-        let tname = ''
-        let cname = ''
-        let table = 0
-        for t = Table, n = Name from info.col where Id = k {
-            set table = t
-            set cname = n
-            for s = Schema, tn = Name from info.table where Id = table {
-                set sname = info.sch_name(s)
-                set tname = tn
-            }
+    let sname = ''
+    let tname = ''
+    let cname = ''
+    let table = 0
+    for t = Table, n = Name from info.col where Id = k {
+        set table = t
+        set cname = n
+        for s = Schema, tn = Name from info.table where Id = table {
+            set sname = info.sch_name(s)
+            set tname = tn
         }
+    }
+    if submit = 'Drop Column' {
         if sys.col_is_referenced(sname, tname, cname) {
             set err = 'Cannot drop referenced column'
         } else  {
@@ -499,9 +506,10 @@ fn adm.dropcol() {
     if submit = '' or err != '' {
         select '
       <p><form method=post>
-      <p><input type=submit name=submit value="Drop Column">
+      <p><input type=submit name=submit value="Drop Column">' | cname | '
       </form>
-      <p>', err
+      <p>'
+        , err
     } else  {
         select '<p>Column dropped'
     }
@@ -523,7 +531,8 @@ fn adm.dropschema() {
       <p><form method=post>
       <p><input type=submit name=submit value="Drop Schema">
       </form>
-      <p>', err
+      <p>'
+        , err
     } else  {
         select '<p>Schema dropped'
     }
@@ -550,9 +559,88 @@ fn adm.droptable() {
       <p><form method=post>
       <p><input type=submit name=submit value="Drop Table">
       </form>
-      <p>', err
+      <p>'
+        , err
     } else  {
         select '<p>Table dropped'
+    }
+    let x = web.trailer()
+}
+fn adm.editcoldesc() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_desc = sys.arg(2, 'desc')
+    if new_desc != '' {
+        update info.col set Description = new_desc where Id = k
+        select '<p>Description saved'
+    } else  {
+        let desc = ''
+        for d = Description from info.col where Id = k {
+            set desc = d
+        }
+        select '
+<p><form method=post>
+Col Description: <input size=50 name=desc value=' | web.attr(desc) | '>
+<p><input type=submit value=Save>
+</form>'
+    }
+    let x = web.trailer()
+}
+fn adm.renamecol() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_name = sys.arg(2, 'name')
+    let table = 0
+    let sname = ''
+    let tname = ''
+    let cname = ''
+    for t = Table, n = Name from info.col where Id = k {
+        set table = t
+        set cname = n
+    }
+    for s = Schema, n = Name from info.table where Id = table {
+        set sname = info.sch_name(s)
+        set tname = n
+    }
+    if new_name != '' {
+        let sql = 'alter table ' | sname | '.' | tname | ' rename column ' | cname | ' to ' | new_name
+        let x = sys.execute(sql)
+        update info.col set Name = new_name where Id = k
+        select '<p>Column ', cname, ' renamed to ', new_name
+    } else  {
+        select '
+<p><form method=post>
+New Column Name: <input name=name>
+<p><input type=submit value=Rename Column>
+</form>'
+    }
+    let x = web.trailer()
+}
+fn web.table_text(schema int, tname string) -> string {
+    let sname = info.sch_name(schema)
+    set result = 'table ' | sname | '.' | tname | sys.table_col_defs(sname, tname)
+}
+fn adm.renameschema() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_name = sys.arg(2, 'name')
+    let sname = info.sch_name(k)
+    let err = ''
+    if new_name != '' {
+        let sql = 'rename schema ' | sname | ' to ' | new_name
+        let x = sys.execute(sql)
+        update info.schema set Name = new_name where Id = k
+        set err = sys.error()
+    }
+    if new_name = '' or err != '' {
+        select '
+<p><form method=post>
+New Schema Name: <input name=name>
+<p><input type=submit value=Rename Schema>
+</form><p>'
+        , err
+    } else  {
+        select '<p>Schema ', sname, ' renamed to ', new_name
     }
     let x = web.trailer()
 }
@@ -560,20 +648,19 @@ go
 insert into info.schema(Id, Name, Description) values (1,'info','Tables with schema info (names, descriptions, etc)')
 insert into info.schema(Id, Name, Description) values (2,'web','Utility functions for web requests, main entry point')
 insert into info.schema(Id, Name, Description) values (3,'adm','Functions that handle system web requests')
-insert into info.schema(Id, Name, Description) values (4,'dbo','Test  schema')
+insert into info.schema(Id, Name, Description) values (4,'test','Test  schema')
 
 insert into info.table(Id, Schema, Name, Description) values (1,1,'schema','Schema table')
 insert into info.table(Id, Schema, Name, Description) values (2,1,'table','Table table')
 insert into info.table(Id, Schema, Name, Description) values (3,1,'function','Function table')
 insert into info.table(Id, Schema, Name, Description) values (4,1,'col','Column table')
 insert into info.table(Id, Schema, Name, Description) values (5,4,'cust','Customer table')
-insert into info.table(Id, Schema, Name, Description) values (6,2,'temp_col','')
+insert into info.table(Id, Schema, Name, Description) values (6,2,'temp_col','Temp table for saving column names duing alter table')
 
 insert into info.function(Id, Schema, Name, Description) values (1,1,'sch_name','Get schema name')
 insert into info.function(Id, Schema, Name, Description) values (2,2,'main','Entry point for web requests - called from rust program')
 insert into info.function(Id, Schema, Name, Description) values (3,2,'header','Output html header, style and menu links')
 insert into info.function(Id, Schema, Name, Description) values (4,2,'enc','Encode & and < characters as html escapes')
-insert into info.function(Id, Schema, Name, Description) values (5,2,'single_quote','Not needed any more?')
 insert into info.function(Id, Schema, Name, Description) values (6,3,'menu','Main menu - show schemas and other links')
 insert into info.function(Id, Schema, Name, Description) values (7,3,'execute','Execute arbitrary sql')
 insert into info.function(Id, Schema, Name, Description) values (8,3,'showschema','Show schema')
@@ -593,14 +680,17 @@ insert into info.function(Id, Schema, Name, Description) values (21,3,'newcol','
 insert into info.function(Id, Schema, Name, Description) values (22,3,'renametable','Rename table')
 insert into info.function(Id, Schema, Name, Description) values (23,3,'edittabledesc','Edit table description')
 insert into info.function(Id, Schema, Name, Description) values (24,1,'table_desc','Get table description')
-insert into info.function(Id, Schema, Name, Description) values (25,2,'table_save','Save records of specified table to temporary table ( based on info.col )')
-insert into info.function(Id, Schema, Name, Description) values (26,2,'table_restore','Restore specified table from temporary table')
-insert into info.function(Id, Schema, Name, Description) values (27,2,'prep_move_table','Obsolete')
+insert into info.function(Id, Schema, Name, Description) values (25,2,'table_save','For alter table, saves records of specified table to temp table ( based on info.col )')
+insert into info.function(Id, Schema, Name, Description) values (26,2,'table_restore','Restore specified table from temp table')
 insert into info.function(Id, Schema, Name, Description) values (29,4,'show_cust','Show list of customers')
 insert into info.function(Id, Schema, Name, Description) values (31,3,'dropfn','Drop function')
 insert into info.function(Id, Schema, Name, Description) values (32,3,'dropcol','Drop column')
 insert into info.function(Id, Schema, Name, Description) values (33,3,'dropschema','Drop Schema')
 insert into info.function(Id, Schema, Name, Description) values (34,3,'droptable','Drop Table')
+insert into info.function(Id, Schema, Name, Description) values (35,3,'editcoldesc','Edit column description')
+insert into info.function(Id, Schema, Name, Description) values (36,3,'renamecol','Rename column')
+insert into info.function(Id, Schema, Name, Description) values (37,2,'table_text','Returns table declaration from schema and table name.')
+insert into info.function(Id, Schema, Name, Description) values (38,3,'renameschema','Rename schema')
 
 insert into info.col(Id, Table, Name, Datatype, Description) values (1,1,'Name',2,'')
 insert into info.col(Id, Table, Name, Datatype, Description) values (2,1,'Description',2,'')
@@ -614,19 +704,20 @@ insert into info.col(Id, Table, Name, Datatype, Description) values (9,4,'Table'
 insert into info.col(Id, Table, Name, Datatype, Description) values (10,4,'Name',2,'')
 insert into info.col(Id, Table, Name, Datatype, Description) values (11,4,'Datatype',1,'')
 insert into info.col(Id, Table, Name, Datatype, Description) values (12,4,'Description',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (13,5,'Name',0,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (14,5,'Address',0,'')
+insert into info.col(Id, Table, Name, Datatype, Description) values (13,5,'Name',0,'First name and surname')
+insert into info.col(Id, Table, Name, Datatype, Description) values (14,5,'Address',0,'Postal address')
 insert into info.col(Id, Table, Name, Datatype, Description) values (15,5,'Postcode',0,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (16,5,'County',0,'')
+insert into info.col(Id, Table, Name, Datatype, Description) values (16,5,'City',0,'City or Town')
 insert into info.col(Id, Table, Name, Datatype, Description) values (17,6,'Name',0,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (18,5,'Email',0,'')
+insert into info.col(Id, Table, Name, Datatype, Description) values (18,5,'Email',0,'Email address')
 
-insert into dbo.cust(Id, Name, Address, Postcode, County, Email) values (2,'George Barwood','33 Sandpiper Close','GL2 4LZ','Gloucestershire','')
+insert into test.cust(Id, Name, Address, Postcode, City, Email) values (2,'George Barwood','33 Sandpiper Close','GL2 4LZ','Gloucester','george@gmail.com!')
+insert into test.cust(Id, Name, Address, Postcode, City, Email) values (3,'Marilyn Barwood','','','','')
 
-insert into web.temp_col(Id, Name) values (34,'Name')
-insert into web.temp_col(Id, Name) values (35,'Address')
-insert into web.temp_col(Id, Name) values (36,'Postcode')
-insert into web.temp_col(Id, Name) values (37,'County')
-insert into web.temp_col(Id, Name) values (38,'Email')
+insert into web.temp_col(Id, Name) values (44,'Name')
+insert into web.temp_col(Id, Name) values (45,'Address')
+insert into web.temp_col(Id, Name) values (46,'Postcode')
+insert into web.temp_col(Id, Name) values (47,'City')
+insert into web.temp_col(Id, Name) values (48,'Email')
 
 "###;
