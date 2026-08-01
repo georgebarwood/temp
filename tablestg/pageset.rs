@@ -119,7 +119,7 @@ impl PageSet {
         for (pnum, data) in self.pages.drain() {
             if data.borrow().changed {
                 result += 1;
-                if true {
+                if false {
                     println!(
                         "PageSet save pnum={} len={}",
                         pnum,

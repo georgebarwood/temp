@@ -65,18 +65,12 @@ impl<'a, T: SmallFixed> BuckMap<'a, T> {
     /// Insert addr of value, must not be a duplicate key ( but this is not checked ).
     pub fn insert<K: Key<T>>(&mut self, key: &K, addr: T) {
         let hash = self.hash(key);
-
-        // println!("BuckMap insert self.root={} hash={}", self.root, hash);
-
         self.do_insert(addr, hash);
     }
 
     /// Get addr and value from specified key, returns None if key not found.
     pub fn get<K: Key<T>>(&mut self, key: &K) -> Option<(T, Value)> {
         let hash = self.hash(key);
-
-        // println!("BuckMap get self.root={} hash={}", self.root, hash);
-
         let pnum = self.get_page_num(hash, false);
         if pnum == 0 {
             return None;

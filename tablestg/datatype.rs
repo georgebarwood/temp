@@ -201,7 +201,7 @@ impl DataType {
             DataType::String(lim) => {
                 let s = val.string();
                 if s.len() > *lim {
-                    println!("string len = {} > lim = {}... encoding", s.len(), lim);
+                    // println!("string len = {} > lim = {}... encoding", s.len(), lim);
                     self.encode(s.as_bytes(), w, spx);
                 } else {
                     write_usize(1 + s.len(), w);
@@ -944,11 +944,13 @@ impl Display for DataType
         match self
         {
             Int => f.write_str("int")?,
-            String(x) => {
+            String(_x) => {
                 f.write_str("string")?;
+                /*
                 if *x > 0 { 
                     write!( f, "({})", x )?;
                 }
+                */
             }
             Struct(x) => {
                 f.write_str("(")?;

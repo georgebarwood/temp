@@ -189,9 +189,7 @@ impl Table {
 
     /// Save the table to sys_store.
     pub fn save(&mut self, id: i64, ps: &mut PageSet) {
-        // println!("Table::Save id={} changed={}", id, self.changed());
         if self.changed() {
-            println!("table::save changed inner={:?} copy={:?}", self.inner, self.copy);
             let id = id as u64;
             self.copy = self.inner.clone();
             let ssc = ps.sys_store.clone();

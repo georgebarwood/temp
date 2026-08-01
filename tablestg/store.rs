@@ -95,7 +95,6 @@ impl Extra {
     }
     /// Store arbitrary size data, returns id.
     fn store(&mut self, user_data: &[u8], ps: &mut PageSet) -> u64 {
-        println!("store::store called!");
         let result = self.next_id;
         let mut id = result;
         let mut em = VBuckMap::restore(self.vbm, ps);
