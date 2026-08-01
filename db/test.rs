@@ -77,7 +77,7 @@ select dbo.test(1,'')
 
     let sql = _sql3;
 
-    let (is_new, spd) = get_spd();
+    let (is_new, spd) = database::get_test_spd();
     let db = Database::new(spd, is_new);
 
     for s in sql {
@@ -91,7 +91,7 @@ select dbo.test(1,'')
             .params
             .insert(GString::from("k"), GString::from("george"));
 
-        db.run(s, &mut tr);
+        db.run(s, &mut tr, false);
 
         println!(
             "elapsed micros={} output=\n{}",

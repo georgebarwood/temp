@@ -26,8 +26,8 @@ impl Database {
     }
 
     /// Run a transaction. Returns number of changed pages.
-    pub fn run(&self, source: &str, tr: &mut dyn Transaction, readonly: bool) -> usize {
-        let (mut ps, mut dict) = self.get_ps_and_dict(readonly);
+    pub fn run(&self, source: &str, tr: &mut dyn Transaction, read_only: bool) -> usize {
+        let (mut ps, mut dict) = self.get_ps_and_dict(read_only);
         let ps = &mut ps;
         let mut dict_changed = false;
         let mut new_dict = dict.clone(); // dict is Arc, so this is cheap operation.
@@ -37,7 +37,7 @@ impl Database {
         loop {
             let end_pos;
             let changed = {
-                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
+                let mut run = Run::new(&dict, &mut new_dict, ps, tr, read_only);
                 let src = &source[start_pos..];
                 run.source = LRc::new(LString::from(src));
                 end_pos = go(&mut run, false);
@@ -65,7 +65,7 @@ impl Database {
         // Exexcute the batch strings.
         for source in &batch {
             let changed = {
-                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
+                let mut run = Run::new(&dict, &mut new_dict, ps, tr, read_only);
                 run.source = LRc::new(LString::from(source.as_str()));
                 // println!("running batch item {}", source.as_str());
                 go(&mut run, false);
@@ -82,7 +82,7 @@ impl Database {
         }
 
         let mut result = 0;
-        if !readonly {
+        if !read_only {
             result = self.commit(ps, dict, dict_changed);
         }
         result
@@ -182,17 +182,11 @@ fn load_sys_store(ps: &mut PageSet) {
 }
 
 /// Constructs test page storage. Bool result indicates whether database file is newly created.
-#[test]
-pub fn get_spd() -> (bool, Arc<SharedPagedData>) {
-    use page_store::*;
-    let limits = Limits::default();
+pub fn get_test_spd() -> (bool, Arc<SharedPagedData>) {
+    use crate::*;
 
     // Construct BlockPageStg.
-    let file = atom_file::MultiFileStorage::new("test.db");
-    let upd = atom_file::FastFileStorage::new("test.upd");
-    let af = atom_file::AtomicFile::new_with_limits(file, upd, &limits.af_lim);
-    let bps = BlockPageStg::new(af, &limits);
-    let is_new = bps.is_new();
-    let spd = SharedPagedData::new_from_ps(bps);
-    (is_new, spd)
+    let stg = MemFile::new();
+    let spd = SharedPagedData::new(stg);
+    (true, spd)
 }

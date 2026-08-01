@@ -393,6 +393,8 @@ pub struct Insert<A: Allocator + Debug + Default> {
 
 impl<A: Allocator + Debug + Default> Insert<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
+        run.check_write()?;
+        
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
         for e in &self.vals {
@@ -450,6 +452,7 @@ pub struct Update<A: Allocator + Debug + Default> {
 
 impl<A: Allocator + Debug + Default> Update<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
+        run.check_write()?;
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run)?;
         let mut table = t.try_borrow_mut()?;
@@ -481,6 +484,7 @@ pub struct Delete<A: Allocator + Debug + Default> {
 
 impl<A: Allocator + Debug + Default> Delete<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
+        run.check_write()?;
         let t = run.load_table(self.table);
         let ids = ids(&t, &self.wher, run)?;
         let mut table = t.try_borrow_mut()?;

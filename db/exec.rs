@@ -7,6 +7,7 @@ pub struct Run<'a> {
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
     pub source: LRc<LString>, // For string constants when executing batch.
+    pub read_only: bool,
     pub dict_changed: bool,
     pub error: bool,
     pub new_dict: &'a mut Arc<Dict>,
@@ -21,6 +22,7 @@ impl<'a> Run<'a> {
         new_dict: &'a mut Arc<Dict>,
         ps: &'a mut PageSet,
         tr: &'a mut dyn Transaction,
+        read_only: bool
     ) -> Self {
         Self {
             stack: LVec::new(),
@@ -28,6 +30,7 @@ impl<'a> Run<'a> {
             ps,
             source: LRc::new(LString::new()),
             new_dict,
+            read_only,
             dict_changed: false,
             error: false,
             tr,
@@ -66,6 +69,14 @@ impl<'a> Run<'a> {
         let table_dt = self.dict.table_datatype(table_ix);
         self.ps.load_table(table_ix as i64, table_dt)
     }
+
+    /// Check transaction is not read_only.
+    pub fn check_write(&self) -> Result<(),E>
+    {
+        if self.read_only {
+           Err(E::new("Transaction is read only"))
+        } else { Ok(()) }
+    }
 }
 
 /// Executes a batch of statements. Result is None is there was an error, otherwise position in source.
@@ -96,7 +107,7 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                     // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
                     if let Err(e) =
-                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps)
+                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps, run.read_only)
                     {
                         run.tr.set_error(&e.message);
                         println!("Error {}", e.message);
@@ -129,7 +140,11 @@ fn execute_schema_updates(
     src: &[u8],
     dict: &mut Dict,
     ps: &mut PageSet,
+    read_only: bool,
 ) -> Result<(), E> {
+    if read_only {
+        return Err( E::new("Read only transaction cannot update schema") );
+    }
     for s in slist {
         // println!("Pass={} executing {:?}", pass, s);
         if pass == 1 || matches!(s, Statement::CreateFn(_)) {
