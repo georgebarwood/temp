@@ -26,8 +26,8 @@ impl Database {
     }
 
     /// Run a transaction. Returns number of changed pages.
-    pub fn run(&self, source: &str, tr: &mut dyn Transaction, read_only: bool) -> usize {
-        let (mut ps, mut dict) = self.get_ps_and_dict(read_only);
+    pub fn run(&self, source: &str, tr: &mut dyn Transaction) -> usize {
+        let (mut ps, mut dict) = self.get_ps_and_dict(tr.read_only());
         let ps = &mut ps;
         let mut dict_changed = false;
         let mut new_dict = dict.clone(); // dict is Arc, so this is cheap operation.
@@ -37,7 +37,7 @@ impl Database {
         loop {
             let end_pos;
             let changed = {
-                let mut run = Run::new(&dict, &mut new_dict, ps, tr, read_only);
+                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 let src = &source[start_pos..];
                 run.source = LRc::new(LString::from(src));
                 end_pos = go(&mut run, false);
@@ -65,7 +65,7 @@ impl Database {
         // Exexcute the batch strings.
         for source in &batch {
             let changed = {
-                let mut run = Run::new(&dict, &mut new_dict, ps, tr, read_only);
+                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
                 run.source = LRc::new(LString::from(source.as_str()));
                 // println!("running batch item {}", source.as_str());
                 go(&mut run, false);
@@ -82,7 +82,7 @@ impl Database {
         }
 
         let mut result = 0;
-        if !read_only {
+        if !tr.read_only() {
             result = self.commit(ps, dict, dict_changed);
         }
         result
@@ -159,13 +159,19 @@ impl DatabaseInner {
 fn save_sys_store(ps: &mut PageSet) {
     // println!("save sys store, store = {:?}", ps.sys_store.borrow() );
 
-    let bytes = ps.sys_store.borrow_mut().save_to_bytes();
-    if let Some(bytes) = bytes {
-        let pdata = ps.load(SYS_STORE_PAGE);
-        let data = Arc::new(bytes);
-        pageset::set_data(&pdata, data);
-        pageset::set_changed(&pdata);
+    if *ps.sys_store.borrow() == ps.sys_store_copy
+    {
+       // println!("save_sys_store : unchanged");
+       return;
+    } else {
+       // println!("save_sys_store : saving");
     }
+
+    let bytes = ps.sys_store.borrow_mut().save_to_bytes();
+    let pdata = ps.load(SYS_STORE_PAGE);
+    let data = Arc::new(bytes);
+    pageset::set_data(&pdata, data);
+    pageset::set_changed(&pdata);
 }
 
 /// Loads ps.sys_store from data page SYS_STORE_PAGE.
@@ -176,6 +182,7 @@ fn load_sys_store(ps: &mut PageSet) {
 
     // println!("load sys store, store = {:?}", store);
 
+    ps.sys_store_copy = store.clone();
     let ssc = ps.sys_store.clone();
     let mut sys_store = ssc.borrow_mut();
     *sys_store = store;

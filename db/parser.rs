@@ -1139,7 +1139,7 @@ impl<'a> Parser<'a> {
         let dt: DataType = match self.str(&tname) {
             b"int" => DataType::Int,
             b"float" => DataType::Float,
-            b"string" => DataType::String(0),
+            b"string" => DataType::String(32),
             _ => todo!(),
         };
         Ok(dt)

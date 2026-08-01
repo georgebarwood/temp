@@ -7,7 +7,6 @@ pub struct Run<'a> {
     pub dict: &'a Dict,
     pub ps: &'a mut PageSet,
     pub source: LRc<LString>, // For string constants when executing batch.
-    pub read_only: bool,
     pub dict_changed: bool,
     pub error: bool,
     pub new_dict: &'a mut Arc<Dict>,
@@ -22,7 +21,6 @@ impl<'a> Run<'a> {
         new_dict: &'a mut Arc<Dict>,
         ps: &'a mut PageSet,
         tr: &'a mut dyn Transaction,
-        read_only: bool
     ) -> Self {
         Self {
             stack: LVec::new(),
@@ -30,7 +28,6 @@ impl<'a> Run<'a> {
             ps,
             source: LRc::new(LString::new()),
             new_dict,
-            read_only,
             dict_changed: false,
             error: false,
             tr,
@@ -73,7 +70,7 @@ impl<'a> Run<'a> {
     /// Check transaction is not read_only.
     pub fn check_write(&self) -> Result<(),E>
     {
-        if self.read_only {
+        if self.tr.read_only() {
            Err(E::new("Transaction is read only"))
         } else { Ok(()) }
     }
@@ -107,7 +104,7 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
                     // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
                     if let Err(e) =
-                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps, run.read_only)
+                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps, run.tr.read_only())
                     {
                         run.tr.set_error(&e.message);
                         println!("Error {}", e.message);

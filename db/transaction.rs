@@ -5,7 +5,12 @@ pub trait Transaction: Any {
     /// Output bytes.
     fn output(&mut self, _bytes: &[u8]) {}
 
-    /// STATUSCODE builtin function. sets the response status code.
+    /// Is transaction read only?
+    fn read_only(&self) -> bool{ 
+        false 
+    }
+
+    /// Sets the response status code.
     fn status_code(&mut self, _code: i64) {}
 
     /// HEADER builtin function, adds header to response.
@@ -102,6 +107,8 @@ pub struct GenTransaction {
     pub rp: GenResponse,
     /// Transaction extension data.
     pub ext: Box<dyn Any + Send + Sync>,
+    /// Transaction is read only
+    pub read_only: bool,
 }
 
 /// Part of multipart data ( uploaded files ).
@@ -137,6 +144,7 @@ impl GenTransaction {
                 status_code: 200,
                 ..Default::default()
             },
+            read_only: false,
             ext: Box::new(()),
         }
     }
@@ -145,6 +153,10 @@ impl GenTransaction {
 impl Transaction for GenTransaction {
     fn output(&mut self, bytes: &[u8]) {
         self.rp.output.extend_from_slice(bytes);
+    }
+
+    fn read_only(&self) -> bool{ 
+        self.read_only
     }
 
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {

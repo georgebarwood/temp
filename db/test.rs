@@ -91,7 +91,7 @@ select dbo.test(1,'')
             .params
             .insert(GString::from("k"), GString::from("george"));
 
-        db.run(s, &mut tr, false);
+        db.run(s, &mut tr);
 
         println!(
             "elapsed micros={} output=\n{}",
