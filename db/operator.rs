@@ -64,7 +64,7 @@ impl Operator {
         match t {
            DataType::Bool => {
               match self {
-                 And | Or => true,
+                 And | Or | Equal | NotEqual => true,
                  _ => false
               }
            }
@@ -74,6 +74,7 @@ impl Operator {
                 _ => true
               }
            }
+           DataType::String(_) => self.yields_bool(),
            _ => false
         }
     }            

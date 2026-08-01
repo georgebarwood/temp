@@ -139,6 +139,8 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                         match op {
                             Operator::And => Bool(BoolExp::And(x, y)),
                             Operator::Or => Bool(BoolExp::Or(x, y)),
+                            Operator::Equal => Bool(BoolExp::BoolEq(x, y)),
+                            Operator::NotEqual => Bool(BoolExp::BoolNe(x, y)),
                             _ => todo!(),
                         }
                     }
@@ -350,6 +352,9 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
     Col(usize),
     And(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
     Or(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
+    BoolEq(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
+    BoolNe(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
+    
     IntEq(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntNe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntLt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
@@ -363,6 +368,7 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
     StrGt(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
     StrLe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
     StrGe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
+
     // String comparison is todo
 }
 
@@ -376,6 +382,9 @@ impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
             Col(x) => rc.item(*x, run.ps).bool(),
             And(x, y) => x.ev(run, rc)? && y.ev(run, rc)?,
             Or(x, y) => x.ev(run, rc)? || y.ev(run, rc)?,
+            BoolEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
+            BoolNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
+            
             IntEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
             IntNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
             IntLt(x, y) => x.ev(run, rc)? < y.ev(run, rc)?,
