@@ -16,6 +16,7 @@ fn info.sch_name(id int) -> string {
         set result = n
     }
 }
+
 fn web.main() {
     let path = sys.arg(0, '')
     let path = sys.substr(path, 1, 99)
@@ -30,6 +31,7 @@ fn web.main() {
     }
     let x = sys.execute(sql)
 }
+
 fn web.header() {
     select '<html>
 <head>
@@ -42,11 +44,13 @@ fn web.header() {
 <p>Links <a href=/adm.menu>Menu</a> <a href=/adm.execute>Exec</a>
 '
 }
+
 fn web.enc(s string) -> string {
     set s = sys.replace(s, '&', '&amp;')
     set s = sys.replace(s, '<', '&lt;')
     set result = s
 }
+
 fn adm.menu() {
     let x = web.header()
     select '<p>Schemas: <a href=/adm.newschema>new</a>'
@@ -57,6 +61,7 @@ fn adm.menu() {
     select '<p><a href=/test.show_cust>Show Cust List</a>'
     let x = web.trailer()
 }
+
 fn adm.execute() {
     let x = web.header()
     let sql = sys.arg(2, 'sql')
@@ -70,6 +75,7 @@ fn adm.execute() {
     select '<p style="color:yellow">', web.enc(sys.error())
     let x = web.trailer()
 }
+
 fn adm.showschema() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -93,27 +99,31 @@ fn adm.showschema() {
     from info.table where Schema = k order by Name
     let x = web.trailer()
 }
+
 fn adm.editfn() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
     select '<p><a href="/adm.renamefn?k=', k, '">Rename Function</a>'
     select ' | <a href="/adm.dropfn?k=', k, '">Drop Function</a>'
-    let desc = sys.arg(2, 'desc')
-    if desc != '' {
-        update info.function set Description = desc where Id = k
-    }
+    let adesc = sys.arg(2, 'desc')
     let sname = ''
     let name = ''
+    let desc = ''
     for s = Schema, n = Name, d = Description from info.function where Id = k {
         set sname = info.sch_name(s)
         set name = n
         set desc = d
     }
-    let fdef = sys.arg(2, 'fdef')
-    if fdef != '' {
+    if adesc != '' and adesc != desc {
+        set desc = adesc
+        update info.function set Description = desc where Id = k
+    }
+    let fdef = sys.norm(sys.arg(2, 'fdef'))
+    let e = sys.fn_text(sname, name)
+    if fdef != '' and fdef != e {
         let x = sys.execute('alter ' | fdef)
     } else  {
-        set fdef = sys.fn_text(sname, name)
+        set fdef = e
     }
     select '
 <p><form method=post>
@@ -125,6 +135,7 @@ fn adm.editfn() {
     , web.enc(sys.error())
     let x = web.trailer()
 }
+
 fn adm.newfn() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -157,6 +168,7 @@ Function Name : <input name=name value=' | web.attr(name) | '>
     }
     let x = web.trailer()
 }
+
 fn adm.renamefn() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -182,6 +194,7 @@ New Name: <input name=name>
     }
     let x = web.trailer()
 }
+
 fn adm.showall() {
     let nl = '
 '
@@ -206,8 +219,10 @@ fn adm.showall() {
         select nl
     }
 }
+
 fn adm.favicon() {
 }
+
 fn adm.editschemadesc() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -225,20 +240,24 @@ New Description: <input size=50 name=desc value=' | web.attr(desc) | '>
     }
     let x = web.trailer()
 }
+
 fn info.sch_desc(id int) -> string {
     for d = Description from info.schema where Id = id {
         set result = d
     }
 }
+
 fn web.trailer() {
     select '
 </body></html>'
 }
+
 fn web.attr(s string) -> string {
     set s = sys.replace(s, '&', '&amp;')
     set s = sys.replace(s, '"', '&quot;')
     set result = '"' | s | '"'
 }
+
 fn adm.showtable() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -262,6 +281,7 @@ fn adm.showtable() {
     from info.col where Table = k order by Id
     let x = web.trailer()
 }
+
 fn adm.newschema() {
     let x = web.header()
     let name = sys.arg(2, 'name')
@@ -283,6 +303,7 @@ Schema Name : <input name=name value=' | web.attr(name) | '>
     }
     let x = web.trailer()
 }
+
 fn adm.newtable() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -306,6 +327,7 @@ Table Name:<input name=name value=' | web.attr(name) | '>
     }
     let x = web.trailer()
 }
+
 fn adm.newcol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -347,6 +369,7 @@ Column Name : <input name=cn value=' | web.attr(cn) | '>
     }
     let x = web.trailer()
 }
+
 fn adm.renametable() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -371,6 +394,7 @@ New Table Name: <input name=name>
     }
     let x = web.trailer()
 }
+
 fn adm.edittabledesc() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -388,11 +412,13 @@ Table Description: <input size=50 name=desc value=' | web.attr(desc) | '>
     }
     let x = web.trailer()
 }
+
 fn info.table_desc(id int) -> string {
     for d = Description from info.table where Id = id {
         set result = d
     }
 }
+
 fn web.table_save(k int) {
     let sn = ''
     let tn = ''
@@ -419,6 +445,7 @@ fn web.table_save(k int) {
     let x = sys.batch(ins)
     let x = sys.batch('delete from ' | sn | '.' | tn | ' where true')
 }
+
 fn web.table_restore(k int) {
     let sn = ''
     let tn = ''
@@ -441,6 +468,7 @@ fn web.table_restore(k int) {
     let x = sys.batch(ins)
     let x = sys.batch('drop table web.temp')
 }
+
 fn test.show_cust() {
     let x = web.header()
     select '<p>', Name, ' ', Address, ' ', City, ' '
@@ -448,6 +476,7 @@ fn test.show_cust() {
     from test.cust order by Name
     let x = web.trailer()
 }
+
 fn adm.dropfn() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -476,6 +505,7 @@ fn adm.dropfn() {
     }
     let x = web.trailer()
 }
+
 fn adm.dropcol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -515,6 +545,7 @@ fn adm.dropcol() {
     }
     let x = web.trailer()
 }
+
 fn adm.dropschema() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -538,6 +569,7 @@ fn adm.dropschema() {
     }
     let x = web.trailer()
 }
+
 fn adm.droptable() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -566,6 +598,7 @@ fn adm.droptable() {
     }
     let x = web.trailer()
 }
+
 fn adm.editcoldesc() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -586,6 +619,7 @@ Col Description: <input size=50 name=desc value=' | web.attr(desc) | '>
     }
     let x = web.trailer()
 }
+
 fn adm.renamecol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -616,10 +650,12 @@ New Column Name: <input name=name>
     }
     let x = web.trailer()
 }
+
 fn web.table_text(schema int, tname string) -> string {
     let sname = info.sch_name(schema)
     set result = 'table ' | sname | '.' | tname | sys.table_col_defs(sname, tname)
 }
+
 fn adm.renameschema() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -644,6 +680,7 @@ New Schema Name: <input name=name>
     }
     let x = web.trailer()
 }
+
 go
 insert into info.schema(Id, Name, Description) values (1,'info','Tables with schema info (names, descriptions, etc)')
 insert into info.schema(Id, Name, Description) values (2,'web','Utility functions for web requests, main entry point')
