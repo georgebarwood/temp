@@ -21,6 +21,7 @@ pub enum Builtin {
     header,
     parseint,
     error,
+    norm,
     // More to do... note: add new functions at end for compatibility.
 }
 
@@ -44,6 +45,7 @@ impl Builtin {
             b"table_literal" => Ok(table_literal),
             b"string_literal" => Ok(string_literal),
             b"error" => Ok(error),
+            b"norm" => Ok(norm),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -84,6 +86,11 @@ impl Builtin {
                 let result = src.string().replace(pat.string(), with.string());
                 Value::String(LRc::new(result))
             }
+            norm => {
+                let src = run.stack.pop().unwrap();
+                let result = src.string().replace("\r", "");
+                Value::String(LRc::new(result))
+            }
             contains => {
                 let pat = run.stack.pop().unwrap();
                 let src = run.stack.pop().unwrap();
@@ -95,16 +102,11 @@ impl Builtin {
             fn_text => {
                 let fname = run.stack.pop().unwrap();
                 let schema = run.stack.pop().unwrap();
-
                 let sid = run.dict.schema_id(schema.string()).unwrap();
                 let nameid = run.dict.name_id(fname.string()).unwrap();
                 let fix = run.dict.func_index(&(*sid, *nameid)).unwrap();
                 let func = run.dict.func_info(*fix);
-
-                // println!( "FnText ... {:?}", func );
-
                 let result = func.to_source(run.dict);
-
                 Value::String(LRc::new(result))
             }
             table_col_defs => {
@@ -225,8 +227,8 @@ impl Builtin {
             execute | batch | header => &DataType::Empty,
             contains | col_is_referenced => &DataType::Bool,
             len | parseint => &DataType::Int,
-            substr | replace | fn_text | table_col_defs | arg | table_literal | table_col_names
-            | string_literal | error => &DataType::String(0),
+            substr | replace | norm | fn_text | table_col_defs | arg | table_literal
+            | table_col_names | string_literal | error => &DataType::String(0),
         }
     }
 
@@ -239,7 +241,7 @@ impl Builtin {
             contains | header | fn_text | table_col_defs | table_col_names | table_literal => {
                 &STR_2
             }
-            execute | batch | parseint => &STR_1,
+            execute | batch | parseint | norm => &STR_1,
             arg => &INT_STR,
             error => &[],
         }

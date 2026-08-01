@@ -68,11 +68,12 @@ impl<'a> Run<'a> {
     }
 
     /// Check transaction is not read_only.
-    pub fn check_write(&self) -> Result<(),E>
-    {
+    pub fn check_write(&self) -> Result<(), E> {
         if self.tr.read_only() {
-           Err(E::new("Transaction is read only"))
-        } else { Ok(()) }
+            Err(E::new("Transaction is read only"))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -101,11 +102,15 @@ pub fn go(run: &mut Run, nested: bool) -> Option<usize> {
             }
             Ok(mut slist) => {
                 if parser.schema_updates {
-                    // println!("schema update statements={:?}", &slist);
                     let md = Arc::make_mut(run.new_dict);
-                    if let Err(e) =
-                        execute_schema_updates(pass, &slist, source.as_bytes(), md, run.ps, run.tr.read_only())
-                    {
+                    if let Err(e) = execute_schema_updates(
+                        pass,
+                        &slist,
+                        source.as_bytes(),
+                        md,
+                        run.ps,
+                        run.tr.read_only(),
+                    ) {
                         run.tr.set_error(&e.message);
                         println!("Error {}", e.message);
                         run.error = true;
@@ -140,10 +145,9 @@ fn execute_schema_updates(
     read_only: bool,
 ) -> Result<(), E> {
     if read_only {
-        return Err( E::new("Read only transaction cannot update schema") );
+        return Err(E::new("Read only transaction cannot update schema"));
     }
     for s in slist {
-        // println!("Pass={} executing {:?}", pass, s);
         if pass == 1 || matches!(s, Statement::CreateFn(_)) {
             match s {
                 Statement::Null => {}
@@ -155,13 +159,11 @@ fn execute_schema_updates(
                     let new_name = x.new_name.sstr(src);
                     dict.rename_schema(x.schema_id, new_name);
                 }
-
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
                     let (id, dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
                     let _ = ps.load_table(id as i64, &dt); // Trigger creation of table or reading it will produce an error later.
                 }
-
                 Statement::AddColumn(x) => {
                     let tid = x.table_id;
                     let table_dt = dict.table_datatype(tid);
@@ -174,14 +176,12 @@ fn execute_schema_updates(
                     let dt = dict.add_column(tid, col_name, &x.col_dt);
                     t.borrow_mut().set_datatype(dt);
                 }
-
                 Statement::RenameColumn(x) => {
                     let new_name = x.new_name.sstr(src);
                     let dt = dict.rename_column(x.table_id, x.col_num, new_name);
                     let t = ps.load_table(x.table_id as i64, &dt);
                     t.borrow_mut().set_datatype(dt);
                 }
-
                 Statement::DropColumn(x) => {
                     if dict.col_is_referenced(x.table_id, x.col_num) {
                         return Err(E::new("Cannot drop referenced column"));
@@ -190,9 +190,7 @@ fn execute_schema_updates(
                     let t = ps.load_table(x.table_id as i64, &dt);
                     t.borrow_mut().set_datatype(dt);
                 }
-
                 Statement::RenameTable(x) => dict.rename_table(x, src),
-
                 Statement::CreateFn(x) => {
                     if pass == 1 && !x.alter {
                         dict.create_fn(x, src);
@@ -200,23 +198,19 @@ fn execute_schema_updates(
                         dict.set_fn_block(x, src);
                     }
                 }
-
                 Statement::RenameFn(x) => dict.rename_fn(x, src),
-
                 Statement::DropSchema(x) => {
                     if dict.schema_is_referenced(x.schema_id) {
                         return Err(E::new("Cannot drop referenced schema"));
                     }
                     dict.drop_schema(x.schema_id);
                 }
-
                 Statement::DropFn(x) => {
                     if dict.fn_is_referenced(x.function_id) {
                         return Err(E::new("Cannot drop referenced function"));
                     }
                     dict.drop_fn(x.function_id);
                 }
-
                 Statement::DropTable(x) => {
                     if dict.table_is_referenced(x.table) {
                         return Err(E::new("Cannot drop referenced table"));
@@ -228,7 +222,7 @@ fn execute_schema_updates(
                     Table::drop(t as i64, dt, ps);
                 }
                 _ => {
-                    println!("s={:?}", s);
+                    // println!("s={:?}", s);
                     panic!();
                 }
             }

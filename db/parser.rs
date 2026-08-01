@@ -165,7 +165,7 @@ impl<'a> Parser<'a> {
 
         let mut dt = if self.token == Token::Colon {
             self.next()?;
-            Some(self.datatype()?)
+            Some(self.datatype(false)?)
         } else {
             None
         };
@@ -592,9 +592,6 @@ impl<'a> Parser<'a> {
                     }
                     let new = Exp::FnCall(*fid, std::mem::take(args));
                     *e = new;
-
-                    // println!("Resolved FnCall {:?}", e);
-
                     &f.ret
                 } else {
                     return Err(E::new(&format!(
@@ -871,7 +868,7 @@ impl<'a> Parser<'a> {
         match self.str(&op) {
             b"add" => {
                 let col_name = self.read_ident()?;
-                let col_dt = self.datatype()?;
+                let col_dt = self.datatype(true)?;
 
                 if self.pass == 2 {
                     return Ok(Statement::Null);
@@ -977,7 +974,7 @@ impl<'a> Parser<'a> {
         let mut parms = LVec::new();
         while self.token != Token::RBra {
             let ident = self.read_ident()?;
-            let typ = self.datatype()?;
+            let typ = self.datatype(false)?;
             parms.push((ident, typ));
             if !self.test_token(Token::Comma)? {
                 break;
@@ -987,7 +984,7 @@ impl<'a> Parser<'a> {
 
         let ret = if self.token == Token::MinusGreater {
             self.next()?;
-            self.datatype()?
+            self.datatype(false)?
         } else {
             DataType::Empty
         };
@@ -1116,7 +1113,7 @@ impl<'a> Parser<'a> {
         let mut dup_check = HashSet::default();
 
         while let Some(ident) = self.check_ident()? {
-            let dt = self.datatype()?;
+            let dt = self.datatype(true)?;
 
             if !dup_check.insert(ident) {
                 return Err(E::new("Duplicate column"));
@@ -1134,12 +1131,12 @@ impl<'a> Parser<'a> {
         Ok(DataType::Struct(list))
     }
 
-    fn datatype(&mut self) -> Result<DataType, E> {
+    fn datatype(&mut self, struc: bool) -> Result<DataType, E> {
         let tname = self.read_ident()?;
         let dt: DataType = match self.str(&tname) {
             b"int" => DataType::Int,
             b"float" => DataType::Float,
-            b"string" => DataType::String(32),
+            b"string" => DataType::String(if struc { 32 } else { 0 }),
             _ => todo!(),
         };
         Ok(dt)
@@ -1262,7 +1259,6 @@ impl<'a> Parser<'a> {
 
     fn next(&mut self) -> Result<(), E> {
         self.token = self.tr.next_token()?;
-        // println!("token = {:?}", &self.token);
         Ok(())
     }
 

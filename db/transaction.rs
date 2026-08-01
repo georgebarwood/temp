@@ -6,8 +6,8 @@ pub trait Transaction: Any {
     fn output(&mut self, _bytes: &[u8]) {}
 
     /// Is transaction read only?
-    fn read_only(&self) -> bool{ 
-        false 
+    fn read_only(&self) -> bool {
+        false
     }
 
     /// Sets the response status code.
@@ -155,16 +155,13 @@ impl Transaction for GenTransaction {
         self.rp.output.extend_from_slice(bytes);
     }
 
-    fn read_only(&self) -> bool{ 
+    fn read_only(&self) -> bool {
         self.read_only
     }
 
     fn arg(&mut self, kind: i64, s: &str) -> LRc<LString> {
         let s: Option<&str> = match kind {
-            0 => {
-                // println!("path={}", &self.qy.path );
-                Some(&self.qy.path)
-            }
+            0 => Some(&self.qy.path),
             1 => self.qy.params.get(s).as_ref().map(|x| x.as_str()),
             2 => self.qy.form.get(s).as_ref().map(|x| x.as_str()),
             3 => self.qy.cookies.get(s).as_ref().map(|x| x.as_str()),

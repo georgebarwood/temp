@@ -61,23 +61,24 @@ impl Database {
             }
         }
 
-        // if batch.len() > 0 { println!("batch len={}... todo batch={:?}", batch.len(), batch ); }
-        // Exexcute the batch strings.
-        for source in &batch {
-            let changed = {
-                let mut run = Run::new(&dict, &mut new_dict, ps, tr);
-                run.source = LRc::new(LString::from(source.as_str()));
-                // println!("running batch item {}", source.as_str());
-                go(&mut run, false);
-                if run.error {
-                    return 0;
+        while !batch.is_empty() {
+            let cb = std::mem::take(&mut batch);
+            // Execute the batch strings.
+            for source in &cb {
+                let changed = {
+                    let mut run = Run::new(&dict, &mut new_dict, ps, tr);
+                    run.source = LRc::new(LString::from(source.as_str()));
+                    go(&mut run, false);
+                    if run.error {
+                        return 0;
+                    }
+                    batch.append(&mut run.batch);
+                    run.dict_changed
+                };
+                if changed {
+                    dict = new_dict.clone();
+                    dict_changed = true;
                 }
-                run.dict_changed
-            };
-            if changed {
-                // println!("dict changed");
-                dict = new_dict.clone();
-                dict_changed = true;
             }
         }
 
@@ -97,7 +98,6 @@ impl Database {
 struct DatabaseInner {
     spd: Arc<SharedPagedData>,
     dict: Arc<Dict>,
-    dict_version: i64,
 }
 
 impl DatabaseInner {
@@ -117,11 +117,7 @@ impl DatabaseInner {
             load_sys_store(&mut ps);
             Dict::load_from_sys_store(&mut ps)
         };
-        Self {
-            spd,
-            dict,
-            dict_version: 1,
-        }
+        Self { spd, dict }
     }
 
     /// Get PageSet and Dict.
@@ -140,10 +136,8 @@ impl DatabaseInner {
     /// Save dict (if changed), sys_store and any updated tables and pages. Returns number of changed pages.
     fn commit(&mut self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
         if new_dict {
-            println!("DatabaseInner commit new_dict");
             dict.save_to_sys_store(ps);
             self.dict = dict;
-            self.dict_version += 1;
         }
         save_sys_store(ps);
         ps.save()
@@ -157,16 +151,9 @@ impl DatabaseInner {
 
 /// Save ps.sys_store to data page SYS_STORE_PAGE.
 fn save_sys_store(ps: &mut PageSet) {
-    // println!("save sys store, store = {:?}", ps.sys_store.borrow() );
-
-    if *ps.sys_store.borrow() == ps.sys_store_copy
-    {
-       // println!("save_sys_store : unchanged");
-       return;
-    } else {
-       // println!("save_sys_store : saving");
+    if *ps.sys_store.borrow() == ps.sys_store_copy {
+        return;
     }
-
     let bytes = ps.sys_store.borrow_mut().save_to_bytes();
     let pdata = ps.load(SYS_STORE_PAGE);
     let data = Arc::new(bytes);
@@ -179,9 +166,6 @@ fn load_sys_store(ps: &mut PageSet) {
     let pdata = ps.load(SYS_STORE_PAGE);
     let pdata = pdata.borrow();
     let store = Store::load_from_bytes(&pdata.data);
-
-    // println!("load sys store, store = {:?}", store);
-
     ps.sys_store_copy = store.clone();
     let ssc = ps.sys_store.clone();
     let mut sys_store = ssc.borrow_mut();

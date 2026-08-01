@@ -23,7 +23,7 @@
 
 //!# Language
 //!
-//! The SQL-like language has two kinds of statements : schema statements, which declare or modify schemas, tables, 
+//! The SQL-like language has two kinds of statements : schema statements, which declare or modify schemas, tables,
 //! and functions, and non-schema statements, see grammer below for details "go" can be used in a top-level batch
 //! to execute schema statements up to that point so that the declared schemas, functions and tables can be referenced.
 //! Schema and non-schema statements cannot be mixed unless seperated by "go".
@@ -52,7 +52,7 @@
 //!
 //! let <varname> = <exp> -- declares a local variable and initialises it with expression.
 //!
-//! set <varname> = <exp> -- updates value of local variable with expression. 
+//! set <varname> = <exp> -- updates value of local variable with expression.
 //!
 //! while <bool-exp> <statement> -- loop while bool expression is true.
 //!
@@ -60,7 +60,7 @@
 //!
 //! for [<varname> = <exp>],.. from <sname> . <tname> where <bool-exp> order by [<exp> [desc]],..
 //!
-//! { <statement>.. } -- List of statements enclosed in curly braces. 
+//! { <statement>.. } -- List of statements enclosed in curly braces.
 //! ```
 //!
 //! Schema modification statements
@@ -87,7 +87,8 @@
 //! drop table <sname> . <tname>
 //! ```
 //!
-//! Note that schema items (schemas, tables, functions, columns) cannot be dropped if they are referenced by another item. 
+//! Note that schema items (schemas, tables, functions, columns) cannot be dropped if they are referenced by a function.
+//! A schema cannot be dropped before all the tables and functions within it have been dropped.
 //!
 //! Datatypes
 //!
@@ -100,12 +101,12 @@
 //! Expressions are built from literals, local variables and column names (where a table is in scope ).
 //!
 //! Boolean literals are true, false. Integer literals are just numbers. String literals are enclosed in single or double quotes.
-//! 
+//!
 //! These are combined with standard arithmetic, comparison and boolean operators ``` ( + * / % = != > < >= <= and or ) ```.
 //!
 //! Strings can be concatenated with |, non-string operands are automatically converted to strings.
 //!
-//! An expression can also be a function call, ```<sname> . <fname> ( <exp>,.. )``` 
+//! An expression can also be a function call, ```<sname> . <fname> ( <exp>,.. )```
 //!
 //! There are also a number of predefined functions, such as sys.len, sys.replace, sys.substring etc.
 //! ( documentation of sys functions is todo )
@@ -141,8 +142,8 @@ use tablestg::*;
 
 pub use tablestg;
 pub use tablestg::{
-    AtomicFile, MemFile, BlockPageStg, FastFileStorage, GString, GVec, HashMap, Limits, MultiFileStorage,
-    PageStorage, SharedPagedData,
+    AtomicFile, BlockPageStg, FastFileStorage, GString, GVec, HashMap, Limits, MemFile,
+    MultiFileStorage, PageStorage, SharedPagedData,
 };
 
 /// [`Database`].

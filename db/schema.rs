@@ -422,13 +422,6 @@ impl Dict {
         let id = INFO_ID;
         let bytes2 = self.info.to_bytes_id(id);
         Self::save(id, &bytes2, ps);
-
-        // println!("Dict::Save_to_sys_store, saved info={:?}.", self.info);
-        println!(
-            "Dict:save_to_sys_store main bytes={} info bytes={}",
-            bytes1.len(),
-            bytes2.len()
-        );
     }
 
     /// Load dict from sys store ( eventually may want to delay info load until it is needed ).
@@ -438,11 +431,6 @@ impl Dict {
 
         let ibytes = Self::load(INFO_ID, ps);
         let info = DictInfo::from_bytes_id(&ibytes);
-
-        /* println!("Loaded dict bytes={} ibytes={} sys_store={:?}",
-           bytes.len(), ibytes.len(), ps.sys_store
-        );
-        */
 
         main.cleanup();
 
@@ -561,6 +549,7 @@ impl<S: XString> SFunc<S> {
         }
 
         show_block(sr, &self.block)?;
+        sr.output.push_str("\n");
         Ok(())
     }
 }
@@ -583,7 +572,7 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
     for _ in 0..sr.indent {
         sr.output.push(' ');
     }
-    sr.output.push('}');
+    sr.output.push_str("}");
 
     sr.names.truncate(save);
     Ok(())
@@ -631,7 +620,7 @@ pub type LStatement = Statement<Local, SrcPos>;
 pub type LOrderBy = OrderBy<Local>;
 pub type LExp = Exp<Local>;
 
-/// For converting stored function to text.
+/// For converting stored function to text, also for checking if items are referenced.
 pub struct SRun<'a> {
     pub names: LVec<&'a str>,
     pub aos: usize,
@@ -642,9 +631,9 @@ pub struct SRun<'a> {
     pub table: Option<(usize, &'a STable)>, // For table name and column names.
     pub target_table: usize,
     pub target_col: usize,
+    pub target_function: usize,
     pub table_referenced: bool,
     pub col_referenced: bool,
-    pub target_function: usize,
     pub function_referenced: bool,
 }
 
@@ -660,9 +649,9 @@ impl<'a> SRun<'a> {
             table: None,
             target_table: 0,
             target_col: 0,
+            target_function: 0,
             table_referenced: false,
             col_referenced: false,
-            target_function: 0,
             function_referenced: false,
         }
     }
@@ -676,8 +665,6 @@ impl<'a> SRun<'a> {
     }
 
     pub fn write_name(&mut self, ix: usize) {
-        // println!("output={} names={:?}, self.name, ix={} aos={}", &self.output, &self.names, ix, self.aos );
-
         let ix = self.names.len() - 1 - (ix - self.aos);
         self.output.push_str(self.names[ix]);
     }

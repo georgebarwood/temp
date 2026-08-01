@@ -60,7 +60,7 @@ select dbo.test(1,'')
         "schema test go table test.users (name string, age int) go
          let i = 8192
          while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
-        "let total=0 for x = age from test.users set total = total + x select total",
+        "let total=0 for x = age from test.users { set total = total + x } select total",
     ];
 
     let _sql4: [&str; 9] = [

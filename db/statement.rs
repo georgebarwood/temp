@@ -394,7 +394,7 @@ pub struct Insert<A: Allocator + Debug + Default> {
 impl<A: Allocator + Debug + Default> Insert<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
         run.check_write()?;
-        
+
         // First evaluate the expressions.
         let mut ee = LVec::with_capacity(self.vals.len());
         for e in &self.vals {
@@ -424,20 +424,10 @@ impl<A: Allocator + Debug + Default> Insert<A> {
             table.reserve_id(row_id);
             row_id
         };
-
         if !auto_id {
             table.remove(row_id, run.ps); // Remove any existing record before inserting.
         }
-
         table.insert(&row, run.ps);
-
-        /*
-        println!(
-            "Insert exec table record count={} row={:?}",
-            table.record_count(),
-            row
-        );
-        */
         Ok(())
     }
 }

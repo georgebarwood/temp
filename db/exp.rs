@@ -88,7 +88,7 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 bi.eval(run)
             }
             _ => {
-                println!("problem exp={:?}", self);
+                // println!("exp={:?}", self);
                 panic!()
             }
         })
@@ -178,7 +178,6 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                         return;
                     }
                 };
-                // println!("encoded exp!");
                 *self = re;
             }
             FnCall(_fid, args) => {
