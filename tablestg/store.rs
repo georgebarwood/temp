@@ -18,7 +18,7 @@ use std::hash::{Hash, Hasher};
 ///
 /// [`insert`]: Store::insert
 /// [`store`]: Store::store
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Store {
     /// Stores keyed records.
     main: Main,
@@ -26,18 +26,16 @@ pub struct Store {
     extra: Extra,
 }
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct Main {
     vbm: VBuckMapInfo,
     /// Number of records.
     record_count: u64,
     /// Records number of removals, but subsequent insertions reduce this.
     remove_balance: u64,
-    /// Changed
-    changed: bool,
 }
 
-#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct Extra {
     next_id: u64,
     vbm: VBuckMapInfo,
@@ -97,6 +95,7 @@ impl Extra {
     }
     /// Store arbitrary size data, returns id.
     fn store(&mut self, user_data: &[u8], ps: &mut PageSet) -> u64 {
+        println!("store::store called!");
         let result = self.next_id;
         let mut id = result;
         let mut em = VBuckMap::restore(self.vbm, ps);
@@ -138,7 +137,6 @@ impl Store {
                 vbm: vbm1,
                 record_count: 0,
                 remove_balance: 0,
-                changed: true,
             },
             extra: Extra {
                 vbm: vbm2,
@@ -205,7 +203,6 @@ impl Store {
         m.insert(&key, &x);
         self.main.vbm = m.save();
         self.main.record_count += 1;
-        self.main.changed = true;
         if self.main.remove_balance > 0 {
             self.main.remove_balance -= 1;
         }
@@ -261,7 +258,6 @@ impl Store {
 
             self.main.record_count -= 1;
             self.main.remove_balance += 1;
-            self.main.changed = true;
             true
         } else {
             false
@@ -280,9 +276,7 @@ impl Store {
 
     /// Store arbitrary size data, returns id. Use fetch to get it back.
     pub fn store(&mut self, user_data: &[u8], ps: &mut PageSet) -> u64 {
-        let result = self.extra.store(user_data, ps);
-        self.main.changed = true;
-        result
+        self.extra.store(user_data, ps)
     }
 
     /// Fetch stored data, len must not exceed len of stored user_data.
@@ -305,7 +299,6 @@ impl Store {
         }
         self.extra.vbm = em.save(); // Not necessary currently.
         self.extra.record_count -= 1;
-        self.main.changed = true;
     }
 
     /// Delete everything, Store is no longer usable.
@@ -314,30 +307,19 @@ impl Store {
         VBuckMap::restore(self.extra.vbm, ps).delete_all();
     }
 
-    /// Has store changed?
-    pub fn changed(&self) -> bool {
-        self.main.changed
-    }
-
-    /// Save Store as bytes. Returns none if Store is unchanged.
+    /// Save Store as bytes.
     ///
     /// This is used to save sys_store to page 1.
-    pub fn save_to_bytes(&mut self) -> Option<PVec<u8>> {
-        if !self.main.changed {
-            return None;
-        }
-        self.main.changed = false;
-
+    pub fn save_to_bytes(&mut self) -> PVec<u8> {
         let mut result = PVec::new();
         postcard::to_io(self, &mut result).unwrap();
-        Some(result)
+        result
     }
 
     /// Load Store from bytes.
     pub fn load_from_bytes(b: &[u8]) -> Self {
         postcard::from_bytes(b).unwrap()
     }
-
 
     /// Fetch some or all bytes of chunk data.
     fn some_chunks(&self, x: &[u8], len: Option<usize>, ps: &mut PageSet) -> LVec<u8> {

@@ -8,6 +8,7 @@ pub struct PageSet {
     wapd: AccessPagedData,
     pages: HashMap<u64, PData>,
     pub sys_store: LRc<RefCell<Store>>,
+    pub sys_store_copy: Store,
     /// Cache of tables.
     pub tables: HashMap<i64, RTable>,
 }
@@ -19,6 +20,7 @@ impl PageSet {
             wapd,
             pages: HashMap::default(),
             sys_store: LRc::new(RefCell::new(Store::default())),
+            sys_store_copy: Store::default(),
             tables: HashMap::default(),
         }
     }
@@ -113,7 +115,6 @@ impl PageSet {
             table.borrow_mut().save(*tid, self);
         }
         self.tables = tables;
-
         let mut result = 0;
         for (pnum, data) in self.pages.drain() {
             if data.borrow().changed {

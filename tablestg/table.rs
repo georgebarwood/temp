@@ -13,15 +13,15 @@ pub struct Table {
     inner: TableInner,
     /// DataType
     pub datatype: Arc<DataType>,
-    /// Changed
-    changed: bool,
+    /// To detect if inner has changed.
+    copy: TableInner,
 }
 
 /// Table wrapped in LRc / RefCell.
 pub type RTable = LRc<RefCell<Table>>;
 
 /// This is data that needs to be saved.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TableInner {
     /// Next id to be allocated.
     next_id: u64,
@@ -48,11 +48,10 @@ impl Table {
     /// Start a new table.
     pub fn new(datatype: Arc<DataType>, ps: &mut PageSet) -> Self {
         let store = Store::new(ps);
-        Self {
-            inner: TableInner { next_id: 1, store },
-            datatype,
-            changed: true,
-        }
+        let inner = TableInner { next_id: 1, store };
+        let mut copy = inner.clone();
+        copy.next_id = 0; // To force initial save.
+        Self { inner, datatype, copy }
     }
 
     /// Update datatype.
@@ -65,7 +64,6 @@ impl Table {
     pub fn new_id(&mut self) -> i64 {
         let result = self.inner.next_id;
         self.inner.next_id += 1;
-        self.changed = true;
         result as i64
     }
 
@@ -73,7 +71,6 @@ impl Table {
     pub fn reserve_id(&mut self, id: i64) {
         if id as u64 >= self.inner.next_id {
             self.inner.next_id = (id + 1) as u64;
-            self.changed = true;
         }
     }
 
@@ -187,15 +184,16 @@ impl Table {
 
     /// Has table changed.
     pub fn changed(&self) -> bool {
-        self.changed || self.inner.store.changed()
+        self.inner != self.copy
     }
 
     /// Save the table to sys_store.
     pub fn save(&mut self, id: i64, ps: &mut PageSet) {
         // println!("Table::Save id={} changed={}", id, self.changed());
         if self.changed() {
+            println!("table::save changed inner={:?} copy={:?}", self.inner, self.copy);
             let id = id as u64;
-            self.changed = false;
+            self.copy = self.inner.clone();
             let ssc = ps.sys_store.clone();
             let mut sys_store = ssc.borrow_mut();
             let bytes = self.inner.to_bytes_id(id);
@@ -214,10 +212,11 @@ impl Table {
         if let Some(sdata) = sys_store.get(&key, ps) {
             // println!("Table::restore decoding table id={}", id);
             let inner = sdata.decode_table_inner();
+            let copy = inner.clone();
             Self {
                 inner,
                 datatype,
-                changed: false,
+                copy,
             }
         } else {
             // println!("Table::restore creating new table id={}", id);

@@ -201,7 +201,7 @@ impl DataType {
             DataType::String(lim) => {
                 let s = val.string();
                 if s.len() > *lim {
-                    // println!("string len = {} > lim = {}... encoding", s.len(), lim);
+                    println!("string len = {} > lim = {}... encoding", s.len(), lim);
                     self.encode(s.as_bytes(), w, spx);
                 } else {
                     write_usize(1 + s.len(), w);
