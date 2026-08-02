@@ -628,6 +628,16 @@ impl<'a> Parser<'a> {
                 }
                 builtin.result_type()
             }
+            Exp::If(list, els) => {
+                let t1 = self.resolve(els, ctx, aos)?;
+                for (_, e) in list {
+                    let t2 = self.resolve(e, ctx, aos)?;
+                    if !t1.similar(t2) {
+                        return Err(E::new("All branches of if expression must have same type"));
+                    }
+                }
+                t1
+            }
             Exp::Col(_) => panic!(),
             _ => todo!(),
         };
@@ -716,7 +726,6 @@ impl<'a> Parser<'a> {
             let rhs = self.exp(op_prec)?;
             e = Exp::Binary(op, LBox::new(e), LBox::new(rhs));
         }
-
         Ok(e)
     }
 
@@ -737,6 +746,7 @@ impl<'a> Parser<'a> {
                 Ok(match self.str(&name) {
                     b"true" => Exp::Bool(BoolExp::Bool(true)),
                     b"false" => Exp::Bool(BoolExp::Bool(false)),
+                    b"if" => self.if_exp()?,
                     _ => self.name_exp(name)?,
                 })
             }
@@ -748,6 +758,22 @@ impl<'a> Parser<'a> {
             }
             _ => Err(E::new("Expression expected")),
         }
+    }
+
+    fn if_exp(&mut self) -> Result<LExp, E> {
+        let mut list = LVec::new();
+        loop {
+            let ce = self.bool_exp()?;
+            let e = self.exp(0)?;
+            list.push((ce, e));
+            if self.test_ident(b"else")? {
+                break;
+            }
+            self.expect_ident(b"if")?;
+        }
+        let els = self.exp(0)?;
+        let result = Exp::If(list, BoxA::new(els));
+        Ok(result)
     }
 
     // Function call or variable reference.

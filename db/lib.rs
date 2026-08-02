@@ -1,8 +1,10 @@
 //! [Database] based on [tablestg] crate.
 
-/* What next... case expressions? 
+/* What next...
+   case expressions? DONE
    tuples?
    list and ilist types?
+   change for to mutate existing variables rather than declare new ones.
 */
 
 //!# Interface

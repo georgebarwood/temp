@@ -53,6 +53,9 @@ pub enum Exp<A: Allocator + Debug + Default> {
 
     /// Built-in call. Builtin operation and args.
     BuiltinCall(Builtin, VecA<Exp<A>, A>),
+
+    /// Conditional expression. if b1 e1 if b2 e2 ... else e_def
+    If(VecA<(Exp<A>, Exp<A>), A>, BoxA<Exp<A>, A>),
 }
 
 impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
@@ -87,6 +90,14 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 }
                 bi.eval(run)
             }
+            If(list, els) => {
+                for (ce, e) in list {
+                    if ce.ev(run, rc)?.bool() {
+                        return e.ev(run, rc);
+                    }
+                }
+                els.ev(run, rc)?
+            }
             _ => {
                 // println!("exp={:?}", self);
                 panic!()
@@ -118,6 +129,16 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 let args = gvals(args, src);
                 BuiltinCall(*bi, args)
             }
+            If(list, els) => {
+                let mut x = VecA::new();
+                for (ce, e) in list {
+                    let ce = Self::from(ce, src);
+                    let e = Self::from(e, src);
+                    x.push((ce, e))
+                }
+                let els = BoxA::new(Self::from(els, src));
+                If(x, els)
+            }
             _ => todo!("Exp eval{:?}", exp),
         }
     }
@@ -142,6 +163,14 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                     }
                 }
                 false
+            }
+            If(list, els) => {
+                for (ce, e) in list {
+                    if ce.has_col() || e.has_col() {
+                        return true;
+                    }
+                }
+                els.has_col()
             }
             _ => false,
         }
@@ -222,6 +251,13 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                     e.encode();
                 }
             }
+            If(list, els) => {
+                for (ce, e) in list {
+                    ce.encode();
+                    e.encode();
+                }
+                els.encode();
+            }
             _ => {}
         }
     }
@@ -288,6 +324,16 @@ impl<A: Allocator + Debug + Default> Exp<A> {
             BuiltinCall(bi, args) => {
                 write!(&mut sr.output, "sys.{:?}", bi)?;
                 Self::show_args(args, sr, false)?;
+            }
+            If(list, els) => {
+                for (ce, e) in list {
+                    sr.output.push_str("if ");
+                    ce.show(sr)?;
+                    sr.output.push_str(" ");
+                    e.show(sr)?;
+                }
+                sr.output.push_str(" else ");
+                els.show(sr)?;
             }
             _ => panic!(),
         }

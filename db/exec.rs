@@ -334,7 +334,8 @@ where
     // Check all conditions for Id = exp optimisation to apply.
     if !hc
         && let Exp::Bool(BoolExp::IntEq(lhs, rhs)) = wher
-        && let IntExp::Col(0) = &**lhs // lhs is Id
+        && let IntExp::Col(0) = &**lhs
+    // lhs is Id
     {
         Some(std::mem::take(rhs))
     } else {
