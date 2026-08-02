@@ -331,8 +331,9 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                     ce.show(sr)?;
                     sr.output.push_str(" ");
                     e.show(sr)?;
+                    sr.output.push_str(" ");
                 }
-                sr.output.push_str(" else ");
+                sr.output.push_str("else ");
                 els.show(sr)?;
             }
             _ => panic!(),
