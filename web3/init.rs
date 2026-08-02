@@ -12,8 +12,7 @@ table test.cust(Name string, Address string, Postcode string, City string, Email
 table web.temp_col(Name string)
 go
 fn info.sch_name(id int) -> string {
-    for n = Name from info.schema where Id = id {
-        set result = n
+    for result = Name from info.schema where Id = id {
     }
 }
 
@@ -81,9 +80,7 @@ fn adm.showschema() {
     let k = sys.parseint(sys.arg(1, 'k'))
     let sname = ''
     let desc = ''
-    for n = Name, d = Description from info.schema where Id = k {
-        set sname = n
-        set desc = d
+    for sname = Name, desc = Description from info.schema where Id = k {
     }
     select '<p>Schema ' | sname | ' : ' | web.enc(desc)
     , ' <a href=/adm.editschemadesc?k=' | k | '>edit</a>'
@@ -109,10 +106,7 @@ fn adm.editfn() {
     let sname = ''
     let name = ''
     let desc = ''
-    for s = Schema, n = Name, d = Description from info.function where Id = k {
-        set sname = info.sch_name(s)
-        set name = n
-        set desc = d
+    for sname = info.sch_name(Schema), name=Name, desc = Description from info.function where Id = k {
     }
     if adesc != '' and adesc != desc {
         set desc = adesc
@@ -175,9 +169,7 @@ fn adm.renamefn() {
     let new_name = sys.arg(2, 'name')
     let sname = ''
     let name = ''
-    for sid = Schema, n = Name from info.function where Id = k {
-        set sname = info.sch_name(sid)
-        set name = n
+    for sname = info.sch_name(Schema), name = Name from info.function where Id = k {
     }
     if new_name != '' {
         let sql = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name
@@ -208,8 +200,9 @@ fn adm.showall() {
     , nl
     from info.function order by Id
     select 'go', nl
-    for s = Schema, n = Name from info.table order by Id {
-        let s = info.sch_name(s)
+    let s = ''
+    let n = ''
+    for s = info.sch_name(Schema), n = Name from info.table order by Id {
         let t = s | '.' | n
         let cols = sys.table_col_names(s, n)
         let ins = 'insert into ' | t | '(' | cols | ') values ('
@@ -242,8 +235,7 @@ New Description: <input size=50 name=desc value=' | web.attr(desc) | '>
 }
 
 fn info.sch_desc(id int) -> string {
-    for d = Description from info.schema where Id = id {
-        set result = d
+    for result = Description from info.schema where Id = id {
     }
 }
 
@@ -264,10 +256,7 @@ fn adm.showtable() {
     let sname = ''
     let tname = ''
     let desc = ''
-    for s = Schema, n = Name, d = Description from info.table where Id = k {
-        set sname = info.sch_name(s)
-        set tname = n
-        set desc = d
+    for sname = info.sch_name(Schema), tname = Name, desc = Description from info.table where Id = k {
     }
     select '<p>Table ', sname, '.', tname, ' : ', web.enc(desc)
     , ' <a href=/adm.edittabledesc?k=', k, '>edit</a>'
@@ -332,8 +321,7 @@ fn adm.newcol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
     let tn = ''
-    for s = Schema, n = Name from info.table where Id = k {
-        set tn = info.sch_name(s) | '.' | n
+    for tn = info.sch_name(Schema) | '.' | Name from info.table where Id = k {
     }
     let x = web.trailer()
     let cn = sys.arg(2, 'cn')
@@ -341,6 +329,7 @@ fn adm.newcol() {
     let err = ''
     if cn != '' and dt != '' {
         let dup = false
+        let n = ''
         for n = Name from info.col where Table = k {
             if n = cn {
                 set dup = true
@@ -376,9 +365,7 @@ fn adm.renametable() {
     let new_name = sys.arg(2, 'name')
     let sname = ''
     let name = ''
-    for sid = Schema, n = Name from info.table where Id = k {
-        set sname = info.sch_name(sid)
-        set name = n
+    for sname = info.sch_name(Schema), name = Name from info.table where Id = k {
     }
     if new_name != '' {
         let sql = 'rename table ' | sname | '.' | name | ' to ' | sname | '.' | new_name
@@ -414,17 +401,14 @@ Table Description: <input size=50 name=desc value=' | web.attr(desc) | '>
 }
 
 fn info.table_desc(id int) -> string {
-    for d = Description from info.table where Id = id {
-        set result = d
+    for result = Description from info.table where Id = id {
     }
 }
 
 fn web.table_save(k int) {
     let sn = ''
     let tn = ''
-    for s = Schema, n = Name from info.table where Id = k {
-        set sn = info.sch_name(s)
-        set tn = n
+    for sn =  info.sch_name(Schema), tn = Name from info.table where Id = k {
     }
     delete from web.temp_col where true
     let cx = 'cx_resvd'
@@ -432,6 +416,7 @@ fn web.table_save(k int) {
     let fors = cx | '0=Id'
     let vals = cx | '0'
     let c = 0
+    let n = ''
     for n = Name from info.col where Table = k order by Id {
         insert into web.temp_col(Name) values (n)
         set c = c + 1
@@ -449,15 +434,14 @@ fn web.table_save(k int) {
 fn web.table_restore(k int) {
     let sn = ''
     let tn = ''
-    for s = Schema, n = Name from info.table where Id = k {
-        set sn = info.sch_name(s)
-        set tn = n
+    for sn = info.sch_name(Schema), tn = Name from info.table where Id = k {
     }
     let cx = 'cx_resvd'
     let cols = 'Id'
     let fors = cx | '0=Id'
     let vals = cx | '0'
     let c = 0
+    let n = ''
     for n = Name from web.temp_col order by Id {
         set c = c + 1
         set cols |= ',' | n
@@ -485,9 +469,7 @@ fn adm.dropfn() {
     if submit = 'Drop Function' {
         let sname = ''
         let name = ''
-        for s = Schema, n = Name from info.function where Id = k {
-            set sname = info.sch_name(s)
-            set name = n
+        for sname = info.sch_name(Schema), name = Name from info.function where Id = k {
         }
         let x = sys.execute('drop fn ' | sname | '.' | name)
         delete from info.function where Id = k
@@ -515,12 +497,8 @@ fn adm.dropcol() {
     let tname = ''
     let cname = ''
     let table = 0
-    for t = Table, n = Name from info.col where Id = k {
-        set table = t
-        set cname = n
-        for s = Schema, tn = Name from info.table where Id = table {
-            set sname = info.sch_name(s)
-            set tname = tn
+    for table = Table, cname = Name from info.col where Id = k {
+        for sname = info.sch_name(Schema), tname = Name from info.table where Id = table {
         }
     }
     if submit = 'Drop Column' {
@@ -578,9 +556,7 @@ fn adm.droptable() {
     if submit = 'Drop Table' {
         let sname = ''
         let name = ''
-        for s = Schema, n = Name from info.table where Id = k {
-            set sname = info.sch_name(s)
-            set name = n
+        for sname = info.sch_name(Schema), name = Name from info.table where Id = k {
         }
         let x = sys.execute('drop table ' | sname | '.' | name)
         delete from info.function where Id = k
@@ -608,8 +584,7 @@ fn adm.editcoldesc() {
         select '<p>Description saved'
     } else  {
         let desc = ''
-        for d = Description from info.col where Id = k {
-            set desc = d
+        for desc = Description from info.col where Id = k {
         }
         select '
 <p><form method=post>
@@ -628,13 +603,9 @@ fn adm.renamecol() {
     let sname = ''
     let tname = ''
     let cname = ''
-    for t = Table, n = Name from info.col where Id = k {
-        set table = t
-        set cname = n
+    for table = Table, cname = Name from info.col where Id = k {
     }
-    for s = Schema, n = Name from info.table where Id = table {
-        set sname = info.sch_name(s)
-        set tname = n
+    for sname = info.sch_name(Schema), tname = Name from info.table where Id = table {
     }
     if new_name != '' {
         let sql = 'alter table ' | sname | '.' | tname | ' rename column ' | cname | ' to ' | new_name
