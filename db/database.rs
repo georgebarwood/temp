@@ -154,7 +154,7 @@ fn save_sys_store(ps: &mut PageSet) {
     if *ps.sys_store.borrow() == ps.sys_store_copy {
         return;
     }
-    let bytes = ps.sys_store.borrow_mut().save_to_bytes();
+    let bytes = ps.sys_store.borrow().save_to_bytes();
     let pdata = ps.load(SYS_STORE_PAGE);
     let data = Arc::new(bytes);
     pageset::set_data(&pdata, data);

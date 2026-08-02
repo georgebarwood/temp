@@ -280,7 +280,7 @@ impl Dict {
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
         let new_tname = x.new_tname.sstr(src);
         let new_nid = self.new_name_id(new_tname);
-        let t : usize = self
+        let t: usize = self
             .main
             .table_lookup
             .remove(&(x.old_schema_id, x.old_nid))
@@ -481,8 +481,8 @@ pub struct SFunc<S: XString> {
     pub fname: S,
 
     /// result datatype
-    pub ret: DataType, // Maybe don't need the Arc.
-    pub parms: GVec<(S, DataType)>, // Maybe don't need the Arc.
+    pub ret: DataType,
+    pub parms: GVec<(S, DataType)>,
     pub block: GVec<Statement<Perm, S>>,
 }
 

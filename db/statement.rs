@@ -20,12 +20,20 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     Insert(Insert<A>),
     /// Update table rows. Where condition is not optional, use "where true" to update all rows.
     Update(Update<A>),
+    /// Optimised For for case where Id = `<exp>`
+    UpdateIdEq(UpdateIdEq<A>),
     /// Delete rows from table. Where condition is not optional, use "where true" to delete all rows.
     Delete(Delete<A>),
+    /// Optimised For for case where Id = `<exp>`
+    DeleteIdEq(DeleteIdEq<A>),
     /// Output values.
     Select(Select<A>),
+    /// Optimised For for case where Id = `<exp>`
+    SelectIdEq(SelectIdEq<A>),
     /// Loop through table, local variables are assigned to expressions evaluated from table rows.
     For(For<A, S>),
+    /// Optimised For for case where Id = `<exp>`
+    ForIdEq(ForIdEq<A, S>),
     /// Create Schema.
     CreateSchema(CreateSchema),
     /// Create Table.
@@ -465,6 +473,37 @@ impl<A: Allocator + Debug + Default> Update<A> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateIdEq<A: Allocator + Debug + Default> {
+    pub table: usize,
+    pub assigns: VecA<(usize, Exp<A>), A>, // col num, Exp
+    pub exp: IntExp<A>,
+}
+
+impl<A: Allocator + Debug + Default> UpdateIdEq<A> {
+    fn exec(&self, run: &mut Run) -> Result<(), E> {
+        run.check_write()?;
+        let id = self.exp.eval(run)?;
+        let t = run.load_table(self.table);
+        let mut table = t.try_borrow_mut()?;
+
+        let mut row = table.fetch(id, run.ps).unwrap();
+        let mut vals = LVec::with_capacity(self.assigns.len());
+        {
+            for (_col, e) in &self.assigns {
+                let v = e.eval_vals(run, row.list())?;
+                vals.push(v);
+            }
+        }
+        let mrow = LRc::make_mut(row.list_mut());
+        for (col, _e) in self.assigns.iter().rev() {
+            mrow[*col] = vals.pop().unwrap();
+        }
+        table.update(id, &row, run.ps);
+        Ok(())
+    }
+}
+
 /// delete statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Delete<A: Allocator + Debug + Default> {
@@ -481,6 +520,24 @@ impl<A: Allocator + Debug + Default> Delete<A> {
         for id in &ids {
             table.remove(*id, run.ps);
         }
+        Ok(())
+    }
+}
+
+/// delete statement ( Id = )
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteIdEq<A: Allocator + Debug + Default> {
+    pub table: usize,
+    pub exp: IntExp<A>,
+}
+
+impl<A: Allocator + Debug + Default> DeleteIdEq<A> {
+    fn exec(&self, run: &mut Run) -> Result<(), E> {
+        run.check_write()?;
+        let id = self.exp.eval(run)?;
+        let t = run.load_table(self.table);
+        let mut table = t.try_borrow_mut()?;
+        table.remove(id, run.ps);
         Ok(())
     }
 }
@@ -543,6 +600,29 @@ impl<A: Allocator + Debug + Default> Select<A> {
     }
 }
 
+/// select statement ( Id = `<exp>` case )
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SelectIdEq<A: Allocator + Debug + Default> {
+    pub vals: VecA<Exp<A>, A>,
+    pub from: Option<usize>,
+    pub exp: IntExp<A>,
+}
+
+impl<A: Allocator + Debug + Default> SelectIdEq<A> {
+    fn exec(&self, run: &mut Run) -> Result<(), E> {
+        let t = run.load_table(self.from.unwrap());
+        let table = t.try_borrow()?;
+        let id = self.exp.eval(run)?;
+        if let Some(mut lr) = table.lazy_fetch(id, run.ps) {
+            for e in &self.vals {
+                let v = e.ev(run, &mut lr)?;
+                run.output(&v);
+            }
+        }
+        Ok(())
+    }
+}
+
 /// for .. from .. statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct For<A: Allocator + Debug + Default, S: XString> {
@@ -593,6 +673,34 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
             let len = run.stack.len();
             for v in &row[n..] {
                 run.stack.push(v.clone());
+            }
+            execute_block_no_restore(&self.block, run)?;
+            run.stack.truncate(len);
+        }
+        Ok(())
+    }
+}
+
+/// for .. from .. statement where Id = `<exp>`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForIdEq<A: Allocator + Debug + Default, S: XString> {
+    pub lets: VecA<(S, Exp<A>), A>,
+    pub from: usize,
+    pub exp: IntExp<A>,
+    pub block: VecA<Statement<A, S>, A>,
+}
+
+impl<A: Allocator + Debug + Default, S: XString> ForIdEq<A, S> {
+    fn exec(&self, run: &mut Run) -> Result<(), E> {
+        // println!("ForIdEq::exec!!");
+        let t = run.load_table(self.from);
+        let table = t.try_borrow()?;
+        let id = self.exp.eval(run)?;
+        if let Some(mut lr) = table.lazy_fetch(id, run.ps) {
+            let len = run.stack.len();
+            for (_, e) in &self.lets {
+                let v = e.ev(run, &mut lr)?;
+                run.stack.push(v);
             }
             execute_block_no_restore(&self.block, run)?;
             run.stack.truncate(len);
@@ -722,9 +830,13 @@ where
             If(x) => x.exec(run),
             Insert(x) => x.exec(run),
             Update(x) => x.exec(run),
+            UpdateIdEq(x) => x.exec(run),
             Delete(x) => x.exec(run),
+            DeleteIdEq(x) => x.exec(run),
             Select(x) => x.exec(run),
+            SelectIdEq(x) => x.exec(run),
             For(x) => x.exec(run),
+            ForIdEq(x) => x.exec(run),
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
             | DropFn(_) | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_)
             | RenameSchema(_) | RenameColumn(_) | Null => panic!(),

@@ -122,6 +122,31 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
     }
 
+    pub fn has_col(&self) -> bool {
+        use Exp::*;
+        match self {
+            Col(_) => true,
+            Binary(_, lhs, rhs) => lhs.has_col() || rhs.has_col(),
+            FnCall(_, args) => {
+                for e in args {
+                    if e.has_col() {
+                        return true;
+                    }
+                }
+                false
+            }
+            BuiltinCall(_, args) => {
+                for e in args {
+                    if e.has_col() {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
     /// Encode for execution.
     /// Replace most Exp::Binary expressions, changing them to type specific Bool, Int or Str expressions.
     pub fn encode(&mut self) {
@@ -129,7 +154,9 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         use Exp::*;
         match self {
             Binary(op, x, y) => {
-                if *op == Operator::Concat { return; }
+                if *op == Operator::Concat {
+                    return;
+                }
                 x.encode();
                 y.encode();
                 let re = match (op, &mut **x, &mut **y) {
@@ -354,7 +381,7 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
     Or(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
     BoolEq(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
     BoolNe(BoxA<BoolExp<A>, A>, BoxA<BoolExp<A>, A>),
-    
+
     IntEq(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntNe(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
     IntLt(BoxA<IntExp<A>, A>, BoxA<IntExp<A>, A>),
@@ -368,7 +395,6 @@ pub enum BoolExp<A: Allocator + Debug + Default> {
     StrGt(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
     StrLe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
     StrGe(BoxA<StrExp<A>, A>, BoxA<StrExp<A>, A>),
-
     // String comparison is todo
 }
 
@@ -384,7 +410,7 @@ impl<A: Allocator + Debug + Default> Eval<bool> for BoolExp<A> {
             Or(x, y) => x.ev(run, rc)? || y.ev(run, rc)?,
             BoolEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
             BoolNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
-            
+
             IntEq(x, y) => x.ev(run, rc)? == y.ev(run, rc)?,
             IntNe(x, y) => x.ev(run, rc)? != y.ev(run, rc)?,
             IntLt(x, y) => x.ev(run, rc)? < y.ev(run, rc)?,

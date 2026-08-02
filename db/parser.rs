@@ -561,8 +561,7 @@ impl<'a> Parser<'a> {
                 }
 
                 // Check operator compatible with t1.
-                if !op.applies_to(t1)
-                {
+                if !op.applies_to(t1) {
                     return Err(E::new(&format!(
                         "Binary operator {} does not apply to type {:?}",
                         op, t1

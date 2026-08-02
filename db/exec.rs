@@ -238,6 +238,7 @@ where
     S: XString,
 {
     for s in slist {
+        let mut sub_s = None;
         match s {
             Statement::Let(x) => x.exp.encode(),
             Statement::Set(x) => x.exp.encode(),
@@ -255,17 +256,36 @@ where
             }
             Statement::Insert(x) => encode_exp_list(&mut x.vals),
             Statement::Update(x) => {
-                x.wher.encode();
+                if let Some(exp) = encode_wher(&mut x.wher) {
+                    let assigns = std::mem::take(&mut x.assigns);
+                    let table = x.table;
+                    sub_s = Some(Statement::UpdateIdEq(UpdateIdEq {
+                        assigns,
+                        table,
+                        exp,
+                    }));
+                }
                 for (_, exp) in &mut x.assigns {
                     exp.encode();
                 }
             }
-            Statement::Delete(x) => x.wher.encode(),
+            Statement::Delete(x) => {
+                if let Some(exp) = encode_wher(&mut x.wher) {
+                    let table = x.table;
+                    sub_s = Some(Statement::DeleteIdEq(DeleteIdEq { table, exp }));
+                }
+            }
             Statement::Select(x) => {
                 encode_exp_list(&mut x.vals);
-                if let Some(ref mut wher) = x.wher {
-                    wher.encode();
+
+                if let Some(ref mut wher) = x.wher
+                    && let Some(exp) = encode_wher(wher)
+                {
+                    let vals = std::mem::take(&mut x.vals);
+                    let from = x.from;
+                    sub_s = Some(Statement::SelectIdEq(SelectIdEq { vals, from, exp }));
                 }
+
                 if let Some(ref mut ob) = x.order_by {
                     for exp in &mut ob.0 {
                         exp.encode();
@@ -276,8 +296,19 @@ where
                 for (_, exp) in &mut x.lets {
                     exp.encode();
                 }
-                if let Some(ref mut wher) = x.wher {
-                    wher.encode();
+
+                if let Some(ref mut wher) = x.wher
+                    && let Some(exp) = encode_wher(wher)
+                {
+                    let lets = std::mem::take(&mut x.lets);
+                    let from = x.from;
+                    let block = std::mem::take(&mut x.block);
+                    sub_s = Some(Statement::ForIdEq(ForIdEq {
+                        lets,
+                        from,
+                        exp,
+                        block,
+                    }));
                 }
                 if let Some(ref mut ob) = x.order_by {
                     for exp in &mut ob.0 {
@@ -288,6 +319,30 @@ where
             }
             _ => {}
         }
+        if let Some(ss) = sub_s {
+            *s = ss;
+        }
+    }
+}
+
+fn encode_wher<A>(wher: &mut Exp<A>) -> Option<IntExp<A>>
+where
+    A: Allocator + Debug + Default,
+{
+    let mut hc = false;
+    // Check that rhs does not have any column references.
+    if let Exp::Binary(Operator::Equal, _, rhs) = wher {
+        hc = rhs.has_col();
+    }
+    wher.encode();
+    if !hc
+        && let Exp::Bool(BoolExp::IntEq(lhs, rhs)) = wher
+        && let IntExp::Col(0) = &**lhs
+        && let rhs = &mut **rhs
+    {
+        Some(std::mem::take(rhs))
+    } else {
+        None
     }
 }
 

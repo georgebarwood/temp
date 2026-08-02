@@ -57,27 +57,18 @@ impl Operator {
         )
     }
 
-    pub fn applies_to(self, t: &DataType) -> bool
-    {
+    pub fn applies_to(self, t: &DataType) -> bool {
         use Operator::*;
-        if self == Concat { return true; }
-        match t {
-           DataType::Bool => {
-              match self {
-                 And | Or | Equal | NotEqual => true,
-                 _ => false
-              }
-           }
-           DataType::Int => {
-              match self {
-                And | Or => false,
-                _ => true
-              }
-           }
-           DataType::String(_) => self.yields_bool(),
-           _ => false
+        if self == Concat {
+            return true;
         }
-    }            
+        match t {
+            DataType::Bool => matches!(self, And | Or | Equal | NotEqual),
+            DataType::Int => !matches!(self, And | Or),
+            DataType::String(_) => self.yields_bool(),
+            _ => false,
+        }
+    }
 
     pub fn precedence(&self) -> u8 {
         use Operator::*;
