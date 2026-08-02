@@ -80,79 +80,79 @@ where
                 sr.names.push(x.varname.str());
             }
             Set(x) => {
-                sr.output.push_str("set ");
+                sr.show("set ");
                 sr.write_name(x.i);
 
-                sr.output.push_str(" = ");
+                sr.show(" = ");
                 x.exp.show(sr)?;
             }
             Append(x) => {
-                sr.output.push_str("set ");
+                sr.show("set ");
                 sr.write_name(x.i);
 
-                sr.output.push_str(" |= ");
+                sr.show(" |= ");
                 x.exp.show(sr)?;
             }
             While(x) => {
-                sr.output.push_str("while ");
+                sr.show("while ");
                 x.exp.show(sr)?;
                 show_block(sr, &x.block)?;
             }
             If(x) => {
-                sr.output.push_str("if ");
+                sr.show("if ");
                 x.exp.show(sr)?;
                 show_block(sr, &x.block)?;
                 if let Some(b) = &x.els {
-                    sr.output.push_str(" else ");
+                    sr.show(" else ");
                     show_block(sr, b)?;
                 }
             }
             Insert(x) => {
-                sr.output.push_str("insert into ");
+                sr.show("insert into ");
                 sr.set_table(x.table);
                 sr.write_table_name();
-                sr.output.push_str("(");
+                sr.show("(");
                 for (i, c) in x.cols.iter().enumerate() {
                     if i != 0 {
-                        sr.output.push_str(", ");
+                        sr.show(", ");
                     }
                     sr.write_col_name(*c);
                 }
-                sr.output.push_str(") values (");
+                sr.show(") values (");
                 sr.table = None; // Optional
                 for (i, e) in x.vals.iter().enumerate() {
                     if i != 0 {
-                        sr.output.push_str(", ");
+                        sr.show(", ");
                     }
                     e.show(sr)?;
                 }
-                sr.output.push_str(")");
+                sr.show(")");
             }
             Update(x) => {
-                sr.output.push_str("update ");
+                sr.show("update ");
                 sr.set_table(x.table);
                 sr.write_table_name();
-                sr.output.push_str(" set ");
+                sr.show(" set ");
                 for (i, (c, e)) in x.assigns.iter().enumerate() {
                     if i != 0 {
-                        sr.output.push_str(", ");
+                        sr.show(", ");
                     }
                     sr.write_col_name(*c);
-                    sr.output.push_str(" = ");
+                    sr.show(" = ");
                     e.show(sr)?;
                 }
-                sr.output.push_str(" where ");
+                sr.show(" where ");
                 x.wher.show(sr)?;
             }
             Delete(x) => {
-                sr.output.push_str("delete from ");
+                sr.show("delete from ");
                 sr.set_table(x.table);
                 sr.write_table_name();
-                sr.output.push_str(" where ");
+                sr.show(" where ");
                 x.wher.show(sr)?;
             }
             Select(x) => {
-                sr.output.push_str("select ");
+                sr.show("select ");
                 if let Some(from) = x.from {
                     sr.set_table(from);
                 }
@@ -161,16 +161,16 @@ where
                         if sr.col() > 50 {
                             sr.newln();
                         }
-                        sr.output.push_str(", ");
+                        sr.show(", ");
                     }
                     e.show(sr)?;
                 }
                 if x.from.is_some() {
                     sr.newln();
-                    sr.output.push_str("from ");
+                    sr.show("from ");
                     sr.write_table_name();
                     if let Some(w) = &x.wher {
-                        sr.output.push_str(" where ");
+                        sr.show(" where ");
                         w.show(sr)?;
                     }
                     Self::show_order_by(&x.order_by, sr)?;
@@ -178,25 +178,25 @@ where
             }
             For(x) => {
                 let save = sr.names.len();
-                sr.output.push_str("for ");
+                sr.show("for ");
                 sr.set_table(x.from);
                 for (i, (name, val)) in x.lets.iter().enumerate() {
                     if i != 0 {
-                        sr.output.push_str(", ");
+                        sr.show(", ");
                     }
                     let name = name.str();
                     sr.names.push(name);
-                    sr.output.push_str(name);
-                    sr.output.push_str(" = ");
+                    sr.show(name);
+                    sr.show(" = ");
                     val.show(sr)?;
                 }
-                sr.output.push_str(" from ");
+                sr.show(" from ");
                 sr.write_table_name();
 
                 sr.names.truncate(save); // To show where and order by
 
                 if let Some(w) = &x.wher {
-                    sr.output.push_str(" where ");
+                    sr.show(" where ");
                     w.show(sr)?;
                 }
                 Self::show_order_by(&x.order_by, sr)?;
@@ -217,14 +217,14 @@ where
 
     fn show_order_by(ob: &OrderBy<A>, sr: &mut SRun) -> Result<(), std::fmt::Error> {
         if let Some((list, desc)) = ob {
-            sr.output.push_str(" order by ");
+            sr.show(" order by ");
             for (i, e) in list.iter().enumerate() {
                 if i != 0 {
-                    sr.output.push_str(", ");
+                    sr.show(", ");
                 }
                 e.show(sr)?;
                 if desc[i] {
-                    sr.output.push_str(" desc ");
+                    sr.show(" desc ");
                 }
             }
         }

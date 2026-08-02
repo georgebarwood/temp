@@ -308,13 +308,13 @@ impl<A: Allocator + Debug + Default> Exp<A> {
             Binary(op, x, y) => {
                 let p = op.precedence();
                 if p < pp || p == pp && right {
-                    sr.output.push_str("(");
+                    sr.show("(");
                 }
                 x.show_prec(sr, p, false)?;
                 write!(&mut sr.output, " {} ", op)?;
                 y.show_prec(sr, p, true)?;
                 if p < pp || p == pp && right {
-                    sr.output.push_str(")");
+                    sr.show(")");
                 }
             }
             FnCall(f, args) => {
@@ -327,13 +327,13 @@ impl<A: Allocator + Debug + Default> Exp<A> {
             }
             If(list, els) => {
                 for (ce, e) in list {
-                    sr.output.push_str("if ");
+                    sr.show("if ");
                     ce.show(sr)?;
-                    sr.output.push_str(" ");
+                    sr.show(" ");
                     e.show(sr)?;
-                    sr.output.push_str(" ");
+                    sr.show(" ");
                 }
-                sr.output.push_str("else ");
+                sr.show("else ");
                 els.show(sr)?;
             }
             _ => panic!(),
@@ -350,7 +350,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
         for (i, e) in args.iter().enumerate() {
             if i > 0 {
-                sr.output.push_str(", ");
+                sr.show(", ");
             }
             e.show(sr)?;
             sr.aos += 1;

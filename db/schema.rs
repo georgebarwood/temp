@@ -531,26 +531,26 @@ impl<S: XString> SFunc<S> {
     fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
         sr.names.push("result");
 
-        sr.output.push_str("fn ");
+        sr.show("fn ");
         sr.write_schema(self.schema_id);
 
         write!(&mut sr.output, ".{}(", self.fname.str())?;
         for (i, p) in self.parms.iter().enumerate() {
             if i != 0 {
-                sr.output.push_str(", ");
+                sr.show(", ");
             }
             let pname = p.0.str();
             write!(&mut sr.output, "{} {}", pname, p.1)?;
             sr.names.push(pname);
         }
-        sr.output.push_str(")");
+        sr.show(")");
 
         if self.ret != DataType::Empty {
             write!(&mut sr.output, " -> {}", self.ret)?;
         }
 
         show_block(sr, &self.block)?;
-        sr.output.push_str("\n");
+        sr.show("\n");
         Ok(())
     }
 }
@@ -562,18 +562,18 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
 ) -> Result<(), std::fmt::Error> {
     let save = sr.names.len();
 
-    sr.output.push_str(" {");
+    sr.show(" {");
     sr.indent += 4;
     for s in block {
         sr.newln();
         s.show(sr)?;
     }
     sr.indent -= 4;
-    sr.output.push_str("\n");
+    sr.show("\n");
     for _ in 0..sr.indent {
         sr.output.push(' ');
     }
-    sr.output.push_str("}");
+    sr.show("}");
 
     sr.names.truncate(save);
     Ok(())
@@ -667,7 +667,7 @@ impl<'a> SRun<'a> {
 
     pub fn write_name(&mut self, ix: usize) {
         let ix = self.names.len() - 1 - (ix - self.aos);
-        self.output.push_str(self.names[ix]);
+        self.show(self.names[ix]);
     }
 
     pub fn write_col_name(&mut self, col_ix: usize) {
@@ -696,20 +696,24 @@ impl<'a> SRun<'a> {
         }
         let f = self.dict.func_info(ix);
         self.write_schema(f.schema_id);
-        self.output.push_str(".");
-        self.output.push_str(f.fname.str());
+        self.show(".");
+        self.show(f.fname.str());
     }
 
     pub fn write_schema(&mut self, schema_id: i64) {
-        self.output
-            .push_str(self.dict.schema_name(schema_id).unwrap());
+        self.show(self.dict.schema_name(schema_id).unwrap());
+    }
+
+    pub fn show(&mut self, s: &str)
+    {
+        self.output.push_str(s);
     }
 
     pub fn newln(&mut self) {
-        self.output.push_str("\n");
+        self.show("\n");
         self.line_start = self.output.len();
         for _ in 0..self.indent {
-            self.output.push_str(" ");
+            self.show(" ");
         }
     }
 
