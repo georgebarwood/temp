@@ -560,22 +560,27 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
     sr: &mut SRun<'a>,
     block: &'a VecA<Statement<A, S>, A>,
 ) -> Result<(), std::fmt::Error> {
-    let save = sr.names.len();
-
-    sr.show(" {");
-    sr.indent += 4;
-    for s in block {
-        sr.newln();
-        s.show(sr)?;
+    if block.len() == 0 
+    {
+        sr.show(" {}");
     }
-    sr.indent -= 4;
-    sr.show("\n");
-    for _ in 0..sr.indent {
-        sr.output.push(' ');
+    else
+    {
+        let save = sr.names.len();
+        sr.show(" {");
+        sr.indent += 4;
+        for s in block {
+            sr.newln();
+           s.show(sr)?;
+        }
+        sr.indent -= 4;
+        sr.show("\n");
+        for _ in 0..sr.indent {
+            sr.output.push(' ');
+        }
+        sr.show("}");
+        sr.names.truncate(save);
     }
-    sr.show("}");
-
-    sr.names.truncate(save);
     Ok(())
 }
 
@@ -665,7 +670,7 @@ impl<'a> SRun<'a> {
         }
     }
 
-    pub fn write_name(&mut self, ix: usize) {
+    pub fn write_local_name(&mut self, ix: usize) {
         let ix = self.names.len() - 1 - (ix - self.aos);
         self.show(self.names[ix]);
     }

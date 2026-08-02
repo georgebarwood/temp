@@ -293,7 +293,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         use std::fmt::Write;
         match self {
             Local(x) | Bool(BoolExp::Local(x)) | Int(IntExp::Local(x)) | Str(StrExp::Local(x)) => {
-                sr.write_name(*x)
+                sr.write_local_name(*x)
             }
 
             Col(x) | Bool(BoolExp::Col(x)) | Int(IntExp::Col(x)) | Str(StrExp::Col(x)) => {

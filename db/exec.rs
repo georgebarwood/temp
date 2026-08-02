@@ -290,18 +290,18 @@ where
                 }
             }
             Statement::For(x) => {
-                for (_, exp) in &mut x.lets {
+                for (_, exp) in &mut x.assigns {
                     exp.encode();
                 }
                 encode_block(&mut x.block);
                 if let Some(ref mut wher) = x.wher
                     && let Some(exp) = encode_wher(wher)
                 {
-                    let lets = std::mem::take(&mut x.lets);
+                    let assigns = std::mem::take(&mut x.assigns);
                     let from = x.from;
                     let block = std::mem::take(&mut x.block);
                     sub_s = Some(Statement::ForIdEq(ForIdEq {
-                        lets,
+                        assigns,
                         from,
                         exp,
                         block,

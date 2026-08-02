@@ -81,14 +81,14 @@ where
             }
             Set(x) => {
                 sr.show("set ");
-                sr.write_name(x.i);
+                sr.write_local_name(x.i);
 
                 sr.show(" = ");
                 x.exp.show(sr)?;
             }
             Append(x) => {
                 sr.show("set ");
-                sr.write_name(x.i);
+                sr.write_local_name(x.i);
 
                 sr.show(" |= ");
                 x.exp.show(sr)?;
@@ -177,23 +177,18 @@ where
                 }
             }
             For(x) => {
-                let save = sr.names.len();
                 sr.show("for ");
                 sr.set_table(x.from);
-                for (i, (name, val)) in x.lets.iter().enumerate() {
+                for (i, (x, val)) in x.assigns.iter().enumerate() {
                     if i != 0 {
                         sr.show(", ");
                     }
-                    let name = name.str();
-                    sr.names.push(name);
-                    sr.show(name);
+                    sr.write_local_name(*x);
                     sr.show(" = ");
                     val.show(sr)?;
                 }
                 sr.show(" from ");
                 sr.write_table_name();
-
-                sr.names.truncate(save); // To show where and order by
 
                 if let Some(w) = &x.wher {
                     sr.show(" where ");
@@ -201,14 +196,7 @@ where
                 }
                 Self::show_order_by(&x.order_by, sr)?;
 
-                // Push the names again for show_block.
-                for (name, _) in &x.lets {
-                    let name = name.str();
-                    sr.names.push(name);
-                }
-
                 show_block(sr, &x.block)?;
-                sr.names.truncate(save);
             }
             _ => todo!(),
         }
@@ -275,13 +263,13 @@ where
                 })
             }
             Statement::For(x) => {
-                let lets = glets(&x.lets, src);
+                let assigns = gassigns(&x.assigns, src);
                 let from = x.from;
                 let wher = x.wher.as_ref().map(|wher| Exp::from(wher, src));
                 let order_by = gorder_by(&x.order_by, src);
                 let block = gblock(&x.block, src);
                 Statement::For(For {
-                    lets,
+                    assigns,
                     from,
                     wher,
                     order_by,
@@ -626,7 +614,7 @@ impl<A: Allocator + Debug + Default> SelectIdEq<A> {
 /// for .. from .. statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct For<A: Allocator + Debug + Default, S: XString> {
-    pub lets: VecA<(S, Exp<A>), A>,
+    pub assigns: VecA<(usize, Exp<A>), A>,
     pub from: usize,
     pub wher: Option<Exp<A>>,
     pub order_by: OrderBy<A>,
@@ -652,30 +640,29 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
                 };
 
                 if ok {
-                    let len = run.stack.len();
-                    for (_, e) in &self.lets {
+                    for (i, e) in &self.assigns {
                         let v = e.ev(run, &mut lr)?;
-                        run.stack.push(v);
+                        *run.local(*i) = v;
                     }
-                    execute_block_no_restore(&self.block, run)?;
-                    run.stack.truncate(len);
+                    execute_block(&self.block, run)?;
                 }
             }
             Ok(())
         }
     }
     pub fn exec_order_by(&self, run: &mut Run) -> Result<(), E> {
-        let temp = get_for_temp(self.from, &self.lets, &self.wher, &self.order_by, run)?;
+        let temp = get_for_temp(self.from, &self.assigns, &self.wher, &self.order_by, run)?;
 
         let n = self.order_by.as_ref().unwrap().0.len();
 
         for row in &temp {
-            let len = run.stack.len();
+            let mut c = 0;
             for v in &row[n..] {
-                run.stack.push(v.clone());
+                let i = self.assigns[c].0;
+                *run.local(i) = v.clone(); // Maybe could avoid clone, but it is cheap.
+                c += 1;
             }
-            execute_block_no_restore(&self.block, run)?;
-            run.stack.truncate(len);
+            execute_block(&self.block, run)?;
         }
         Ok(())
     }
@@ -684,7 +671,7 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
 /// for .. from .. statement where Id = `<exp>`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForIdEq<A: Allocator + Debug + Default, S: XString> {
-    pub lets: VecA<(S, Exp<A>), A>,
+    pub assigns: VecA<(usize, Exp<A>), A>,
     pub from: usize,
     pub exp: IntExp<A>,
     pub block: VecA<Statement<A, S>, A>,
@@ -697,13 +684,11 @@ impl<A: Allocator + Debug + Default, S: XString> ForIdEq<A, S> {
         let table = t.try_borrow()?;
         let id = self.exp.eval(run)?;
         if let Some(mut lr) = table.lazy_fetch(id, run.ps) {
-            let len = run.stack.len();
-            for (_, e) in &self.lets {
+            for (i, e) in &self.assigns {
                 let v = e.ev(run, &mut lr)?;
-                run.stack.push(v);
+                *run.local(*i) = v;
             }
-            execute_block_no_restore(&self.block, run)?;
-            run.stack.truncate(len);
+            execute_block(&self.block, run)?;
         }
         Ok(())
     }
@@ -875,17 +860,14 @@ where
     result
 }
 
-/// Convert list of bindings to new allocatpr.
-pub fn glets<A, S>(list: &[(SrcPos, LExp)], src: &[u8]) -> VecA<(S, Exp<A>), A>
+/// Convert list of assigns to new allocatpr.
+pub fn gassigns<A>(list: &[(usize, LExp)], src: &[u8]) -> VecA<(usize, Exp<A>), A>
 where
     A: Allocator + Debug + Default,
-    S: XString,
 {
     let mut result = VecA::with_capacity(list.len());
-    for (name, e) in list {
-        let name = name.sstr(src);
-        let name = S::from_str(name);
-        result.push((name, Exp::from(e, src)));
+    for (x, e) in list {
+        result.push((*x, Exp::from(e, src)));
     }
     result
 }
