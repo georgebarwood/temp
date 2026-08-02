@@ -1,5 +1,10 @@
 //! [Database] based on [tablestg] crate.
 
+/* What next... case expressions? 
+   tuples?
+   list and ilist types?
+*/
+
 //!# Interface
 //!
 //! The method [Database::run] is called to execute an SQL query.

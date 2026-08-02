@@ -231,14 +231,14 @@ fn execute_schema_updates(
     Ok(())
 }
 
-/// Encode a list of statements.
+/// Encode a list of statements, optimising where conditions if possible.
 pub fn encode_block<A, S>(slist: &mut [Statement<A, S>])
 where
     A: Allocator + Debug + Default,
     S: XString,
 {
     for s in slist {
-        let mut sub_s = None;
+        let mut sub_s = None; // Optimised statement to be assigned to s.
         match s {
             Statement::Let(x) => x.exp.encode(),
             Statement::Set(x) => x.exp.encode(),
@@ -256,6 +256,9 @@ where
             }
             Statement::Insert(x) => encode_exp_list(&mut x.vals),
             Statement::Update(x) => {
+                for (_, exp) in &mut x.assigns {
+                    exp.encode();
+                }
                 if let Some(exp) = encode_wher(&mut x.wher) {
                     let assigns = std::mem::take(&mut x.assigns);
                     let table = x.table;
@@ -264,9 +267,6 @@ where
                         table,
                         exp,
                     }));
-                }
-                for (_, exp) in &mut x.assigns {
-                    exp.encode();
                 }
             }
             Statement::Delete(x) => {
@@ -277,16 +277,13 @@ where
             }
             Statement::Select(x) => {
                 encode_exp_list(&mut x.vals);
-
                 if let Some(ref mut wher) = x.wher
                     && let Some(exp) = encode_wher(wher)
                 {
                     let vals = std::mem::take(&mut x.vals);
                     let from = x.from;
                     sub_s = Some(Statement::SelectIdEq(SelectIdEq { vals, from, exp }));
-                }
-
-                if let Some(ref mut ob) = x.order_by {
+                } else if let Some(ref mut ob) = x.order_by {
                     for exp in &mut ob.0 {
                         exp.encode();
                     }
@@ -296,7 +293,7 @@ where
                 for (_, exp) in &mut x.lets {
                     exp.encode();
                 }
-
+                encode_block(&mut x.block);
                 if let Some(ref mut wher) = x.wher
                     && let Some(exp) = encode_wher(wher)
                 {
@@ -309,13 +306,11 @@ where
                         exp,
                         block,
                     }));
-                }
-                if let Some(ref mut ob) = x.order_by {
+                } else if let Some(ref mut ob) = x.order_by {
                     for exp in &mut ob.0 {
                         exp.encode();
                     }
                 }
-                encode_block(&mut x.block);
             }
             _ => {}
         }
@@ -325,6 +320,7 @@ where
     }
 }
 
+/// Encode where expression, returns IntExp for case Id = `<exp>` where exp has no column references.
 fn encode_wher<A>(wher: &mut Exp<A>) -> Option<IntExp<A>>
 where
     A: Allocator + Debug + Default,
@@ -335,10 +331,10 @@ where
         hc = rhs.has_col();
     }
     wher.encode();
+    // Check all conditions for Id = exp optimisation to apply.
     if !hc
         && let Exp::Bool(BoolExp::IntEq(lhs, rhs)) = wher
-        && let IntExp::Col(0) = &**lhs
-        && let rhs = &mut **rhs
+        && let IntExp::Col(0) = &**lhs // lhs is Id
     {
         Some(std::mem::take(rhs))
     } else {
