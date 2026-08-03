@@ -1,6 +1,6 @@
 use crate::{
-    DataType, IdVKey, LVec, LazyItem, MSPX, PData, PageSet, SPX, VBuckMap, VBuckMapInfo,
-    VBuckMapIter, VKey, Value, table::TableInner, PVec
+    DataType, IdVKey, LVec, LazyItem, MSPX, PData, PVec, PageSet, SPX, VBuckMap, VBuckMapInfo,
+    VBuckMapIter, VKey, Value, table::TableInner,
 };
 use std::hash::{Hash, Hasher};
 
@@ -47,7 +47,7 @@ impl Extra {
         let mut em = VBuckMap::restore(self.vbm, ps);
         let mut done = 0;
         while done < len {
-            let key = IdVKey { id };
+            let key = IdVKey::new(id);
             let (rdata, off, amt) = em.get(&key).unwrap();
             let (off, amt) = (off + 8, amt - 8); // Skip the id.
             to.extend_from_slice(&rdata.borrow().data[off..off + amt]);
@@ -69,14 +69,14 @@ impl Extra {
 
         if local < len {
             let id = u64::from_le_bytes(x[1..9].try_into().unwrap());
-            self.do_fetch_chunks(id, len-local, &mut result, ps);
+            self.do_fetch_chunks(id, len - local, &mut result, ps);
         }
         result
     }
     /// Fetch all chunk data.
     fn fetch_chunks(&self, x: &[u8], ps: &mut PageSet) -> LVec<u8> {
         let (_, len, _) = self.parse_x(x);
-        
+
         self.chunks(x, len, ps)
     }
     /// Returns chunk start id, length of user data and non-chunk length.
@@ -112,7 +112,7 @@ impl Extra {
             t.extend_from_slice(&id.to_le_bytes());
             t.extend_from_slice(chunk);
 
-            let key = IdVKey { id };
+            let key = IdVKey::new(id);
             em.insert(&key, &t);
 
             id += 1;
@@ -152,7 +152,6 @@ impl Store {
 
     /// Insert user_data, must not be a duplicate key ( but this is not checked ).
     pub fn insert<K: VKey>(&mut self, key: &K, user_data: &[u8], ps: &mut PageSet) {
-        
         let len = user_data.len();
         let mut x = LVec::with_capacity(256);
         if len < 255 {
@@ -220,7 +219,7 @@ impl Store {
         if let Some((pdata, off, len)) = m.get(&key) {
             if pdata.borrow().data[off] == 1 {
                 return Some(SData::Small(pdata, off + 1, len - 1));
-            } else {  
+            } else {
                 let v = self
                     .extra
                     .fetch_chunks(&pdata.borrow().data[off..off + len], ps);
@@ -290,7 +289,7 @@ impl Store {
         let mut em = VBuckMap::restore(self.extra.vbm, ps);
         let mut done = 0;
         while done < len {
-            let key = IdVKey { id };
+            let key = IdVKey::new(id);
             let amt = em.remove(&key);
             assert!(amt > 0);
             done += amt;
@@ -309,7 +308,7 @@ impl Store {
     /// Save Store as bytes.
     ///
     /// This is used to save sys_store to page 1.
-    pub fn save_to_bytes(&mut self) -> PVec<u8> {
+    pub fn save_to_bytes(&self) -> PVec<u8> {
         let mut result = PVec::new();
         postcard::to_io(self, &mut result).unwrap();
         result
@@ -333,7 +332,8 @@ impl Store {
 /// Value Iterator - result of [Store::iter] returns all records (rows).
 pub struct StoreIter<'a> {
     inner: VBuckMapIter,
-    pub store: &'a Store,
+    /// Store
+    store: &'a Store,
     v: LVec<u8>,
 }
 
@@ -418,6 +418,7 @@ impl SData {
         self.decode_at(dt, 0, spx)
     }
 
+    /// Decode data to TableInner.
     pub fn decode_table_inner(&self) -> TableInner {
         match self {
             SData::Small(pdata, off, _len) => {
@@ -489,7 +490,7 @@ fn test_insert(m: &mut Store, td: &[u8], id: u64, ps: &mut PageSet) {
 
     // println!("adding {:?} id={}", &x, id );
 
-    let key = IdVKey { id };
+    let key = IdVKey::new(id);
     m.insert(&key, &x, ps);
 
     // println!("checking id={} m={:?}", id, m);
@@ -509,7 +510,7 @@ fn test_get(m: &mut Store, td: &[u8], id: u64, ps: &mut PageSet) {
 
     // println!("getting {:?} id={}", &x, id );
 
-    let key = IdVKey { id };
+    let key = IdVKey::new(id);
 
     if let Some(_sd) = m.get(&key, ps) {
         // assert!(sd.data() == &*x);
@@ -519,6 +520,7 @@ fn test_get(m: &mut Store, td: &[u8], id: u64, ps: &mut PageSet) {
 }
 
 #[cfg(test)]
+/// Test Store.
 pub fn test_store(ps: &mut PageSet) {
     let mut m = Store::new(ps);
 
@@ -564,7 +566,7 @@ pub fn test_store(ps: &mut PageSet) {
     println!("testing remove");
 
     for id in 0..n {
-        let key = IdVKey { id };
+        let key = IdVKey::new(id);
         m.remove(&key, ps);
     }
 

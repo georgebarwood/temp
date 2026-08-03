@@ -5,7 +5,7 @@ use std::cell::RefCell;
 ///
 /// The first field (column) of the stored value must be a 64-bit id.
 ///
-/// Table has methods to fetch only specific columns. This is perticularly 
+/// Table has methods to fetch only specific columns. This is perticularly
 /// useful when a table has many columns or large columns that are stored indirectly.
 #[derive(Debug)]
 pub struct Table {
@@ -51,12 +51,15 @@ impl Table {
         let inner = TableInner { next_id: 1, store };
         let mut copy = inner.clone();
         copy.next_id = 0; // To force initial save.
-        Self { inner, datatype, copy }
+        Self {
+            inner,
+            datatype,
+            copy,
+        }
     }
 
     /// Update datatype.
-    pub fn set_datatype( &mut self, dt: Arc<DataType> )
-    {
+    pub fn set_datatype(&mut self, dt: Arc<DataType>) {
         self.datatype = dt;
     }
 
@@ -87,18 +90,18 @@ impl Table {
             self.datatype.value_to_bytes(v, &mut spx)
         };
 
-        let id = v.list()[0].int() as u64;
+        let id = v.list()[0].int();
 
-        let key = IdVKey { id };
+        let key = IdVKey::new(id as u64);
 
         self.inner.store.insert(&key, &x, ps);
 
-        id as i64
+        id
     }
 
     /// Fetch the value associated with the specified id.
     pub fn fetch(&self, id: i64, ps: &mut PageSet) -> Option<Value> {
-        let key = IdVKey { id: id as u64 };
+        let key = IdVKey::new(id as u64);
         let m = &self.inner.store;
         if let Some(sd) = m.get(&key, ps) {
             let mut spx = (m, &mut *ps);
@@ -111,7 +114,7 @@ impl Table {
 
     /// Fetch the value associated with the specified id. [OwnedLazyRow::item] is used to access the columns.
     pub fn lazy_fetch<'a>(&'a self, id: i64, ps: &mut PageSet) -> Option<OwnedLazyRow<'a>> {
-        let key = IdVKey { id: id as u64 };
+        let key = IdVKey::new(id as u64);
         let m = &self.inner.store;
         if let Some(sdata) = m.get(&key, ps) {
             let items = sdata.lazy_row_items(&self.datatype);
@@ -133,13 +136,13 @@ impl Table {
             let mut spx = (m, &mut *ps);
             self.datatype.value_to_bytes(v, &mut spx)
         };
-        let key = IdVKey { id: id as u64 };
+        let key = IdVKey::new(id as u64);
         self.inner.store.insert(&key, &x, ps);
     }
 
     /// Remove the value (row, record) specified by id from the table.
     pub fn remove(&mut self, id: i64, ps: &mut PageSet) -> Option<Value> {
-        let key = IdVKey { id: id as u64 };
+        let key = IdVKey::new(id as u64);
         let m = &mut self.inner.store;
         if let Some(sd) = m.get(&key, ps) {
             let result = {
@@ -190,13 +193,12 @@ impl Table {
     /// Save the table to sys_store.
     pub fn save(&mut self, id: i64, ps: &mut PageSet) {
         if self.changed() {
-            let id = id as u64;
             self.copy = self.inner.clone();
             let ssc = ps.sys_store.clone();
             let mut sys_store = ssc.borrow_mut();
-            let bytes = self.inner.to_bytes_id(id);
+            let bytes = self.inner.to_bytes_id(id as u64);
 
-            let key = IdVKey::new(id);
+            let key = IdVKey::new(id as u64);
             sys_store.replace(&key, &bytes, ps);
         }
     }
@@ -226,6 +228,7 @@ impl Table {
         }
     }
 
+    /// Drop table - delete all pages and remove sys_store record.
     pub fn drop(id: i64, datatype: Arc<DataType>, ps: &mut PageSet) {
         Table::restore(id, ps, datatype).delete_all(ps);
 
@@ -244,10 +247,8 @@ pub struct OwnedLazyRow<'a> {
     items: LVec<LazyItem>,
 }
 
-impl<'a> OwnedLazyRow<'a> {
-    /// Get specified item from row.
-    /// A copy is kept, which is cloned if the same item is fetched again.
-    pub fn item(&mut self, item: usize, ps: &mut PageSet) -> Value {
+impl<'a> RowContext for OwnedLazyRow<'a> {
+    fn item(&mut self, item: usize, ps: &mut PageSet) -> Value {
         let x = &mut self.items[item];
         match x {
             LazyItem::Value(v) => v.clone(),
@@ -262,9 +263,10 @@ impl<'a> OwnedLazyRow<'a> {
     }
 }
 
-pub trait RowContext
-{
-   fn item(&mut self, i: usize, ps: &mut PageSet) -> Value;
+/// Trait for different ways to access values from row of data.
+pub trait RowContext {
+    /// Get specified column.
+    fn item(&mut self, i: usize, ps: &mut PageSet) -> Value;
 }
 
 /// LazyRow allows a subset of columns to be fetched, see [Table::lazy_row].
@@ -400,6 +402,7 @@ pub struct IndexKey<'a> {
 }
 
 impl<'a> IndexKey<'a> {
+    /// Make new IndexKey.
     pub fn new(val: &'a Value, table: &'a Table, col: usize) -> Self {
         Self { val, table, col }
     }

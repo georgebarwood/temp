@@ -1,4 +1,4 @@
-use crate::{Arc, Data, DataType, LRc, Store, Table, RTable};
+use crate::{Arc, Data, DataType, LRc, RTable, Store, Table};
 use std::cell::RefCell;
 
 use page_store::*;
@@ -7,7 +7,9 @@ use page_store::*;
 pub struct PageSet {
     wapd: AccessPagedData,
     pages: HashMap<u64, PData>,
+    /// Store for schema.
     pub sys_store: LRc<RefCell<Store>>,
+    /// Copy for checking if sys_store has changed and needs to be saved.
     pub sys_store_copy: Store,
     /// Cache of tables.
     pub tables: HashMap<i64, RTable>,
@@ -23,30 +25,6 @@ impl PageSet {
             sys_store_copy: Store::default(),
             tables: HashMap::default(),
         }
-    }
-
-    pub fn test() -> Self {
-        use page_store::*;
-        let limits = Limits::default();
-
-        // Construct BlockPageStg.
-        let file = atom_file::MultiFileStorage::new("test.db");
-        let upd = atom_file::FastFileStorage::new("test.upd");
-        let af = atom_file::AtomicFile::new_with_limits(file, upd, &limits.af_lim);
-        let ps = BlockPageStg::new(af, &limits);
-        let _is_new = ps.is_new();
-
-        let spd = SharedPagedData::new_from_ps(ps);
-
-        if false {
-            let psi = &spd.psi;
-            println!("max page size={}", psi.max_size_page());
-            for i in 0..psi.sizes() {
-                println!("page size={}", psi.size(1 + i));
-            }
-        }
-
-        Self::new(spd.new_writer())
     }
 
     /// Compute rounded up size of page. Returns 0 if size exceeds page limit.
@@ -142,7 +120,9 @@ pub type PData = LRc<RefCell<PDataInner>>;
 /// Data and changed status for PData.
 #[derive(Default)]
 pub struct PDataInner {
+    /// Data.
     pub data: Data,
+    /// Has Data changed ( so needs to be saved ).
     pub changed: bool,
 }
 

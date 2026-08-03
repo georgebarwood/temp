@@ -16,15 +16,16 @@ use crate::*;
 )]
 pub enum DataType {
     #[default]
-    ///  Todo
+    ///  Empty datatype - values use no storage.
     Empty,
 
+    /// Boolean datatype - values are true/false.
     Bool,
 
-    /// e.g. `int` ( todo : have different sizes )
+    /// Integer datatype -- e.g. `int` ( maybe todo : have different sizes )
     Int,
 
-    /// e.g. `float` ( todo : have different sizes )
+    /// Float datatype, e.g. `float` ( todo : have different sizes )
     Float,
 
     /// String(n), if string length is > n, value is stored indirectly.
@@ -44,18 +45,17 @@ pub enum DataType {
 
     // Array of values.
     // Array(usize, LBox<DataType>),
-    
     /// List(n) of values, if binary length is > n, value is stored indirectly.
     List(GBox<DataType>, usize),
 
     // e.g. `[string->int]`
     // Map(GBox<DataType>, GBox<DataType>),
-    
     /// List(n) of 64-bit integers. if binary length > n, value is stored indirectly.
     IList(usize),
 }
 
 impl DataType {
+    /// Get index of name column.
     pub fn lookup_col(&self, name: &str) -> Option<usize> {
         match self {
             DataType::Struct(fields) => {
@@ -70,38 +70,40 @@ impl DataType {
         None
     }
 
-    pub fn similar(&self, other: &DataType) -> bool
-    {
-        match (self,other) {
-           (DataType::Empty,DataType::Empty) => true,
-           (DataType::Bool,DataType::Bool) => true,
-           (DataType::Int,DataType::Int) => true,
-           (DataType::Float,DataType::Float) => true,
-           (DataType::String(_), DataType::String(_)) => true,
-           (DataType::Binary(_), DataType::Binary(_)) => true,
-           (DataType::Tuple(x), DataType::Tuple(y)) =>
-           {
-              for (x,y) in x.iter().zip(y.iter())
-              {
-                 if !x.similar(y) {return false;}
-              }
-              true
-           }
-           _ => false
+    /// Check if datatypes are equal apart from indirect store limits.
+    pub fn similar(&self, other: &DataType) -> bool {
+        match (self, other) {
+            (DataType::Empty, DataType::Empty) => true,
+            (DataType::Bool, DataType::Bool) => true,
+            (DataType::Int, DataType::Int) => true,
+            (DataType::Float, DataType::Float) => true,
+            (DataType::String(_), DataType::String(_)) => true,
+            (DataType::Binary(_), DataType::Binary(_)) => true,
+            (DataType::Tuple(x), DataType::Tuple(y)) => {
+                for (x, y) in x.iter().zip(y.iter()) {
+                    if !x.similar(y) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
         }
     }
 
-    pub fn struc( &self ) -> &[(GString, DataType)] {
-        match self {
-            DataType::Struct(x) => &x,
-            _ => panic!()
-        }
-    }
-
-    pub fn struc_mut( &mut self ) -> &mut GVec<(GString, DataType)> {
+    /// Get reference to Struct.
+    pub fn struc(&self) -> &[(GString, DataType)] {
         match self {
             DataType::Struct(x) => x,
-            _ => panic!()
+            _ => panic!(),
+        }
+    }
+
+    /// Get mut reference to Struct.
+    pub fn struc_mut(&mut self) -> &mut GVec<(GString, DataType)> {
+        match self {
+            DataType::Struct(x) => x,
+            _ => panic!(),
         }
     }
 
@@ -125,7 +127,7 @@ impl DataType {
             DataType::Empty => {}
             DataType::Bool => {
                 write_bool(val.bool(), w);
-            } 
+            }
             DataType::Int => {
                 let v = val.int();
                 let _ = w.write(&v.to_le_bytes());
@@ -355,12 +357,12 @@ impl DataType {
     }
 
     /// Find column with specified name.
-    pub fn name_to_col(&self, name: &str) -> Option<(usize,&DataType)> {
+    pub fn name_to_col(&self, name: &str) -> Option<(usize, &DataType)> {
         match self {
             DataType::Struct(fields) => {
                 for (i, f) in fields.iter().enumerate() {
                     if f.0 == name {
-                        return Some((i,&f.1));
+                        return Some((i, &f.1));
                     }
                 }
                 None
@@ -843,121 +845,125 @@ pub type MSPX<'a> = (&'a mut Store, &'a mut PageSet);
 /// Store, PageSet.
 pub type SPX<'a> = (&'a Store, &'a mut PageSet);
 
-pub fn write_usize<W: std::io::Write>(mut val: usize, w: &mut W) {
-        let mut buf = [0u8; 10]; // 10 = 64 / 7 rounded up.
-        let mut ix = 0;
-        loop {
-            let b = (val % 128) as u8;
-            val /= 128;
-            if val == 0 {
-                buf[ix] = b;
-                ix += 1;
-                break;
-            } else {
-                buf[ix] = b + 128;
-                ix += 1;
-            }
+fn write_usize<W: std::io::Write>(mut val: usize, w: &mut W) {
+    let mut buf = [0u8; 10]; // 10 = 64 / 7 rounded up.
+    let mut ix = 0;
+    loop {
+        let b = (val % 128) as u8;
+        val /= 128;
+        if val == 0 {
+            buf[ix] = b;
+            ix += 1;
+            break;
+        } else {
+            buf[ix] = b + 128;
+            ix += 1;
         }
-        let _ = w.write(&buf[0..ix]);
+    }
+    let _ = w.write(&buf[0..ix]);
 }
 
-pub fn len_usize(mut val: usize) -> usize {
-        let mut ix = 0;
-        loop {
-            val /= 128;
-            if val == 0 {
-                ix += 1;
-                break;
-            } else {
-                ix += 1;
-            }
+fn len_usize(mut val: usize) -> usize {
+    let mut ix = 0;
+    loop {
+        val /= 128;
+        if val == 0 {
+            ix += 1;
+            break;
+        } else {
+            ix += 1;
         }
-        ix
+    }
+    ix
 }
 
-pub fn write_byte<W: std::io::Write>(b: u8, w: &mut W) {
+/*
+fn write_byte<W: std::io::Write>(b: u8, w: &mut W) {
         let _ = w.write(&b.to_le_bytes());
 }
 
-pub fn read_byte(buf: &[u8], ix: &mut usize) -> u8 {
+fn read_byte(buf: &[u8], ix: &mut usize) -> u8 {
         let x = buf[*ix];
         *ix += 1;
         x
 }
+*/
 
-pub fn read_usize(buf: &[u8], ix: &mut usize) -> usize {
-        let (x, sz) = DataType::decode_usize(&buf[*ix..]);
-        *ix += sz;
-        x
+fn read_usize(buf: &[u8], ix: &mut usize) -> usize {
+    let (x, sz) = DataType::decode_usize(&buf[*ix..]);
+    *ix += sz;
+    x
 }
 
-pub fn write_string<W: std::io::Write>(s: &str, w: &mut W) {
+/*
+fn write_string<W: std::io::Write>(s: &str, w: &mut W) {
     write_usize( s.len(), w);
     let _ = w.write( s.as_bytes() );
 }
 
-pub fn read_string<'a>(buf: &'a [u8], ix: &mut usize) -> &'a str {
+fn read_string<'a>(buf: &'a [u8], ix: &mut usize) -> &'a str {
     let len = read_usize(buf, ix);
     let result = tos(&buf[*ix..*ix+len]);
     *ix += len;
     result
 }
+*/
 
-pub fn write_bool<W: std::io::Write>(val: bool, w: &mut W) {
-        let b : u8 = if val {1} else {0};
-        let _ = w.write(&b.to_le_bytes());
+fn write_bool<W: std::io::Write>(val: bool, w: &mut W) {
+    let b: u8 = if val { 1 } else { 0 };
+    let _ = w.write(&b.to_le_bytes());
 }
 
-pub fn read_bool(buf: &[u8], ix: &mut usize) -> bool {
-        let x = buf[*ix];
-        *ix += 1;
-        x != 0 // Maybe should panic if not 0 or 1.
+fn read_bool(buf: &[u8], ix: &mut usize) -> bool {
+    let x = buf[*ix];
+    *ix += 1;
+    x != 0 // Maybe should panic if not 0 or 1.
 }
 
-pub fn write_int<W: std::io::Write>(val: i64, w: &mut W) {
-        // Could use a variable length encoding to be efficient for small ints.
-        let _ = w.write(&val.to_le_bytes());
+fn write_int<W: std::io::Write>(val: i64, w: &mut W) {
+    // Could use a variable length encoding to be efficient for small ints.
+    let _ = w.write(&val.to_le_bytes());
 }
 
-pub fn read_int(buf: &[u8], ix: &mut usize) -> i64 {
-        let x = i64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
-        *ix += 8;
-        x
+fn read_int(buf: &[u8], ix: &mut usize) -> i64 {
+    let x = i64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
+    *ix += 8;
+    x
 }
 
-pub fn read_float(buf: &[u8], ix: &mut usize) -> F64 {
-        let x = f64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
-        *ix += 8;
-        F64(x)
+fn read_float(buf: &[u8], ix: &mut usize) -> F64 {
+    let x = f64::from_le_bytes(buf[*ix..*ix + 8].try_into().unwrap());
+    *ix += 8;
+    F64(x)
 }
 
+/// Get str ref from byt ref.
 pub fn tos(s: &[u8]) -> &str {
     str::from_utf8(s).unwrap()
 }
 
 use std::fmt::Display;
 use std::fmt::Formatter;
-impl Display for DataType
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> { 
+impl Display for DataType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use DataType::*;
-        match self
-        {
+        match self {
             Int => f.write_str("int")?,
             String(_x) => {
                 f.write_str("string")?;
                 /*
-                if *x > 0 { 
+                if *x > 0 {
                     write!( f, "({})", x )?;
                 }
                 */
             }
             Struct(x) => {
                 f.write_str("(")?;
-                for (i,(name,dt)) in x.iter().skip(1).enumerate()
-                {
-                    if i != 0 { f.write_str(", ")?; }
-                    write!( f, "{} {}", name, dt)?;
+                for (i, (name, dt)) in x.iter().skip(1).enumerate() {
+                    if i != 0 {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{} {}", name, dt)?;
                 }
                 f.write_str(")")?;
             }

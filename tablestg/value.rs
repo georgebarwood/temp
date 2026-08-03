@@ -14,16 +14,26 @@ use crate::*;
 )]
 /// Generic value.
 pub enum Value {
+    /// Empty value - takes up no storage.
     #[default]
     Empty,
+    /// Boolean true/false value.
     Bool(bool),
+    /// Integer value ( currently i64 ).
     Int(i64),
+    /// Float value.
     Float(F64),
+    /// String value.
     String(LRc<LString>),
+    /// Binary value ( bytes ).
     Binary(LRc<LVec<u8>>),
+    /// List of values.
     List(LRc<LVec<Value>>),
+    /// Values with different variants.
     Enum(usize, LBox<Value>),
+    /// List of integers.
     IList(LRc<LVec<i64>>),
+    /// DataType value ( may be unused, not sure this is needed ).
     DataType(DataType),
 }
 
@@ -35,7 +45,7 @@ impl Value {
             _ => panic!("bool expected"),
         }
     }
-    
+
     /// Get int ( Value must be Int ).
     pub fn int(&self) -> i64 {
         match self {
@@ -143,6 +153,8 @@ impl Value {
 
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
+
+/// Float with Hash, Eq, Ord etc. implemented.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct F64(pub f64);
 

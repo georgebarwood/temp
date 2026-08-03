@@ -21,10 +21,11 @@ pub trait VKey: Hash + Debug {
 /// Key for records where key is 64 bits, the first 8 bytes of the record.
 #[derive(Debug, Hash)]
 pub struct IdVKey {
-    pub id: u64,
+    id: u64,
 }
 
 impl IdVKey {
+    /// Make new IdVKey.
     pub fn new(id: u64) -> Self {
         Self { id }
     }
@@ -107,6 +108,7 @@ impl<'a> VBuckMap<'a> {
             if let Some((off, len)) =
                 Reader::new(&pdata.clone().borrow().data).get(key, hash, self.ps)
             {
+                // println!("vbuckmap::Get result key={:?} pnum={} off={} len={}", key, pnum, off, len);
                 Some((pdata, off, len))
             } else {
                 None

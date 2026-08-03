@@ -1,15 +1,16 @@
-//! This crate is not yet reliable or stable!
-//!
 //! [Table] stores [Value]s which have a specific [DataType].
 
-/* 
-   Idea for re-using indirect values.
-   On Store delete, allow deleted indirect values to be collected rather than deleted.
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
+/*
+   Idea for re-using indirect values ( not yet implemented ).
+   On Store delete, allow deleted indirect values to be collected into "garbage" container rather than deleted.
    On next insert, use the garbage values if possible.
    If not possible they are deleted.
 */
 /*
-   Idea for splitting hash buckets incrementally.
+   Idea for splitting hash buckets incrementally ( not yet implemented ).
 
    Suppose we have a hash table with 4 buckets, numbered as below:
 
@@ -44,7 +45,7 @@
 
 /// [Table] stores [Value]s which have a specific [DataType].
 pub mod table;
-pub use table::{LazyRow, Table, RTable, RowContext};
+pub use table::{LazyRow, RTable, RowContext, Table};
 
 /// Generic [Value]s.
 pub mod value;
@@ -84,7 +85,9 @@ const PAGE_SIZE: u64 = 3952;
 
 // Basic data types.
 
-pub use atom_file::{Arc, Data, PVec, pvec, MemFile, MultiFileStorage, AtomicFile, FastFileStorage};
+pub use atom_file::{
+    Arc, AtomicFile, Data, FastFileStorage, MemFile, MultiFileStorage, PVec, pvec,
+};
 pub use page_store::*;
 
 pub use pstd::localalloc::{Local, Perm};
