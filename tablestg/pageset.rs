@@ -7,7 +7,7 @@ use page_store::*;
 pub struct PageSet {
     wapd: AccessPagedData,
     pages: HashMap<u64, PData>,
-    /// Store for schema.
+    /// Store for schema and table root info.
     pub sys_store: LRc<RefCell<Store>>,
     /// Copy for checking if sys_store has changed and needs to be saved.
     pub sys_store_copy: Store,
