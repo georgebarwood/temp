@@ -4,8 +4,12 @@
    case expressions? DONE
    tuples?
    list and ilist types?
-   change for to mutate existing variables rather than declare new ones.
+   change for to mutate existing variables rather than declare new ones ( not sure about this ).
+   Indexes - for where conditions "where col  = exp". or maybe "where somefunc(cols) = exp".
 */
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 //!# Interface
 //!
@@ -31,7 +35,7 @@
 //!# Language
 //!
 //! The SQL-like language has two kinds of statements : schema statements, which declare or modify schemas, tables,
-//! and functions, and non-schema statements, see grammer below for details "go" can be used in a top-level batch
+//! and functions, and non-schema statements, see grammar below for details "go" can be used in a top-level batch
 //! to execute schema statements up to that point so that the declared schemas, functions and tables can be referenced.
 //! Schema and non-schema statements cannot be mixed unless seperated by "go".
 //!
@@ -112,6 +116,8 @@
 //! These are combined with standard arithmetic, comparison and boolean operators ``` ( + * / % = != > < >= <= and or ) ```.
 //!
 //! Strings can be concatenated with |, non-string operands are automatically converted to strings.
+//!
+//! Comnditional expressions, for example: ```select if 7 < 2 'x' if 4 > 3 'y' else 'z'```
 //!
 //! An expression can also be a function call, ```<sname> . <fname> ( <exp>,.. )```
 //!

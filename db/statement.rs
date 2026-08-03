@@ -656,11 +656,9 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
         let n = self.order_by.as_ref().unwrap().0.len();
 
         for row in &temp {
-            let mut c = 0;
-            for v in &row[n..] {
+            for (c, v) in row[n..].iter().enumerate() {
                 let i = self.assigns[c].0;
                 *run.local(i) = v.clone(); // Maybe could avoid clone, but it is cheap.
-                c += 1;
             }
             execute_block(&self.block, run)?;
         }

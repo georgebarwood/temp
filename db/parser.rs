@@ -263,12 +263,12 @@ impl<'a> Parser<'a> {
             let name = self.read_ident()?;
             self.expect_token(Token::Equal)?;
             let exp = self.exp(0)?;
-            
+
             let i = if let Some((i, _)) = self.local(&self.locs, &name) {
                 i
             } else {
-               let msg = format!("Local variable {:?} not found", tos(self.str(&name)));
-               return Err(E::new(&msg));
+                let msg = format!("Local variable {:?} not found", tos(self.str(&name)));
+                return Err(E::new(&msg));
             };
             assigns.push((i, exp));
             if !self.test_token(Token::Comma)? {
@@ -287,18 +287,20 @@ impl<'a> Parser<'a> {
         let order_by = self.order_by(&table_dt)?;
 
         // Resolve assigns and check data types.
-        if self.pass == 2
-        {
+        if self.pass == 2 {
             for (i, val) in &mut assigns {
                 let lctx = RContext::Local(&self.locs);
                 let tctx = RContext::Table(&table_dt, &lctx);
                 let dt = self.resolve(val, &tctx, 0)?;
                 let vdt = &self.local_dt(*i);
                 if !dt.similar(vdt) {
-                    let msg = format!("Wrong datatype in for assign vdt={:?} dt={:?} i={}", vdt, dt, i);
+                    let msg = format!(
+                        "Wrong datatype in for assign vdt={:?} dt={:?} i={}",
+                        vdt, dt, i
+                    );
                     return Err(E::new(&msg));
                 }
-            }       
+            }
         }
 
         let block = self.block()?;
@@ -1324,12 +1326,11 @@ impl<'a> Parser<'a> {
         }
         None
     }
-    
+
     /// Get data type of local variable.
-    fn local_dt(&self, i: usize) -> &DataType
-    {
-       let ix = self.locs.len() - ( i + 1 );
-       &self.locs[ix].datatype
+    fn local_dt(&self, i: usize) -> &DataType {
+        let ix = self.locs.len() - (i + 1);
+        &self.locs[ix].datatype
     }
 
     /// Get &[u8] from &SrcPos.

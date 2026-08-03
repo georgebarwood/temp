@@ -560,18 +560,15 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
     sr: &mut SRun<'a>,
     block: &'a VecA<Statement<A, S>, A>,
 ) -> Result<(), std::fmt::Error> {
-    if block.len() == 0 
-    {
+    if block.is_empty() {
         sr.show(" {}");
-    }
-    else
-    {
+    } else {
         let save = sr.names.len();
         sr.show(" {");
         sr.indent += 4;
         for s in block {
             sr.newln();
-           s.show(sr)?;
+            s.show(sr)?;
         }
         sr.indent -= 4;
         sr.show("\n");
@@ -709,8 +706,7 @@ impl<'a> SRun<'a> {
         self.show(self.dict.schema_name(schema_id).unwrap());
     }
 
-    pub fn show(&mut self, s: &str)
-    {
+    pub fn show(&mut self, s: &str) {
         self.output.push_str(s);
     }
 

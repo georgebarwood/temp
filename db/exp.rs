@@ -143,6 +143,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
     }
 
+    /// Checks whether an expresion has any column references.
     pub fn has_col(&self) -> bool {
         use Exp::*;
         match self {
