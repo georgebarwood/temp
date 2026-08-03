@@ -1,488 +1,16 @@
 pub const INITSQL: &str = r###"
-schema info
-schema web
 schema adm
+schema info
 schema test
+schema web
 go
+table info.col(Table int, Name string, Datatype int, Description string)
+table info.function(Schema int, Name string, Description string)
 table info.schema(Name string, Description string)
 table info.table(Schema int, Name string, Description string)
-table info.function(Schema int, Name string, Description string)
-table info.col(Table int, Name string, Datatype int, Description string)
 table test.cust(Name string, Address string, Postcode string, City string, Email string, Notes string)
 table web.temp_col(Name string, Datatype int)
 go
-fn info.sch_name(id int) -> string {
-    for result = Name from info.schema where Id = id {}
-}
-
-fn web.main() {
-    let path = sys.arg(0, '')
-    let path = sys.substr(path, 1, 99)
-    if path = 'favicon.ico' {
-        set path = 'adm.favicon'
-    }
-    let sql = ''
-    if sys.contains(path, '.') {
-        set sql = 'let x = ' | path | '()'
-    } else  {
-        set sql = 'let x = pub.' | path | '()'
-    }
-    let x = sys.execute(sql)
-}
-
-fn web.header() {
-    select '<html>
-<head>
-<style>
-   body, input, textarea{ background-color:#353535; color:white }
-   a, a:visited{ color: white }
-</style>
-</head>
-<body>
-<p>Links <a href=/adm.menu>Menu</a> <a href=/adm.execute>Exec</a>
-'
-}
-
-fn web.enc(s string) -> string {
-    set s = sys.replace(s, '&', '&amp;')
-    set s = sys.replace(s, '<', '&lt;')
-    set result = s
-}
-
-fn adm.menu() {
-    let x = web.header()
-    select '<p>Schemas: <a href=/adm.newschema>new</a>'
-    select '<p><a href="/adm.showschema?k=', Id, '">'
-    , Name, '</a> : ', web.enc(Description)
-    from info.schema order by Name
-    select '<p><a target=_blank href="/adm.showall">Show All</a>'
-    select '<p><a href=/test.show_cust>Show Cust List</a>'
-    let x = web.trailer()
-}
-
-fn adm.execute() {
-    let x = web.header()
-    let sql = sys.arg(2, 'sql')
-    select '
-<p><b>Execute Sql</b>
-<p><form method=post>
-<textarea rows=10 cols=80 name=sql>' | web.enc(sql) | '</textarea>
-<p><input type=submit value=Go>
-</form>'
-    let x = sys.execute(sql)
-    select '<p style="color:yellow">', web.enc(sys.error())
-    let x = web.trailer()
-}
-
-fn adm.showschema() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let sname = ''
-    let desc = ''
-    for sname = Name, desc = Description from info.schema where Id = k {}
-    select '<p>Schema ' | sname | ' : ' | web.enc(desc)
-    , ' <a href=/adm.editschemadesc?k=' | k | '>edit</a>'
-    , ' <a href=/adm.renameschema?k=' | k | '>rename</a>'
-    , ' <a href=/adm.dropschema?k=' | k | '>drop</a>'
-    select '<p>Functions <a href=/adm.newfn?k=' | k | '>new</a> :'
-    select '<p><a href="/adm.editfn?k=', Id, '">' | Name | '</a> : '
-    , web.enc(Description)
-    from info.function where Schema = k order by Name
-    select '<p>Tables <a href=/adm.newtable?k=' | k | '>new</a> : '
-    select '<p><a href=/adm.showtable?k=' | Id | '>' | Name | '</a> '
-    , sys.table_col_defs(sname, Name), ' : ', web.enc(Description)
-    from info.table where Schema = k order by Name
-    let x = web.trailer()
-}
-
-fn adm.editfn() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    select '<p><a href="/adm.renamefn?k=', k, '">Rename Function</a>'
-    select ' | <a href="/adm.dropfn?k=', k, '">Drop Function</a>'
-    let adesc = sys.arg(2, 'desc')
-    let sname = ''
-    let name = ''
-    let desc = ''
-    for sname = info.sch_name(Schema), name = Name, desc = Description from info.function where Id = k {}
-    if adesc != '' and adesc != desc {
-        set desc = adesc
-        update info.function set Description = desc where Id = k
-    }
-    let fdef = sys.norm(sys.arg(2, 'fdef'))
-    let e = sys.fn_text(sname, name)
-    if fdef != '' and fdef != e {
-        let x = sys.execute('alter ' | fdef)
-    } else  {
-        set fdef = e
-    }
-    select '
-<p><form method=post>
-<textarea rows=2 cols=80 name=desc>' | web.enc(desc) | '</textarea>
-<textarea rows=20 cols=80 name=fdef>' | web.enc(fdef) | '</textarea>
-<p><input type=submit value=Alter>
-</form>
-<p>'
-    , web.enc(sys.error())
-    let x = web.trailer()
-}
-
-fn adm.newfn() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let sn = info.sch_name(k)
-    let name = sys.arg(2, 'name')
-    let body = sys.arg(2, 'body')
-    let err = ''
-    let show = true
-    if name != '' and body != '' {
-        let sql = 'fn ' | sn | '.' | name | body
-        let x = sys.execute(sql)
-        insert into info.function(Schema, Name) values (k, name)
-        set err = sys.error()
-        set show = err != ''
-    } else  {
-        if body = '' {
-            set body = '(){}'
-        }
-    }
-    if show {
-        select '
-<p><form method=post>
-Function Name : <input name=name value=' | web.attr(name) | '> 
-<p><textarea rows=20 cols=80 name=body>' | web.enc(body) | '</textarea>
-<p><input type=submit value=Create>
-</form>'
-        , '<p>', err
-    } else  {
-        select '<p>Function created'
-    }
-    let x = web.trailer()
-}
-
-fn adm.renamefn() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let new_name = sys.arg(2, 'name')
-    let sname = ''
-    let name = ''
-    for sname = info.sch_name(Schema), name = Name from info.function where Id = k {}
-    if new_name != '' {
-        let sql = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name
-        let x = sys.execute(sql)
-        update info.function set Name = new_name where Id = k
-        select '<p>Function ', name, ' renamed to '
-        , new_name
-    } else  {
-        select '
-<p><form method=post>
-New Name: <input name=name>
-<p><input type=submit value=Rename>
-</form>'
-    }
-    let x = web.trailer()
-}
-
-fn adm.showall() {
-    let nl = '
-'
-    select 'schema ', Name, nl
-    from info.schema order by Id
-    select 'go', nl
-    select web.table_text(Schema, Name), nl
-    from info.table order by Id
-    select 'go', nl
-    select sys.fn_text(info.sch_name(Schema), Name)
-    , nl
-    from info.function order by Id
-    select 'go', nl
-    let s = ''
-    let n = ''
-    for s = info.sch_name(Schema), n = Name from info.table order by Id {
-        let t = s | '.' | n
-        let cols = sys.table_col_names(s, n)
-        let ins = 'insert into ' | t | '(' | cols | ') values ('
-        let sel = " '" | ins | "' | " | sys.table_literal(s, n) | " | ')" | nl | "'"
-        let sql = 'select ' | sel | ' from ' | t | ' order by Id'
-        let x = sys.execute(sql)
-        select nl
-    }
-}
-
-fn adm.favicon() {}
-
-fn adm.editschemadesc() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let new_desc = sys.arg(2, 'desc')
-    if new_desc != '' {
-        update info.schema set Description = new_desc where Id = k
-        select '<p>Description saved'
-    } else  {
-        let desc = info.sch_desc(k)
-        select '
-<p><form method=post>
-New Description: <input size=50 name=desc value=' | web.attr(desc) | '>
-<p><input type=submit value=Save>
-</form>'
-    }
-    let x = web.trailer()
-}
-
-fn info.sch_desc(id int) -> string {
-    for result = Description from info.schema where Id = id {}
-}
-
-fn web.trailer() {
-    select '
-</body></html>'
-}
-
-fn web.attr(s string) -> string {
-    set s = sys.replace(s, '&', '&amp;')
-    set s = sys.replace(s, '"', '&quot;')
-    set result = '"' | s | '"'
-}
-
-fn adm.showtable() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let sname = ''
-    let tname = ''
-    let desc = ''
-    for sname = info.sch_name(Schema), tname = Name, desc = Description from info.table where Id = k {}
-    select '<p>Table ', sname, '.', tname, ' : ', web.enc(desc)
-    , ' <a href=/adm.edittabledesc?k=', k, '>edit</a>'
-    , ' <a href=/adm.renametable?k=', k, '>rename</a>'
-    , ' <a href=/adm.droptable?k=', k, '>drop</a>'
-    select '<p>Columns <a href=/adm.newcol?k=', k, '>new</a> :'
-    select '<p>' | Name | ' : ' | web.enc(Description)
-    , ' <a href=/adm.editcoldesc?k=' | Id | '>edit</a>'
-    , ' <a href=/adm.renamecol?k=' | Id | '>ren</a>'
-    , ' <a href=/adm.dropcol?k=' | Id | '>drop</a>'
-    from info.col where Table = k order by Id
-    let x = web.trailer()
-}
-
-fn adm.newschema() {
-    let x = web.header()
-    let name = sys.arg(2, 'name')
-    let err = ''
-    if name != '' {
-        let x = sys.execute('schema ' | name)
-        insert into info.schema(Name) values (name)
-        set err = sys.error()
-    }
-    if err != '' or name = '' {
-        select '
-<p><form method=post>
-Schema Name : <input name=name value=' | web.attr(name) | '> 
-<p><input type=submit value=Create>
-</form>'
-        , '<p>', err
-    } else  {
-        select '<p>Schema created'
-    }
-    let x = web.trailer()
-}
-
-fn adm.newtable() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let sn = info.sch_name(k)
-    let name = sys.arg(2, 'name')
-    let err = ''
-    if name != '' {
-        let sql = 'table ' | sn | '.' | name | '()'
-        let x = sys.execute(sql)
-        insert into info.table(Schema, Name) values (k, name)
-        set err = sys.error()
-    }
-    if name = '' or err != '' {
-        select '
-<p><form method=post>
-Table Name:<input name=name value=' | web.attr(name) | '> 
-<p><input type=submit value=Create>
-</form>'
-    } else  {
-        select 'Table created'
-    }
-    let x = web.trailer()
-}
-
-fn adm.newcol() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let tn = ''
-    for tn = info.sch_name(Schema) | '.' | Name from info.table where Id = k {}
-    let x = web.trailer()
-    let cn = sys.arg(2, 'cn')
-    let dt = sys.arg(2, 'dt')
-    let err = ''
-    if cn != '' and dt != '' {
-        let dup = false
-        let n = ''
-        for n = Name from info.col where Table = k {
-            if n = cn {
-                set dup = true
-            }
-        }
-        if dup {
-            set err = 'Duplicate column name'
-        } else  {
-            let sql = 'alter table ' | tn | ' add column ' | cn | ' ' | dt
-            let x = web.table_save(k)
-            let x = sys.batch(sql)
-            let x = web.table_restore(k)
-            let dts = if dt = 'int' 1 if dt = 'string' 2 else 0
-            insert into info.col(Table, Name, Datatype) values (k, cn, dts)
-        }
-    }
-    if cn = '' or dt = '' or err != '' {
-        select '
-<p><form method=post>
-Column Name : <input name=cn value=' | web.attr(cn) | '> 
-<p>Column Datatype : <input name=dt value=' | web.attr(dt) | '> 
-<p><input type=submit value=Add>
-</form>'
-        , '<p>', err
-    } else  {
-        select '<p>Column added'
-    }
-    let x = web.trailer()
-}
-
-fn adm.renametable() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let new_name = sys.arg(2, 'name')
-    let sname = ''
-    let name = ''
-    for sname = info.sch_name(Schema), name = Name from info.table where Id = k {}
-    if new_name != '' {
-        let sql = 'rename table ' | sname | '.' | name | ' to ' | sname | '.' | new_name
-        let x = sys.execute(sql)
-        update info.table set Name = new_name where Id = k
-        select '<p>Table ', name, ' renamed to ', new_name
-    } else  {
-        select '
-<p><form method=post>
-New Table Name: <input name=name>
-<p><input type=submit value=Rename Table>
-</form>'
-    }
-    let x = web.trailer()
-}
-
-fn adm.edittabledesc() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let new_desc = sys.arg(2, 'desc')
-    if new_desc != '' {
-        update info.table set Description = new_desc where Id = k
-        select '<p>Description saved'
-    } else  {
-        let desc = info.table_desc(k)
-        select '
-<p><form method=post>
-Table Description: <input size=50 name=desc value=' | web.attr(desc) | '>
-<p><input type=submit value=Save>
-</form>'
-    }
-    let x = web.trailer()
-}
-
-fn info.table_desc(id int) -> string {
-    for result = Description from info.table where Id = id {}
-}
-
-fn web.table_save(k int) {
-    let sn = ''
-    let tn = ''
-    for sn = info.sch_name(Schema), tn = Name from info.table where Id = k {}
-    delete from web.temp_col where true
-    let cx = 'cx_resvd'
-    let cols = 'Id'
-    let fors = cx | '0=Id'
-    let vals = cx | '0'
-    let lets = 'let ' | cx | '0' | ' = ' | 0
-    let c = 0
-    let n = ''
-    let dt = 0
-    for n = Name, dt = Datatype from info.col where Table = k order by Id {
-        insert into web.temp_col(Name, Datatype) values (n, dt)
-        set c = c + 1
-        set cols |= ',' | n
-        set fors |= ',' | cx | c | '=' | n
-        set vals |= ',' | cx | c
-        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
-    }
-    let ins = lets | ' for ' | fors | ' from ' | sn | '.' | tn | ' insert into web.temp(' | cols | ') values ( ' | vals | ')'
-    let def = 'table web.temp ' | sys.table_col_defs(sn, tn)
-    let x = sys.batch(def)
-    let x = sys.batch(ins)
-    let x = sys.batch('delete from ' | sn | '.' | tn | ' where true')
-}
-
-fn web.table_restore(k int) {
-    let sn = ''
-    let tn = ''
-    for sn = info.sch_name(Schema), tn = Name from info.table where Id = k {}
-    let cx = 'cx_resvd'
-    let cols = 'Id'
-    let fors = cx | '0=Id'
-    let vals = cx | '0'
-    let lets = 'let ' | cx | '0' | ' = ' | 0
-    let c = 0
-    let n = ''
-    let dt = 0
-    for n = Name, dt = Datatype from web.temp_col order by Id {
-        set c = c + 1
-        set cols |= ',' | n
-        set fors |= ',' | cx | c | '=' | n
-        set vals |= ',' | cx | c
-        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
-    }
-    let ins = lets | ' for ' | fors | ' from web.temp insert into ' | sn | '.' | tn | '(' | cols | ') values ( ' | vals | ')'
-    let x = sys.batch(ins)
-    let x = sys.batch('drop table web.temp')
-    let x = sys.batch('delete from web.temp_col where true')
-}
-
-fn test.show_cust() {
-    let x = web.header()
-    select '<p>', Name, ' ', Address, ' ', City, ' '
-    , Postcode, ' ', Email
-    from test.cust order by Name
-    let x = web.trailer()
-}
-
-fn adm.dropfn() {
-    let x = web.header()
-    let k = sys.parseint(sys.arg(1, 'k'))
-    let err = ''
-    let submit = sys.arg(2, 'submit')
-    if submit = 'Drop Function' {
-        let sname = ''
-        let name = ''
-        for sname = info.sch_name(Schema), name = Name from info.function where Id = k {}
-        let x = sys.execute('drop fn ' | sname | '.' | name)
-        delete from info.function where Id = k
-        set err = sys.error()
-    }
-    if submit = '' or err != '' {
-        select '
-      <p><form method=post>
-      <p><input type=submit name=submit value="Drop Function">
-      </form>
-      <p>'
-        , err
-    } else  {
-        select '<p>Function dropped'
-    }
-    let x = web.trailer()
-}
-
 fn adm.dropcol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -514,6 +42,32 @@ fn adm.dropcol() {
         , err
     } else  {
         select '<p>Column dropped'
+    }
+    let x = web.trailer()
+}
+
+fn adm.dropfn() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let err = ''
+    let submit = sys.arg(2, 'submit')
+    if submit = 'Drop Function' {
+        let sname = ''
+        let name = ''
+        for sname = info.sch_name(Schema), name = Name from info.function where Id = k {}
+        let x = sys.execute('drop fn ' | sname | '.' | name)
+        delete from info.function where Id = k
+        set err = sys.error()
+    }
+    if submit = '' or err != '' {
+        select '
+      <p><form method=post>
+      <p><input type=submit name=submit value="Drop Function">
+      </form>
+      <p>'
+        , err
+    } else  {
+        select '<p>Function dropped'
     }
     let x = web.trailer()
 }
@@ -587,6 +141,222 @@ Col Description: <input size=50 name=desc value=' | web.attr(desc) | '>
     let x = web.trailer()
 }
 
+fn adm.editfn() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    select '<p><a href="/adm.renamefn?k=', k, '">Rename Function</a>'
+    select ' | <a href="/adm.dropfn?k=', k, '">Drop Function</a>'
+    let adesc = sys.arg(2, 'desc')
+    let sname = ''
+    let name = ''
+    let desc = ''
+    for sname = info.sch_name(Schema), name = Name, desc = Description from info.function where Id = k {}
+    if adesc != '' and adesc != desc {
+        set desc = adesc
+        update info.function set Description = desc where Id = k
+    }
+    let fdef = sys.norm(sys.arg(2, 'fdef'))
+    let e = sys.fn_text(sname, name)
+    if fdef != '' and fdef != e {
+        let x = sys.execute('alter ' | fdef)
+    } else  {
+        set fdef = e
+    }
+    select '
+<p><form method=post>
+<textarea rows=2 cols=80 name=desc>' | web.enc(desc) | '</textarea>
+<textarea rows=20 cols=80 name=fdef>' | web.enc(fdef) | '</textarea>
+<p><input type=submit value=Alter>
+</form>
+<p>'
+    , web.enc(sys.error())
+    let x = web.trailer()
+}
+
+fn adm.editschemadesc() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_desc = sys.arg(2, 'desc')
+    if new_desc != '' {
+        update info.schema set Description = new_desc where Id = k
+        select '<p>Description saved'
+    } else  {
+        let desc = info.sch_desc(k)
+        select '
+<p><form method=post>
+New Description: <input size=50 name=desc value=' | web.attr(desc) | '>
+<p><input type=submit value=Save>
+</form>'
+    }
+    let x = web.trailer()
+}
+
+fn adm.edittabledesc() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_desc = sys.arg(2, 'desc')
+    if new_desc != '' {
+        update info.table set Description = new_desc where Id = k
+        select '<p>Description saved'
+    } else  {
+        let desc = info.table_desc(k)
+        select '
+<p><form method=post>
+Table Description: <input size=50 name=desc value=' | web.attr(desc) | '>
+<p><input type=submit value=Save>
+</form>'
+    }
+    let x = web.trailer()
+}
+
+fn adm.execute() {
+    let x = web.header()
+    let sql = sys.arg(2, 'sql')
+    select '
+<p><b>Execute Sql</b>
+<p><form method=post>
+<textarea rows=10 cols=80 name=sql>' | web.enc(sql) | '</textarea>
+<p><input type=submit value=Go>
+</form>'
+    let x = sys.execute(sql)
+    select '<p style="color:yellow">', web.enc(sys.error())
+    let x = web.trailer()
+}
+
+fn adm.favicon() {}
+
+fn adm.menu() {
+    let x = web.header()
+    select '<p>Schemas: <a href=/adm.newschema>new</a>'
+    select '<p><a href="/adm.showschema?k=', Id, '">'
+    , Name, '</a> : ', web.enc(Description)
+    from info.schema order by Name
+    select '<p><a target=_blank href="/adm.showall">Show All</a>'
+    select '<p><a href=/test.show_cust>Show Cust List</a>'
+    let x = web.trailer()
+}
+
+fn adm.newcol() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let tn = ''
+    for tn = info.sch_name(Schema) | '.' | Name from info.table where Id = k {}
+    let x = web.trailer()
+    let cn = sys.arg(2, 'cn')
+    let dt = sys.arg(2, 'dt')
+    let err = ''
+    if cn != '' and dt != '' {
+        let dup = false
+        let n = ''
+        for n = Name from info.col where Table = k {
+            if n = cn {
+                set dup = true
+            }
+        }
+        if dup {
+            set err = 'Duplicate column name'
+        } else  {
+            let sql = 'alter table ' | tn | ' add column ' | cn | ' ' | dt
+            let x = web.table_save(k)
+            let x = sys.batch(sql)
+            let x = web.table_restore(k)
+            let dts = if dt = 'int' 1 if dt = 'string' 2 else 0
+            insert into info.col(Table, Name, Datatype) values (k, cn, dts)
+        }
+    }
+    if cn = '' or dt = '' or err != '' {
+        select '
+<p><form method=post>
+Column Name : <input name=cn value=' | web.attr(cn) | '> 
+<p>Column Datatype : <input name=dt value=' | web.attr(dt) | '> 
+<p><input type=submit value=Add>
+</form>'
+        , '<p>', err
+    } else  {
+        select '<p>Column added'
+    }
+    let x = web.trailer()
+}
+
+fn adm.newfn() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let sn = info.sch_name(k)
+    let name = sys.arg(2, 'name')
+    let body = sys.arg(2, 'body')
+    let err = ''
+    let show = true
+    if name != '' and body != '' {
+        let sql = 'fn ' | sn | '.' | name | body
+        let x = sys.execute(sql)
+        insert into info.function(Schema, Name) values (k, name)
+        set err = sys.error()
+        set show = err != ''
+    } else  {
+        if body = '' {
+            set body = '(){}'
+        }
+    }
+    if show {
+        select '
+<p><form method=post>
+Function Name : <input name=name value=' | web.attr(name) | '> 
+<p><textarea rows=20 cols=80 name=body>' | web.enc(body) | '</textarea>
+<p><input type=submit value=Create>
+</form>'
+        , '<p>', err
+    } else  {
+        select '<p>Function created'
+    }
+    let x = web.trailer()
+}
+
+fn adm.newschema() {
+    let x = web.header()
+    let name = sys.arg(2, 'name')
+    let err = ''
+    if name != '' {
+        let x = sys.execute('schema ' | name)
+        insert into info.schema(Name) values (name)
+        set err = sys.error()
+    }
+    if err != '' or name = '' {
+        select '
+<p><form method=post>
+Schema Name : <input name=name value=' | web.attr(name) | '> 
+<p><input type=submit value=Create>
+</form>'
+        , '<p>', err
+    } else  {
+        select '<p>Schema created'
+    }
+    let x = web.trailer()
+}
+
+fn adm.newtable() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let sn = info.sch_name(k)
+    let name = sys.arg(2, 'name')
+    let err = ''
+    if name != '' {
+        let sql = 'table ' | sn | '.' | name | '()'
+        let x = sys.execute(sql)
+        insert into info.table(Schema, Name) values (k, name)
+        set err = sys.error()
+    }
+    if name = '' or err != '' {
+        select '
+<p><form method=post>
+Table Name:<input name=name value=' | web.attr(name) | '> 
+<p><input type=submit value=Create>
+</form>'
+    } else  {
+        select 'Table created'
+    }
+    let x = web.trailer()
+}
+
 fn adm.renamecol() {
     let x = web.header()
     let k = sys.parseint(sys.arg(1, 'k'))
@@ -612,9 +382,27 @@ New Column Name: <input name=name>
     let x = web.trailer()
 }
 
-fn web.table_text(schema int, tname string) -> string {
-    let sname = info.sch_name(schema)
-    set result = 'table ' | sname | '.' | tname | sys.table_col_defs(sname, tname)
+fn adm.renamefn() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_name = sys.arg(2, 'name')
+    let sname = ''
+    let name = ''
+    for sname = info.sch_name(Schema), name = Name from info.function where Id = k {}
+    if new_name != '' {
+        let sql = 'rename fn ' | sname | '.' | name | ' to ' | sname | '.' | new_name
+        let x = sys.execute(sql)
+        update info.function set Name = new_name where Id = k
+        select '<p>Function ', name, ' renamed to '
+        , new_name
+    } else  {
+        select '
+<p><form method=post>
+New Name: <input name=name>
+<p><input type=submit value=Rename>
+</form>'
+    }
+    let x = web.trailer()
 }
 
 fn adm.renameschema() {
@@ -640,6 +428,218 @@ New Schema Name: <input name=name>
         select '<p>Schema ', sname, ' renamed to ', new_name
     }
     let x = web.trailer()
+}
+
+fn adm.renametable() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let new_name = sys.arg(2, 'name')
+    let sname = ''
+    let name = ''
+    for sname = info.sch_name(Schema), name = Name from info.table where Id = k {}
+    if new_name != '' {
+        let sql = 'rename table ' | sname | '.' | name | ' to ' | sname | '.' | new_name
+        let x = sys.execute(sql)
+        update info.table set Name = new_name where Id = k
+        select '<p>Table ', name, ' renamed to ', new_name
+    } else  {
+        select '
+<p><form method=post>
+New Table Name: <input name=name>
+<p><input type=submit value=Rename Table>
+</form>'
+    }
+    let x = web.trailer()
+}
+
+fn adm.showall() {
+    let nl = '
+'
+    select 'schema ', Name, nl
+    from info.schema order by Name
+    select 'go', nl
+    select web.table_text(Schema, Name), nl
+    from info.table order by info.sch_name(Schema), Name
+    select 'go', nl
+    select sys.fn_text(info.sch_name(Schema), Name)
+    , nl
+    from info.function order by info.sch_name(Schema), Name
+    select 'go', nl
+    let s = ''
+    let n = ''
+    for s = info.sch_name(Schema), n = Name from info.table order by Id {
+        let t = s | '.' | n
+        let cols = sys.table_col_names(s, n)
+        let ins = 'insert into ' | t | '(' | cols | ') values ('
+        let sel = " '" | ins | "' | " | sys.table_literal(s, n) | " | ')" | nl | "'"
+        let sql = 'select ' | sel | ' from ' | t | ' order by Id'
+        let x = sys.execute(sql)
+        select nl
+    }
+}
+
+fn adm.showschema() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let sname = ''
+    let desc = ''
+    for sname = Name, desc = Description from info.schema where Id = k {}
+    select '<p>Schema ' | sname | ' : ' | web.enc(desc)
+    , ' <a href=/adm.editschemadesc?k=' | k | '>edit</a>'
+    , ' <a href=/adm.renameschema?k=' | k | '>rename</a>'
+    , ' <a href=/adm.dropschema?k=' | k | '>drop</a>'
+    select '<p>Functions <a href=/adm.newfn?k=' | k | '>new</a> :'
+    select '<p><a href="/adm.editfn?k=', Id, '">' | Name | '</a> : '
+    , web.enc(Description)
+    from info.function where Schema = k order by Name
+    select '<p>Tables <a href=/adm.newtable?k=' | k | '>new</a> : '
+    select '<p><a href=/adm.showtable?k=' | Id | '>' | Name | '</a> '
+    , sys.table_col_defs(sname, Name), ' : ', web.enc(Description)
+    from info.table where Schema = k order by Name
+    let x = web.trailer()
+}
+
+fn adm.showtable() {
+    let x = web.header()
+    let k = sys.parseint(sys.arg(1, 'k'))
+    let sname = ''
+    let tname = ''
+    let desc = ''
+    for sname = info.sch_name(Schema), tname = Name, desc = Description from info.table where Id = k {}
+    select '<p>Table ', sname, '.', tname, ' : ', web.enc(desc)
+    , ' <a href=/adm.edittabledesc?k=', k, '>edit</a>'
+    , ' <a href=/adm.renametable?k=', k, '>rename</a>'
+    , ' <a href=/adm.droptable?k=', k, '>drop</a>'
+    select '<p>Columns <a href=/adm.newcol?k=', k, '>new</a> :'
+    select '<p>' | Name | ' : ' | web.enc(Description)
+    , ' <a href=/adm.editcoldesc?k=' | Id | '>edit</a>'
+    , ' <a href=/adm.renamecol?k=' | Id | '>ren</a>'
+    , ' <a href=/adm.dropcol?k=' | Id | '>drop</a>'
+    from info.col where Table = k order by Id
+    let x = web.trailer()
+}
+
+fn info.sch_desc(id int) -> string {
+    for result = Description from info.schema where Id = id {}
+}
+
+fn info.sch_name(id int) -> string {
+    for result = Name from info.schema where Id = id {}
+}
+
+fn info.table_desc(id int) -> string {
+    for result = Description from info.table where Id = id {}
+}
+
+fn test.show_cust() {
+    let x = web.header()
+    select '<p>', Name, ' ', Address, ' ', City, ' '
+    , Postcode, ' ', Email
+    from test.cust order by Name
+    let x = web.trailer()
+}
+
+fn web.attr(s string) -> string {
+    set s = sys.replace(s, '&', '&amp;')
+    set s = sys.replace(s, '"', '&quot;')
+    set result = '"' | s | '"'
+}
+
+fn web.enc(s string) -> string {
+    set s = sys.replace(s, '&', '&amp;')
+    set s = sys.replace(s, '<', '&lt;')
+    set result = s
+}
+
+fn web.header() {
+    select '<html>
+<head>
+<style>
+   body, input, textarea{ background-color:#353535; color:white }
+   a, a:visited{ color: white }
+</style>
+</head>
+<body>
+<p>Links <a href=/adm.menu>Menu</a> <a href=/adm.execute>Exec</a>
+'
+}
+
+fn web.main() {
+    let path = sys.arg(0, '')
+    let path = sys.substr(path, 1, 99)
+    if path = 'favicon.ico' {
+        set path = 'adm.favicon'
+    }
+    let sql = ''
+    if sys.contains(path, '.') {
+        set sql = 'let x = ' | path | '()'
+    } else  {
+        set sql = 'let x = pub.' | path | '()'
+    }
+    let x = sys.execute(sql)
+}
+
+fn web.table_restore(k int) {
+    let sn = ''
+    let tn = ''
+    for sn = info.sch_name(Schema), tn = Name from info.table where Id = k {}
+    let cx = 'cx_resvd'
+    let cols = 'Id'
+    let fors = cx | '0=Id'
+    let vals = cx | '0'
+    let lets = 'let ' | cx | '0' | ' = ' | 0
+    let c = 0
+    let n = ''
+    let dt = 0
+    for n = Name, dt = Datatype from web.temp_col order by Id {
+        set c = c + 1
+        set cols |= ',' | n
+        set fors |= ',' | cx | c | '=' | n
+        set vals |= ',' | cx | c
+        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
+    }
+    let ins = lets | ' for ' | fors | ' from web.temp insert into ' | sn | '.' | tn | '(' | cols | ') values ( ' | vals | ')'
+    let x = sys.batch(ins)
+    let x = sys.batch('drop table web.temp')
+    let x = sys.batch('delete from web.temp_col where true')
+}
+
+fn web.table_save(k int) {
+    let sn = ''
+    let tn = ''
+    for sn = info.sch_name(Schema), tn = Name from info.table where Id = k {}
+    delete from web.temp_col where true
+    let cx = 'cx_resvd'
+    let cols = 'Id'
+    let fors = cx | '0=Id'
+    let vals = cx | '0'
+    let lets = 'let ' | cx | '0' | ' = ' | 0
+    let c = 0
+    let n = ''
+    let dt = 0
+    for n = Name, dt = Datatype from info.col where Table = k order by Id {
+        insert into web.temp_col(Name, Datatype) values (n, dt)
+        set c = c + 1
+        set cols |= ',' | n
+        set fors |= ',' | cx | c | '=' | n
+        set vals |= ',' | cx | c
+        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
+    }
+    let ins = lets | ' for ' | fors | ' from ' | sn | '.' | tn | ' insert into web.temp(' | cols | ') values ( ' | vals | ')'
+    let def = 'table web.temp ' | sys.table_col_defs(sn, tn)
+    let x = sys.batch(def)
+    let x = sys.batch(ins)
+    let x = sys.batch('delete from ' | sn | '.' | tn | ' where true')
+}
+
+fn web.table_text(schema int, tname string) -> string {
+    let sname = info.sch_name(schema)
+    set result = 'table ' | sname | '.' | tname | sys.table_col_defs(sname, tname)
+}
+
+fn web.trailer() {
+    select '
+</body></html>'
 }
 
 go
