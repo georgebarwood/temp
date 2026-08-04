@@ -221,6 +221,9 @@ fn execute_schema_updates(
                     // Remove record from sys_schema using x.table_id and ps.
                     Table::drop(t as i64, dt, ps);
                 }
+                Statement::AddIndex(_x) => {
+                    println!("Add Index not yet implementd");
+                }
                 _ => {
                     // println!("s={:?}", s);
                     panic!();

@@ -56,6 +56,9 @@ pub enum Exp<A: Allocator + Debug + Default> {
 
     /// Conditional expression. if b1 e1 if b2 e2 ... else e_def
     If(VecA<(Exp<A>, Exp<A>), A>, BoxA<Exp<A>, A>),
+
+    /// Default expression.
+    Default(DataType),
 }
 
 impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
@@ -97,6 +100,9 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                     }
                 }
                 els.ev(run, rc)?
+            }
+            Default(dt) => {
+                dt.default_value()
             }
             _ => {
                 // println!("exp={:?}", self);
@@ -336,6 +342,9 @@ impl<A: Allocator + Debug + Default> Exp<A> {
                 }
                 sr.show("else ");
                 els.show(sr)?;
+            }
+            Default(dt) => {
+                write!(&mut sr.output, "default({})", dt)?;
             }
             _ => panic!(),
         }

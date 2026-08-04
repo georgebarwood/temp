@@ -117,7 +117,9 @@
 //!
 //! Strings can be concatenated with |, non-string operands are automatically converted to strings.
 //!
-//! Comnditional expressions, for example: ```select if 7 < 2 'x' if 4 > 3 'y' else 'z'```
+//! Conditional expression, for example: ```select if 7 < 2 'x' if 4 > 3 'y' else 'z'```
+//!
+//! Default expression : default(<datatype>)
 //!
 //! An expression can also be a function call, ```<sname> . <fname> ( <exp>,.. )```
 //!

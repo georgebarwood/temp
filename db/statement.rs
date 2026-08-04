@@ -34,12 +34,12 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     For(For<A, S>),
     /// Optimised For for case where Id = `<exp>`
     ForIdEq(ForIdEq<A, S>),
-    /// Create Schema.
+    /// schema.
     CreateSchema(CreateSchema),
-    /// Create Table.
+    /// table
     CreateTable(CreateTable),
 
-    /// alter table add Column.
+    /// alter table add column.
     AddColumn(AddColumn),
 
     /// Create Function.
@@ -54,14 +54,17 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     /// Rename Column.
     RenameColumn(RenameColumn),
 
-    /// Drop Schema.
+    /// drop schema.
     DropSchema(DropSchema),
-    /// Drop Table.
+    /// drop table.
     DropTable(DropTable),
-    /// alter Table drop column.
+    /// alter table drop column.
     DropColumn(DropColumn),
-    /// Drop Function.
+    /// drop function.
     DropFn(DropFn),
+
+    /// alter table add index.
+    AddIndex(AddIndex),
 }
 
 use std::fmt::Write;
@@ -742,12 +745,19 @@ pub struct RenameFn {
     pub new_fname: SrcPos,
 }
 
-/// add column statement.
+/// alter table add column statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddColumn {
     pub table_id: usize,
     pub col_name: SrcPos,
     pub col_dt: DataType,
+}
+
+/// alter table add index statement.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddIndex {
+    pub table_id: usize,
+    pub col_num: usize,
 }
 
 /// drop column statement.
@@ -822,7 +832,7 @@ where
             ForIdEq(x) => x.exec(run),
             CreateSchema(_) | CreateTable(_) | RenameTable(_) | CreateFn(_) | RenameFn(_)
             | DropFn(_) | DropTable(_) | AddColumn(_) | DropColumn(_) | DropSchema(_)
-            | RenameSchema(_) | RenameColumn(_) | Null => panic!(),
+            | RenameSchema(_) | RenameColumn(_) | AddIndex(_) | Null => panic!(),
         }?;
     }
     Ok(())

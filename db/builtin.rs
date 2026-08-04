@@ -22,6 +22,7 @@ pub enum Builtin {
     parseint,
     error,
     norm,
+    col_datatype,
     // More to do... note: add new functions at end for compatibility.
 }
 
@@ -46,6 +47,7 @@ impl Builtin {
             b"string_literal" => Ok(string_literal),
             b"error" => Ok(error),
             b"norm" => Ok(norm),
+            b"col_datatype" => Ok(col_datatype),
             _ => Err(E::new("Unknown sys call")),
         }
     }
@@ -159,6 +161,25 @@ impl Builtin {
                 Value::Bool(result)
             }
 
+            col_datatype => {
+                let cname = run.stack.pop().unwrap();
+                let cname = cname.string();
+                let tname = run.stack.pop().unwrap();
+                let tname = tname.string();
+                let schema = run.stack.pop().unwrap();
+                let schema = schema.string();
+
+                let sid = run.dict.schema_id(schema).unwrap();
+                let nameid = run.dict.name_id(tname).unwrap();
+                let (_, dt) = run.dict.table(&(*sid, *nameid)).unwrap();
+                let cid = dt.lookup_col(cname).unwrap();
+                let cdt = dt.dt_struct(cid);
+                let mut result = LString::new();
+                use std::fmt::Write;
+                write!( result, "{}", cdt ).unwrap();
+                Value::String(LRc::new(result))
+            }
+
             table_literal => {
                 let tname = run.stack.pop().unwrap();
                 let tname = tname.string();
@@ -228,7 +249,7 @@ impl Builtin {
             contains | col_is_referenced => &DataType::Bool,
             len | parseint => &DataType::Int,
             substr | replace | norm | fn_text | table_col_defs | arg | table_literal
-            | table_col_names | string_literal | error => &DataType::String(0),
+            | table_col_names | string_literal | error | col_datatype => &DataType::String(0),
         }
     }
 
@@ -237,7 +258,7 @@ impl Builtin {
         match self {
             len | string_literal => &STR_1,
             substr => &STR_INT_INT,
-            replace | col_is_referenced => &STR_3,
+            replace | col_is_referenced | col_datatype => &STR_3,
             contains | header | fn_text | table_col_defs | table_col_names | table_literal => {
                 &STR_2
             }
