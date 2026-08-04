@@ -106,7 +106,8 @@ fn adm.droptable() {
         let name = ''
         for sname = info.sch_name(Schema), name = Name from info.table where Id = k {}
         let x = sys.execute('drop table ' | sname | '.' | name)
-        delete from info.function where Id = k
+        delete from info.col where Table = k
+        delete from info.table where Id = k
         set err = sys.error()
     }
     if submit = '' or err != '' {
