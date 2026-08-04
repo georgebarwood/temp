@@ -177,7 +177,7 @@ impl<'a> Parser<'a> {
             let edt = self.resolve(&mut exp, &rctx, 0)?;
 
             if let Some(dt) = &dt {
-                self.check_types(dt, &edt)?;
+                self.check_types(dt, edt)?;
             } else {
                 dt = Some(edt.clone());
             }
@@ -208,7 +208,7 @@ impl<'a> Parser<'a> {
                 if append {
                     self.check_string_or_binary(vdt)?;
                 }
-                self.check_types(vdt, &edt)?;
+                self.check_types(vdt, edt)?;
             }
             if append {
                 Ok(Statement::Append(Append { i, exp }))
@@ -415,7 +415,7 @@ impl<'a> Parser<'a> {
                     let lctx = RContext::Local(&self.locs);
                     let vt = self.resolve(&mut val, &lctx, 0)?;
                     let et = table_dt.dt_struct(cols[i]);
-                    self.check_types(&vt, &et)?;
+                    self.check_types(vt, et)?;
                 }
                 vals.push(val);
                 if !self.test_token(Token::Comma)? {
@@ -520,25 +520,26 @@ impl<'a> Parser<'a> {
     /// Resolve any variable or column names in expression, returns datatype.
     /// Exp::Name expressions are changed to Exp::Col or Exp::Local nodes.
     /// aos = Arguments on Stack which increase distance to local variables.
-    fn resolve(
+    fn resolve<'r,'e,'c>(
         &self,
-        e: & mut Exp<Local>,
-        ctx: & RContext,
+        e: &'e mut Exp<Local>,
+        ctx: & RContext<'c>,
         mut aos: usize,
-    ) -> Result<DataType, E>
+    ) -> Result<&'r DataType, E>
+    where 'e: 'r, 'a: 'r, 'c: 'r
     {
         if self.pass == 1 {
-            return Ok(DataType::Empty);
+            return Ok(&DataType::Empty);
         }
         let dt = match e {
-            Exp::Bool(_) => DataType::Bool,
-            Exp::Int(_) => DataType::Int,
-            Exp::Str(_) => DataType::String(0),
+            Exp::Bool(_) => &DataType::Bool,
+            Exp::Int(_) => &DataType::Int,
+            Exp::Str(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
                 RContext::Table(t, nxt) => {
                     if let Some((col, typ)) = t.name_to_col(tos(self.str(name))) {
                         *e = Exp::col(col, typ);
-                        typ.clone()
+                        typ
                     } else {
                         self.resolve(e, nxt, aos)?
                     }
@@ -546,7 +547,7 @@ impl<'a> Parser<'a> {
                 RContext::Local(locs) => {
                     if let Some((i, typ)) = self.local(locs, name) {
                         *e = Exp::local(i + aos, typ);
-                        typ.clone()
+                        typ
                     } else {
                         let e = &format!("Name not found : {:?}", tos(self.str(name)));
                         return Err(E::new(e));
@@ -558,17 +559,14 @@ impl<'a> Parser<'a> {
                 let t1 = self.resolve(lhs, ctx, aos)?;
                 let t2 = self.resolve(rhs, ctx, aos)?;
 
-                if t1.similar(&t2) || *op == Operator::Concat {
+                if t1.similar(t2) || *op == Operator::Concat {
                     // Ok
                 } else {
-                    return Err(E::new(&format!(
-                        "Binary operator type mismatch lhs={:?} rhs={:?} t1={:?} t2={:?}",
-                        lhs, rhs, t1, t2
-                    )));
+                    return Err(E::new("Binary operator type mismatch"));
                 }
 
                 // Check operator compatible with t1.
-                if !op.applies_to(&t1) {
+                if !op.applies_to(t1) {
                     return Err(E::new(&format!(
                         "Binary operator {} does not apply to type {:?}",
                         op, t1
@@ -576,7 +574,7 @@ impl<'a> Parser<'a> {
                 }
 
                 if op.yields_bool() {
-                    DataType::Bool
+                    &DataType::Bool
                 } else {
                     t1
                 }
@@ -598,7 +596,7 @@ impl<'a> Parser<'a> {
                         let t = self.resolve(e, ctx, aos)?;
                         aos += 1;
                         let pt = &f.parms[i].1;
-                        if !pt.similar(&t) {
+                        if !pt.similar(t) {
                             return Err(E::new(&format!(
                                 "Function call parameter type mismatch t={:?} pt={:?}",
                                 t, pt
@@ -607,7 +605,7 @@ impl<'a> Parser<'a> {
                     }
                     let new = Exp::FnCall(*fid, std::mem::take(args));
                     *e = new;
-                    f.ret.clone()
+                    &f.ret
                 } else {
                     return Err(E::new(&format!(
                         "Function \"{}.{}\" not found",
@@ -626,26 +624,26 @@ impl<'a> Parser<'a> {
                     aos += 1;
 
                     let pt = &arg_types[i];
-                    if !pt.similar(&et) {
+                    if !pt.similar(et) {
                         return Err(E::new(&format!(
                             "Sys call parameter type mismatch et={:?} pt={:?}",
                             et, pt
                         )));
                     }
                 }
-                builtin.result_type().clone()
+                builtin.result_type()
             }
             Exp::If(list, els) => {
                 let t1 = self.resolve(els, ctx, aos)?;
                 for (_, e) in list {
                     let t2 = self.resolve(e, ctx, aos)?;
-                    if !t1.similar(&t2) {
+                    if !t1.similar(t2) {
                         return Err(E::new("All branches of if expression must have same type"));
                     }
                 }
                 t1
             }
-            Exp::Default(dt) => dt.clone(),
+            Exp::Default(dt) => dt,
             Exp::Col(_) => panic!(),
             _ => todo!(),
         };
@@ -657,7 +655,7 @@ impl<'a> Parser<'a> {
         if self.pass == 2 {
             let rctx = RContext::Local(&self.locs);
             let edt = self.resolve(&mut exp, &rctx, 0)?;
-            if edt != DataType::Bool {
+            if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
             }
         }
@@ -670,7 +668,7 @@ impl<'a> Parser<'a> {
             let lctx = RContext::Local(&self.locs);
             let tctx = RContext::Table(table_dt, &lctx);
             let edt = self.resolve(&mut exp, &tctx, 0)?;
-            if edt != DataType::Bool {
+            if edt != &DataType::Bool {
                 return Err(E::new("Boolean expression expected"));
             }
         }
