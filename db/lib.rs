@@ -1,12 +1,13 @@
 //! [Database] based on [tablestg] crate.
 
-/* What next...
-   case expressions? DONE
-   tuples?
-   list and ilist types?
-   change for to mutate existing variables rather than declare new ones ( not sure about this ).
-   Indexes - for where conditions "where col  = exp". or maybe "where somefunc(cols) = exp".
-*/
+//!
+//! Todo List
+//!
+//!   tuples?
+//!
+//!   list and ilist types?
+//!
+//!   Indexes - for where conditions "where col  = exp". or maybe "where somefunc(cols) = exp".
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -119,7 +120,7 @@
 //!
 //! Conditional expression, for example: ```select if 7 < 2 'x' if 4 > 3 'y' else 'z'```
 //!
-//! Default expression : default(<datatype>)
+//! Default expression : `default(<datatype>)`
 //!
 //! An expression can also be a function call, ```<sname> . <fname> ( <exp>,.. )```
 //!

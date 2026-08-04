@@ -101,9 +101,7 @@ impl<A: Allocator + Debug + Default> Eval<Value> for Exp<A> {
                 }
                 els.ev(run, rc)?
             }
-            Default(dt) => {
-                dt.default_value()
-            }
+            Default(dt) => dt.default_value(),
             _ => {
                 // println!("exp={:?}", self);
                 panic!()

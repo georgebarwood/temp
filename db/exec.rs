@@ -217,7 +217,7 @@ fn execute_schema_updates(
                     }
                     let t = x.table;
                     let dt = dict.table_datatype(t).clone();
-                    dict.drop_table(x);
+                    dict.drop_table(x.table);
                     // Remove record from sys_schema using x.table_id and ps.
                     Table::drop(t as i64, dt, ps);
                 }

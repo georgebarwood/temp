@@ -2,7 +2,6 @@ use crate::*;
 use datatype::DataType;
 
 use serde::*;
-use std::collections::HashMap;
 use std::fmt::Write;
 
 /* Need to check when deleting a function that it has no callers.
@@ -25,14 +24,11 @@ pub struct Dict {
     main: DictMain,
     info: DictInfo,
 
-    /// Maps nid to string.
-    names: HashMap<i64, GString>,
-
     /// Maps schema id to string.
     schema_names: HashMap<i64, GString>,
 
-    /// Maps table id to (schema_id, nid).
-    table_names: HashMap<usize, (i64, i64)>,
+    /// Maps table id to (schema_id, tname).
+    table_names: HashMap<usize, (i64, GString)>,
 }
 
 /// Main dictionary, run-time copy.
@@ -40,14 +36,12 @@ pub struct Dict {
 struct DictMain {
     /// Map from string to schema id.
     schemas: HashMap<GString, i64>,
-    /// Map from string to name id.
-    names: HashMap<GString, i64>,
 
-    /// Map from (schema id,name id) to table index/id.
-    table_lookup: HashMap<(i64, i64), usize>,
+    /// Map from (schema id,name) to table index/id.
+    table_lookup: HashMap<(i64, GString), usize>,
 
-    /// Map from (schema id, name id) to index into funcs.
-    func_lookup: HashMap<(i64, i64), usize>,
+    /// Map from (schema id, name) to index into funcs.
+    func_lookup: HashMap<(i64, GString), usize>,
 
     /// List of table datatypes.
     table_dt: GVec<STable>,
@@ -108,18 +102,6 @@ impl DictMain {
     fn from_bytes_id(b: &[u8]) -> Self {
         postcard::from_bytes(&b[8..]).unwrap()
     }
-
-    /// Retain only nids that are still in use.
-    fn cleanup(&mut self) {
-        let mut ok = HashSet::default();
-        for (_, nid) in self.table_lookup.keys() {
-            ok.insert(nid);
-        }
-        for (_, nid) in self.func_lookup.keys() {
-            ok.insert(nid);
-        }
-        self.names.retain(|_, nid| ok.contains(nid));
-    }
 }
 
 impl Dict {
@@ -156,14 +138,9 @@ impl Dict {
         false
     }
 
-    /// Get table name id or function name id from name.
-    pub fn name_id(&self, name: &str) -> Option<&i64> {
-        self.main.names.get(name)
-    }
-
     /// Get table id and datatype from schema id and name id.
-    pub fn table(&self, x: &(i64, i64)) -> Option<(usize, &STable)> {
-        if let Some(table_ix) = self.main.table_lookup.get(x) {
+    pub fn table(&self, x:i64, s:&str ) -> Option<(usize, &STable)> { 
+        if let Some(table_ix) = self.main.table_lookup.get( &PairKey::new(x,s) ) {
             let ix = *table_ix - RESVD_ID as usize;
             Some((*table_ix, &self.main.table_dt[ix]))
         } else {
@@ -173,9 +150,8 @@ impl Dict {
 
     /// Get table schema and name from table id.
     pub fn table_name(&self, id: usize) -> Option<(&str, &str)> {
-        let (schema_id, nid) = self.table_names.get(&id)?;
+        let (schema_id, tname) = self.table_names.get(&id)?;
         let schema = self.schema_names.get(schema_id)?;
-        let tname = self.names.get(nid)?;
         Some((schema, tname))
     }
 
@@ -185,8 +161,8 @@ impl Dict {
     }
 
     /// Get function index from schema id and name id.
-    pub fn func_index(&self, x: &(i64, i64)) -> Option<&usize> {
-        self.main.func_lookup.get(x)
+    pub fn func_index(&self, x:i64, s:&str) -> Option<&usize> {
+        self.main.func_lookup.get( &PairKey{x,s} )
     }
 
     /// Get function from function index.
@@ -197,18 +173,6 @@ impl Dict {
     /// Get function info from function index.
     pub fn func_info(&self, ix: usize) -> &SFunc<YesString> {
         &self.info.funcs[ix]
-    }
-
-    /// Get name id from string.
-    fn new_name_id(&mut self, s: &str) -> i64 {
-        if let Some(id) = self.main.names.get(s) {
-            return *id;
-        }
-        self.main.last_name_id += 1;
-        let id = self.main.last_name_id;
-        self.main.names.insert(GString::from(s), id);
-        self.names.insert(id, GString::from(s));
-        id
     }
 
     /// Create Schema.
@@ -239,13 +203,13 @@ impl Dict {
     }
 
     /// Create Table.
-    pub fn create_table(&mut self, schema_id: i64, name: &str, dt: &DataType) -> (usize, STable) {
+    pub fn create_table(&mut self, schema_id: i64, tname: &str, dt: &DataType) -> (usize, STable) {
         let id = self.main.new_table_id();
-        let nid = self.new_name_id(name);
-        self.main.table_lookup.insert((schema_id, nid), id);
+        let tname = GString::from(tname);
+        self.main.table_lookup.insert((schema_id, tname.clone()), id);
         let dt = Arc::new(dt.clone());
         self.main.table_dt.push(dt.clone());
-        self.table_names.insert(id, (schema_id, nid));
+        self.table_names.insert(id, (schema_id, tname));
         (id, dt)
     }
 
@@ -278,23 +242,26 @@ impl Dict {
 
     /// Rename Table.
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
+        let (old_schema_id, old_name) = self.table_names.get(&x.table_id).unwrap();
+        
         let new_tname = x.new_tname.sstr(src);
-        let new_nid = self.new_name_id(new_tname);
+        let new_tname = GString::from(new_tname);
         let t: usize = self
             .main
             .table_lookup
-            .remove(&(x.old_schema_id, x.old_nid))
+            .remove( &PairKey::new(*old_schema_id, old_name) )
             .unwrap();
-        self.main.table_lookup.insert((x.new_schema_id, new_nid), t);
-        self.table_names.insert(t, (x.new_schema_id, new_nid));
+        self.main.table_lookup.insert((x.new_schema_id, new_tname.clone()), t);
+        self.table_names.insert(t, (x.new_schema_id, new_tname));
     }
 
     /// Drop Table.
-    pub fn drop_table(&mut self, x: &DropTable) {
-        let ix = self
+    pub fn drop_table(&mut self, ix: usize) {
+        let (old_schema_id, old_name) = self.table_names.get(&ix).unwrap();
+        self
             .main
             .table_lookup
-            .remove(&(x.schema_id, x.name_id))
+            .remove( &PairKey::new(*old_schema_id, old_name) )
             .unwrap();
         self.main.table_dt[ix - RESVD_ID as usize] = Arc::new(DataType::Empty); // Now an empty slot.
         // ToDo : insert into set of free table ids for re-use.
@@ -303,8 +270,8 @@ impl Dict {
     /// Drop Function.
     pub fn drop_fn(&mut self, function_id: usize) {
         let f = &mut self.info.funcs[function_id];
-        let nid = self.main.names[f.fname.str()];
-        self.main.func_lookup.remove(&(f.schema_id, nid));
+        
+        self.main.func_lookup.remove( &PairKey::new(f.schema_id, f.fname.str()) );
         *f = Arc::new(SFunc::default());
         let f = &mut self.main.funcs[function_id];
         *f = Arc::new(SFunc::default());
@@ -345,7 +312,6 @@ impl Dict {
     pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
         let fname = x.fname.sstr(src);
         let func_id = self.main.funcs.len();
-        let nid = self.new_name_id(fname);
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
             let name = name.sstr(src);
@@ -359,7 +325,7 @@ impl Dict {
             block: GVec::new(), // Dummy block on pass 1
         };
         self.main.funcs.push(Arc::new(func));
-        self.main.func_lookup.insert((x.schema_id, nid), func_id);
+        self.main.func_lookup.insert((x.schema_id, GString::from(fname)), func_id);
 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
@@ -379,8 +345,7 @@ impl Dict {
     /// Set Function block.
     pub fn set_fn_block(&mut self, x: &CreateFn<Local>, src: &[u8]) {
         let fname = x.fname.sstr(src);
-        let nid = self.main.names.get(fname).unwrap();
-        let fid = self.main.func_lookup.get(&(x.schema_id, *nid)).unwrap();
+        let fid = self.main.func_lookup.get( &PairKey::new(x.schema_id, fname) ).unwrap();
 
         let f = &mut self.main.funcs[*fid];
         let fm = Arc::make_mut(f);
@@ -395,21 +360,20 @@ impl Dict {
 
     /// Rename Function.
     pub fn rename_fn(&mut self, x: &RenameFn, src: &[u8]) {
-        let fid: usize = self
-            .main
-            .func_lookup
-            .remove(&(x.old_schema_id, x.old_nid))
-            .unwrap();
-        let new_fname = x.new_fname.sstr(src);
-        let new_nid = self.new_name_id(new_fname);
-
+        let fid = x.function_id;
+        let f = &mut self.info.funcs[fid];
+                
         self.main
             .func_lookup
-            .insert((x.new_schema_id, new_nid), fid);
+            .remove(&PairKey::new(f.schema_id, f.fname.str()))
+            .unwrap();
+        let new_fname = x.new_fname.sstr(src);
 
-        // Update name in self.info.
-        let f = &mut self.info.funcs[fid];
+        self.main.func_lookup.insert((x.new_schema_id, GString::from(new_fname)), fid);
+
+        // Update name and schema in self.info.
         let fm = Arc::make_mut(f);
+        fm.schema_id = x.new_schema_id;
         fm.fname = YesString::from_str(new_fname);
     }
 
@@ -428,12 +392,10 @@ impl Dict {
     /// Load dict from sys store ( eventually may want to delay info load until it is needed ).
     pub fn load_from_sys_store(ps: &mut PageSet) -> Arc<Dict> {
         let bytes = Self::load(DICT_ID, ps);
-        let mut main = DictMain::from_bytes_id(&bytes);
+        let main = DictMain::from_bytes_id(&bytes);
 
         let ibytes = Self::load(INFO_ID, ps);
         let info = DictInfo::from_bytes_id(&ibytes);
-
-        main.cleanup();
 
         let mut dict = Dict {
             main,
@@ -444,11 +406,9 @@ impl Dict {
         for (k, v) in &dict.main.schemas {
             dict.schema_names.insert(*v, k.clone());
         }
-        for (k, v) in &dict.main.names {
-            dict.names.insert(*v, k.clone());
-        }
+
         for (k, id) in &dict.main.table_lookup {
-            dict.table_names.insert(*id, *k);
+            dict.table_names.insert(*id, k.clone());
         }
 
         Arc::new(dict)
@@ -720,5 +680,27 @@ impl<'a> SRun<'a> {
 
     pub fn col(&self) -> usize {
         self.output.len() - self.line_start
+    }
+}
+
+use equivalent::Equivalent;
+#[derive(Hash)]
+struct PairKey<'a>{
+    x: i64,
+    s: &'a str
+}
+
+impl <'a> PairKey<'a>
+{
+    fn new( x:i64, s: &'a str) -> Self
+    {
+       Self{ x, s }
+    }
+}
+
+impl <'a> Equivalent<(i64,GString)> for PairKey<'a>
+{
+    fn equivalent(&self, k: &(i64, GString)) -> bool { 
+       self.x == k.0 && self.s == k.1
     }
 }

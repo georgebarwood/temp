@@ -719,8 +719,7 @@ pub struct CreateTable {
 /// Rename table statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameTable {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
+    pub table_id: usize,
     pub new_schema_id: i64,
     pub new_tname: SrcPos,
 }
@@ -739,8 +738,7 @@ pub struct CreateFn<A: Allocator + Debug + Default> {
 /// rename fn statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameFn {
-    pub old_schema_id: i64,
-    pub old_nid: i64,
+    pub function_id: usize,
     pub new_schema_id: i64,
     pub new_fname: SrcPos,
 }
@@ -784,8 +782,6 @@ pub struct DropSchema {
 /// drop table statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropTable {
-    pub schema_id: i64,
-    pub name_id: i64,
     pub table: usize,
 }
 
