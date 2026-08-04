@@ -3,6 +3,10 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+/* Idea for "table" Datatype.
+   Implement as Small (vec), Small (hash table) or Large (Table) variants.
+*/
+
 /*
    Idea for re-using indirect values ( not yet implemented ).
    On Store delete, allow deleted indirect values to be collected into "garbage" container rather than deleted.

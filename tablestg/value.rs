@@ -33,7 +33,7 @@ pub enum Value {
     Enum(usize, LBox<Value>),
     /// List of integers.
     IList(LRc<LVec<i64>>),
-    /// DataType value ( may be unused, not sure this is needed ).
+    /// DataType value.
     DataType(DataType),
 }
 
