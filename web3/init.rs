@@ -4,11 +4,11 @@ schema info
 schema test
 schema web
 go
-table info.col(Table int, Name string, Datatype int, Description string)
+table info.col(Table int, Name string, Description string)
 table info.function(Schema int, Name string, Description string)
 table info.schema(Name string, Description string)
 table info.table(Schema int, Name string, Description string)
-table test.cust(Name string, Address string, Postcode string, City string, Email string, Notes string)
+table test.cust(Name string, Address string, Postcode string, City string, Email string, Country int)
 table web.temp_col(Name string, Datatype int)
 go
 fn adm.dropcol() {
@@ -260,8 +260,7 @@ fn adm.newcol() {
             let x = web.table_save(k)
             let x = sys.batch(sql)
             let x = web.table_restore(k)
-            let dts = if dt = 'int' 1 if dt = 'string' 2 else 0
-            insert into info.col(Table, Name, Datatype) values (k, cn, dts)
+            insert into info.col(Table, Name) values (k, cn)
         }
     }
     if cn = '' or dt = '' or err != '' {
@@ -589,14 +588,14 @@ fn web.table_restore(k int) {
     let vals = cx | '0'
     let lets = 'let ' | cx | '0' | ' = ' | 0
     let c = 0
-    let n = ''
+    let cn = ''
     let dt = 0
-    for n = Name, dt = Datatype from web.temp_col order by Id {
+    for cn = Name from web.temp_col order by Id {
         set c = c + 1
-        set cols |= ',' | n
-        set fors |= ',' | cx | c | '=' | n
+        set cols |= ',' | cn
+        set fors |= ',' | cx | c | '=' | cn
         set vals |= ',' | cx | c
-        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
+        set lets |= ' let ' | cx | c | '=default(' | sys.col_datatype(sn, tn, cn) | ')'
     }
     let ins = lets | ' for ' | fors | ' from web.temp insert into ' | sn | '.' | tn | '(' | cols | ') values ( ' | vals | ')'
     let x = sys.batch(ins)
@@ -615,15 +614,14 @@ fn web.table_save(k int) {
     let vals = cx | '0'
     let lets = 'let ' | cx | '0' | ' = ' | 0
     let c = 0
-    let n = ''
-    let dt = 0
-    for n = Name, dt = Datatype from info.col where Table = k order by Id {
-        insert into web.temp_col(Name, Datatype) values (n, dt)
+    let cn = ''
+    for cn = Name from info.col where Table = k order by Id {
+        insert into web.temp_col(Name) values (cn)
         set c = c + 1
-        set cols |= ',' | n
-        set fors |= ',' | cx | c | '=' | n
+        set cols |= ',' | cn
+        set fors |= ',' | cx | c | '=' | cn
         set vals |= ',' | cx | c
-        set lets |= ' let ' | cx | c | '=' | if dt = 1 '0' else "''"
+        set lets |= ' let ' | cx | c | '=default(' | sys.col_datatype(sn, tn, cn) | ')'
     }
     let ins = lets | ' for ' | fors | ' from ' | sn | '.' | tn | ' insert into web.temp(' | cols | ') values ( ' | vals | ')'
     let def = 'table web.temp ' | sys.table_col_defs(sn, tn)
@@ -674,7 +672,7 @@ insert into info.function(Id, Schema, Name, Description) values (17,2,'attr','Re
 insert into info.function(Id, Schema, Name, Description) values (18,3,'showtable','Show table')
 insert into info.function(Id, Schema, Name, Description) values (19,3,'newschema','Create schema')
 insert into info.function(Id, Schema, Name, Description) values (20,3,'newtable','Create table')
-insert into info.function(Id, Schema, Name, Description) values (21,3,'newcol','Create new table column')
+insert into info.function(Id, Schema, Name, Description) values (21,3,'newcol','Create new table column. Todo: verify dt')
 insert into info.function(Id, Schema, Name, Description) values (22,3,'renametable','Rename table')
 insert into info.function(Id, Schema, Name, Description) values (23,3,'edittabledesc','Edit table description')
 insert into info.function(Id, Schema, Name, Description) values (24,1,'table_desc','Get table description')
@@ -690,28 +688,27 @@ insert into info.function(Id, Schema, Name, Description) values (36,3,'renamecol
 insert into info.function(Id, Schema, Name, Description) values (37,2,'table_text','Returns table declaration from schema and table name.')
 insert into info.function(Id, Schema, Name, Description) values (38,3,'renameschema','Rename schema')
 
-insert into info.col(Id, Table, Name, Datatype, Description) values (1,1,'Name',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (2,1,'Description',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (3,2,'Schema',1,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (4,2,'Name',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (5,2,'Description',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (6,3,'Schema',1,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (7,3,'Name',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (8,3,'Description',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (9,4,'Table',1,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (10,4,'Name',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (11,4,'Datatype',1,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (12,4,'Description',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (13,5,'Name',2,'First name and surname')
-insert into info.col(Id, Table, Name, Datatype, Description) values (14,5,'Address',2,'Postal address')
-insert into info.col(Id, Table, Name, Datatype, Description) values (15,5,'Postcode',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (16,5,'City',2,'City or Town')
-insert into info.col(Id, Table, Name, Datatype, Description) values (17,6,'Name',2,'')
-insert into info.col(Id, Table, Name, Datatype, Description) values (18,5,'Email',2,'Email address')
-insert into info.col(Id, Table, Name, Datatype, Description) values (19,5,'Notes',2,'')
+insert into info.col(Id, Table, Name, Description) values (1,1,'Name','')
+insert into info.col(Id, Table, Name, Description) values (2,1,'Description','')
+insert into info.col(Id, Table, Name, Description) values (3,2,'Schema','')
+insert into info.col(Id, Table, Name, Description) values (4,2,'Name','')
+insert into info.col(Id, Table, Name, Description) values (5,2,'Description','')
+insert into info.col(Id, Table, Name, Description) values (6,3,'Schema','')
+insert into info.col(Id, Table, Name, Description) values (7,3,'Name','')
+insert into info.col(Id, Table, Name, Description) values (8,3,'Description','')
+insert into info.col(Id, Table, Name, Description) values (9,4,'Table','')
+insert into info.col(Id, Table, Name, Description) values (10,4,'Name','')
+insert into info.col(Id, Table, Name, Description) values (11,4,'Description','')
+insert into info.col(Id, Table, Name, Description) values (12,5,'Name','First name and surname')
+insert into info.col(Id, Table, Name, Description) values (13,5,'Address','Postal address')
+insert into info.col(Id, Table, Name, Description) values (14,5,'Postcode','')
+insert into info.col(Id, Table, Name, Description) values (15,5,'City','City or Town')
+insert into info.col(Id, Table, Name, Description) values (16,6,'Name','')
+insert into info.col(Id, Table, Name, Description) values (17,5,'Email','Email address')
+insert into info.col(Id, Table, Name, Description) values (18,5,'Country','')
 
-insert into test.cust(Id, Name, Address, Postcode, City, Email, Notes) values (2,'George Barwood','33 Sandpiper Close','GL2 4LZ','Gloucester','george@gmail.com!','')
-insert into test.cust(Id, Name, Address, Postcode, City, Email, Notes) values (3,'Marilyn Barwood','','','','','')
+insert into test.cust(Id, Name, Address, Postcode, City, Email, Country) values (2,'George Barwood','33 Sandpiper Close','GL2 4LZ','Gloucester','george@gmail.com!',0)
+insert into test.cust(Id, Name, Address, Postcode, City, Email, Country) values (3,'Marilyn Barwood','','','','',0)
 
 
 "###;
