@@ -278,7 +278,80 @@ impl Dict {
         self.main.free_table_ids.insert(ix);
     }
 
-    /// Drop Function.
+    fn new_func_id(&mut self) -> usize {
+        if let Some(result) = self.main.free_func_ids.pop_first()
+        {
+            return result;
+        }
+        let result = self.main.funcs.len();
+        self.main.funcs.push( Default::default() );
+        self.info.funcs.push( Default::default() );
+        result
+    }
+
+    fn get_func<S: XString>(&mut self, x: &CreateFn<Local>, src: &[u8]) -> Arc<SFunc<S>>
+    {
+        let mut parms = GVec::new();
+        for (name, typ) in &x.parms {
+            let name = name.sstr(src);
+            parms.push((S::from_str(name), typ.clone()));
+        }
+        Arc::new(SFunc {
+            ret: x.ret.clone(),
+            parms,
+            block: GVec::new(), // Dummy block on pass 1
+        })
+    }
+
+    /// Create Function.
+    pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
+        let fname = x.fname.sstr(src);
+        let func_id = self.new_func_id();
+ 
+        self.main.funcs[func_id] = self.get_func(x, src);
+        self.info.funcs[func_id] = self.get_func(x, src);
+        
+        self.main
+            .func_lookup
+            .insert((x.schema_id, GString::from(fname)), func_id);
+            
+        self.func_names.insert(func_id, (x.schema_id, GString::from(fname)) );
+    }
+
+    /// Set Function block.
+    pub fn set_fn_block(&mut self, x: &CreateFn<Local>, src: &[u8]) {
+        let fname = x.fname.sstr(src);
+        let fid = self
+            .main
+            .func_lookup
+            .get(&PairKey::new(x.schema_id, fname))
+            .unwrap();
+
+        let f = &mut self.main.funcs[*fid];
+        let fm = Arc::make_mut(f);
+        fm.block = gblock(&x.block, src);
+        encode_block(&mut fm.block);
+
+        let f = &mut self.info.funcs[*fid];
+        let fm = Arc::make_mut(f);
+        fm.block = gblock(&x.block, src);
+        // info func is not encoded.
+    }
+
+    /// Rename Function.
+    pub fn rename_fn(&mut self, x: &RenameFn, src: &[u8]) {
+        let fid = x.function_id;
+        let (old_schema_id, old_fname) = self.func_names.get(&fid).unwrap();
+        self.main.func_lookup
+            .remove(&PairKey::new(*old_schema_id, old_fname))
+            .unwrap();
+        let new_fname = x.new_fname.sstr(src);
+        self.main.func_lookup
+            .insert((x.new_schema_id, GString::from(new_fname)), fid);
+        self.func_names.insert(fid, ( x.new_schema_id, GString::from(new_fname) ) );
+    }
+
+        /// Drop Function.
     pub fn drop_fn(&mut self, function_id: usize) {
         let (sid,fname) = self.func_names.remove(&function_id).unwrap();
         self.main.func_lookup.remove(&PairKey::new(sid, &fname));
@@ -320,86 +393,6 @@ impl Dict {
             }
         }
         false
-    }
-
-    fn new_func_id(&mut self) -> usize {
-        if let Some(result) = self.main.free_func_ids.pop_first()
-        {
-            return result;
-        }
-        let result = self.main.funcs.len();
-        self.main.funcs.push( Arc::new(SFunc::default()) );
-        self.info.funcs.push( Arc::new(SFunc::default()) );
-        result
-    }
-
-    /// Create Function.
-    pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
-        let fname = x.fname.sstr(src);
-        let func_id = self.new_func_id();
- 
-        let mut parms = GVec::new();
-        for (name, typ) in &x.parms {
-            let name = name.sstr(src);
-            parms.push((NoString::from_str(name), typ.clone()));
-        }
-        let func = SFunc::<NoString> {
-            ret: x.ret.clone(),
-            parms,
-            block: GVec::new(), // Dummy block on pass 1
-        };
-        self.main.funcs[func_id] = Arc::new(func);
-        
-        let mut parms = GVec::new();
-        for (name, typ) in &x.parms {
-            let name = name.sstr(src);
-            parms.push((YesString::from_str(name), typ.clone()));
-        }
-        let info_func = SFunc::<YesString> {
-            ret: x.ret.clone(),
-            parms,
-            block: GVec::new(), // Dummy block on pass 1
-        };
-        self.info.funcs[func_id] = Arc::new(info_func);
-        
-        self.main
-            .func_lookup
-            .insert((x.schema_id, GString::from(fname)), func_id);
-            
-        self.func_names.insert(func_id, (x.schema_id, GString::from(fname)) );
-    }
-
-    /// Set Function block.
-    pub fn set_fn_block(&mut self, x: &CreateFn<Local>, src: &[u8]) {
-        let fname = x.fname.sstr(src);
-        let fid = self
-            .main
-            .func_lookup
-            .get(&PairKey::new(x.schema_id, fname))
-            .unwrap();
-
-        let f = &mut self.main.funcs[*fid];
-        let fm = Arc::make_mut(f);
-        fm.block = gblock(&x.block, src);
-        encode_block(&mut fm.block);
-
-        let f = &mut self.info.funcs[*fid];
-        let fm = Arc::make_mut(f);
-        fm.block = gblock(&x.block, src);
-        // info func is not encoded.
-    }
-
-    /// Rename Function.
-    pub fn rename_fn(&mut self, x: &RenameFn, src: &[u8]) {
-        let fid = x.function_id;
-        let (old_schema_id, old_fname) = self.func_names.get(&fid).unwrap();
-        self.main.func_lookup
-            .remove(&PairKey::new(*old_schema_id, old_fname))
-            .unwrap();
-        let new_fname = x.new_fname.sstr(src);
-        self.main.func_lookup
-            .insert((x.new_schema_id, GString::from(new_fname)), fid);
-        self.func_names.insert(fid, ( x.new_schema_id, GString::from(new_fname) ) );
     }
 
     /// Save dict to sys store.
