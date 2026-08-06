@@ -16,7 +16,7 @@ const DICT_ID: u64 = 1;
 const INFO_ID: u64 = 2;
 
 /// Last reserved id (leave some space).
-const RESVD_ID: u64 = 16;
+const RESVD_ID: usize = 16;
 
 /// Dictionary to look up schema, tables, functions etc.
 #[derive(Clone, Default)]
@@ -53,7 +53,9 @@ struct DictMain {
     funcs: GVec<Arc<SFunc<NoString>>>,
 
     last_schema_id: i64,
-    last_table_id: usize,
+
+    free_table_ids: BTreeSet<usize>,
+    free_func_ids: BTreeSet<usize>,
 }
 
 /// Extra info, such as parameter and local variable names for functions.
@@ -78,18 +80,23 @@ impl DictInfo {
 
 impl DictMain {
     fn new() -> Self {
-        Self {
-            last_table_id: (RESVD_ID - 1) as usize,
-            ..Default::default()
-        }
+        Default::default()
     }
     fn new_schema_id(&mut self) -> i64 {
+    
         self.last_schema_id += 1;
         self.last_schema_id
     }
-    fn new_table_id(&mut self) -> usize {
-        self.last_table_id += 1;
-        self.last_table_id
+    
+    fn new_table_id(&mut self, dt: STable ) -> usize {
+        if let Some(result) = self.free_table_ids.pop_first()
+        {
+            self.table_dt[result - RESVD_ID] = dt;
+            return result;
+        }
+        let result = self.table_dt.len();
+        self.table_dt.push( dt );
+        result + RESVD_ID
     }
 
     /// Serialize as bytes, with pre-pended id.
@@ -143,7 +150,7 @@ impl Dict {
     /// Get table id and datatype from schema id and name id.
     pub fn table(&self, x: i64, s: &str) -> Option<(usize, &STable)> {
         if let Some(table_ix) = self.main.table_lookup.get(&PairKey::new(x, s)) {
-            let ix = *table_ix - RESVD_ID as usize;
+            let ix = *table_ix - RESVD_ID;
             Some((*table_ix, &self.main.table_dt[ix]))
         } else {
             None
@@ -159,7 +166,7 @@ impl Dict {
 
     /// Get table datatype from table id.
     pub fn table_datatype(&self, id: usize) -> &STable {
-        &self.main.table_dt[id - RESVD_ID as usize]
+        &self.main.table_dt[id - RESVD_ID]
     }
 
     /// Get function index from schema id and name.
@@ -206,20 +213,19 @@ impl Dict {
 
     /// Create Table.
     pub fn create_table(&mut self, schema_id: i64, tname: &str, dt: &DataType) -> (usize, STable) {
-        let id = self.main.new_table_id();
+        let dt = Arc::new(dt.clone());
+        let id = self.main.new_table_id(dt.clone());
         let tname = GString::from(tname);
         self.main
             .table_lookup
             .insert((schema_id, tname.clone()), id);
-        let dt = Arc::new(dt.clone());
-        self.main.table_dt.push(dt.clone());
         self.table_names.insert(id, (schema_id, tname));
         (id, dt)
     }
 
     /// Add Column.
     pub fn add_column(&mut self, table_id: usize, col_name: &str, col_dt: &DataType) -> STable {
-        let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
+        let dt = &mut self.main.table_dt[table_id - RESVD_ID];
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
         dtm.push((GString::from(col_name), col_dt.clone()));
@@ -228,7 +234,7 @@ impl Dict {
 
     /// Rename Column.
     pub fn rename_column(&mut self, table_id: usize, col_num: usize, new_name: &str) -> STable {
-        let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
+        let dt = &mut self.main.table_dt[table_id - RESVD_ID];
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
         dtm[col_num].0 = GString::from(new_name);
@@ -237,7 +243,7 @@ impl Dict {
 
     /// Drop Column.
     pub fn drop_column(&mut self, table_id: usize, col_num: usize) -> STable {
-        let dt = &mut self.main.table_dt[table_id - RESVD_ID as usize];
+        let dt = &mut self.main.table_dt[table_id - RESVD_ID];
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
         dtm.remove(col_num);
@@ -268,8 +274,8 @@ impl Dict {
             .table_lookup
             .remove(&PairKey::new(*old_schema_id, old_name))
             .unwrap();
-        self.main.table_dt[ix - RESVD_ID as usize] = Arc::new(DataType::Empty); // Now an empty slot.
-        // ToDo : insert into set of free table ids for re-use.
+        self.main.table_dt[ix - RESVD_ID] = Arc::new(DataType::Invalid); // Now an empty slot.
+        self.main.free_table_ids.insert(ix);
     }
 
     /// Drop Function.
@@ -283,7 +289,7 @@ impl Dict {
         let f = &mut self.info.funcs[function_id];
         *f = Arc::new(SFunc::default());
         
-        // ToDo : insert into set of free function ids for re-use.
+        self.main.free_func_ids.insert(function_id);
     }
 
     /// Check if table is referenced.
@@ -316,10 +322,22 @@ impl Dict {
         false
     }
 
+    fn new_func_id(&mut self) -> usize {
+        if let Some(result) = self.main.free_func_ids.pop_first()
+        {
+            return result;
+        }
+        let result = self.main.funcs.len();
+        self.main.funcs.push( Arc::new(SFunc::default()) );
+        self.info.funcs.push( Arc::new(SFunc::default()) );
+        result
+    }
+
     /// Create Function.
     pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
         let fname = x.fname.sstr(src);
-        let func_id = self.main.funcs.len();
+        let func_id = self.new_func_id();
+ 
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
             let name = name.sstr(src);
@@ -330,12 +348,8 @@ impl Dict {
             parms,
             block: GVec::new(), // Dummy block on pass 1
         };
-        self.main.funcs.push(Arc::new(func));
-        self.main
-            .func_lookup
-            .insert((x.schema_id, GString::from(fname)), func_id);
-        self.func_names.insert(func_id, (x.schema_id, GString::from(fname)) );
-
+        self.main.funcs[func_id] = Arc::new(func);
+        
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
             let name = name.sstr(src);
@@ -346,7 +360,13 @@ impl Dict {
             parms,
             block: GVec::new(), // Dummy block on pass 1
         };
-        self.info.funcs.push(Arc::new(info_func));
+        self.info.funcs[func_id] = Arc::new(info_func);
+        
+        self.main
+            .func_lookup
+            .insert((x.schema_id, GString::from(fname)), func_id);
+            
+        self.func_names.insert(func_id, (x.schema_id, GString::from(fname)) );
     }
 
     /// Set Function block.
@@ -417,7 +437,7 @@ impl Dict {
         }
 
         for (k, id) in &dict.main.func_lookup {
-            dict.table_names.insert(*id, k.clone());
+            dict.func_names.insert(*id, k.clone());
         }
 
         Arc::new(dict)
