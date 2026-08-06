@@ -105,7 +105,7 @@ impl Builtin {
                 let fname = run.stack.pop().unwrap();
                 let schema = run.stack.pop().unwrap();
                 let sid = run.dict.schema_id(schema.string()).unwrap();
-                let fix = run.dict.func_index( *sid, fname.string() ).unwrap();
+                let fix = run.dict.func_index(*sid, fname.string()).unwrap();
                 let func = run.dict.func_info(*fix);
                 let result = func.to_source(run.dict);
                 Value::String(LRc::new(result))

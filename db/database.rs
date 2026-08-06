@@ -81,12 +81,11 @@ impl Database {
                 }
             }
         }
-
-        let mut result = 0;
-        if !tr.read_only() {
-            result = self.commit(ps, dict, dict_changed);
+        if tr.read_only() {
+            0
+        } else {
+            self.commit(ps, dict, dict_changed)
         }
-        result
     }
 
     /// Called before process terminates to ensure all commits are flushed to permanent storage.

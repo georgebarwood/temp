@@ -553,9 +553,10 @@ impl<A: Allocator + Debug + Default> Select<A> {
             let t = run.load_table(*f);
             let table = t.try_borrow()?;
             let mut iter = table.iter(run.ps);
+            let mut items = table.lazy_row_alloc();
             while let Some(b) = iter.next_ref(run.ps) {
                 // print!("got a row :");
-                let mut lr = table.lazy_row(b);
+                let mut lr = table.lazy_row(b, &mut items);
                 let ok = if let Some(wher) = &self.wher {
                     wher.ev(run, &mut lr)?.bool()
                 } else {
@@ -632,17 +633,16 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
             let t = run.load_table(self.from);
             let table = t.try_borrow()?;
             let mut iter = table.iter(run.ps);
+            let mut items = table.lazy_row_alloc();
             while let Some(b) = iter.next_ref(run.ps) {
-                let mut lr = table.lazy_row(b);
-
-                let ok = if let Some(wher) = &self.wher {
-                    let v = wher.ev(run, &mut lr)?;
-                    v.bool()
-                } else {
-                    true
-                };
-
-                if ok {
+                let mut lr = table.lazy_row(b, &mut items);
+                if {
+                    if let Some(wher) = &self.wher {
+                        wher.ev(run, &mut lr)?.bool()
+                    } else {
+                        true
+                    }
+                } {
                     for (i, e) in &self.assigns {
                         let v = e.ev(run, &mut lr)?;
                         *run.local(*i) = v;
@@ -650,6 +650,7 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
                     execute_block(&self.block, run)?;
                 }
             }
+
             Ok(())
         }
     }
@@ -842,8 +843,9 @@ where
     let mut result = LVec::new();
     let table = t.try_borrow()?;
     let mut iter = table.iter(run.ps);
+    let mut items = table.lazy_row_alloc();
     while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
+        let mut lr = table.lazy_row(b, &mut items);
         if wher.ev(run, &mut lr)?.bool() {
             let id = lr.item(0, run.ps).int();
             result.push(id);
@@ -917,8 +919,9 @@ fn get_for_temp<A: Allocator + Debug + Default, S>(
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
+    let mut items = table.lazy_row_alloc();
     while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
+        let mut lr = table.lazy_row(b, &mut items);
         let ok = if let Some(wher) = &wher {
             wher.ev(run, &mut lr)?.bool()
         } else {
@@ -958,8 +961,9 @@ where
     let mut iter = table.iter(run.ps);
 
     let mut temp = LVec::new();
+    let mut items = table.lazy_row_alloc();
     while let Some(b) = iter.next_ref(run.ps) {
-        let mut lr = table.lazy_row(b);
+        let mut lr = table.lazy_row(b, &mut items);
         let ok = if let Some(wher) = &wher {
             wher.ev(run, &mut lr)?.bool()
         } else {

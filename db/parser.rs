@@ -1099,14 +1099,9 @@ impl<'a> Parser<'a> {
     }
 
     fn rename_fn(&mut self) -> Result<LStatement, E> {
-        let function_id = 
-        { 
+        let function_id = {
             let f = self.function();
-            if self.pass == 2 {
-                0
-            } else {
-                f?
-            }
+            if self.pass == 2 { 0 } else { f? }
         };
 
         self.expect_ident(b"to")?;
@@ -1147,9 +1142,7 @@ impl<'a> Parser<'a> {
         }
 
         let (table, _table_dt) = t?;
-        let result = DropTable {
-            table
-        };
+        let result = DropTable { table };
         let result = Statement::DropTable(result);
         Ok(result)
     }
@@ -1171,7 +1164,7 @@ impl<'a> Parser<'a> {
         let mut list = GVec::new();
         list.push((GString::from("Id"), DataType::Int));
 
-        let mut dup_check = HashSetA::<&str>::default();
+        let mut dup_check = HashSetA::<&str, Local>::default();
 
         while let Some(ident) = self.check_ident()? {
             let dt = self.datatype(true)?;
@@ -1218,7 +1211,7 @@ impl<'a> Parser<'a> {
     }
 
     fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, &STable), E> {
-        let tname =  tos(self.str(tname));
+        let tname = tos(self.str(tname));
         if let Some((table_ix, table_dt)) = self.dict.table(schema, tname) {
             Ok((table_ix, table_dt))
         } else {
@@ -1227,7 +1220,7 @@ impl<'a> Parser<'a> {
     }
 
     fn check_function(&self, schema: i64, fname: &SrcPos) -> Result<usize, E> {
-        let fname =  tos(self.str(fname));
+        let fname = tos(self.str(fname));
         if let Some(fid) = self.dict.func_index(schema, fname) {
             Ok(*fid)
         } else {
