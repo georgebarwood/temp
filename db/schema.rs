@@ -739,17 +739,18 @@ pub struct URun
 
 impl URun
 {
-   pub fn fncall(&self, f: &mut usize)
+   pub fn fncall(&self, fix: &mut usize)
    {
-       if let Some((f1,f2)) = self.func && f1 == *f {
-           println!("modifying func call {} -> {}", f1, f2);
-           *f = f2
+       if let Some((f1,f2)) = self.func && f1 == *fix {
+           // println!("modifying func call {} -> {}", f1, f2);
+           *fix = f2
        }
    }
-   pub fn table(&self, s: &mut usize)
+   pub fn table(&self, tix: &mut usize)
    {
-       if let Some((t1,t2)) = self.table && t1 == *s {
-           *s = t2
+       if let Some((t1,t2)) = self.table && t1 == *tix {
+           // println!("modifying table ref {} -> {}", t1, t2);
+           *tix = t2
        }
    }
 }
