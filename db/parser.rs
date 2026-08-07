@@ -8,7 +8,7 @@ struct Loc<'a> {
 
 /// Resolve Context ( for resolving names ).
 enum RContext<'a> {
-    Table(&'a STable, &'a RContext<'a>),
+    Table(&'a Arc<DataType>, &'a RContext<'a>),
     Local(&'a [Loc<'a>]),
 }
 
@@ -372,15 +372,15 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn assigns(&mut self, table_dt: &STable) -> Result<LVec<(usize, Exp<Local>)>, E> {
+    fn assigns(&mut self, tdt: &Arc<DataType>) -> Result<LVec<(usize, Exp<Local>)>, E> {
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
-            if let Some(col_id) = table_dt.lookup_col(ident) {
+            if let Some(col_id) = tdt.lookup_col(ident) {
                 self.expect_token(Token::Equal)?;
                 let mut exp = self.exp(0)?;
                 {
                     let lctx = RContext::Local(&self.locs);
-                    let tctx = RContext::Table(table_dt, &lctx);
+                    let tctx = RContext::Table(tdt, &lctx);
                     self.resolve(&mut exp, &tctx, 0)?;
                 }
                 result.push((col_id, exp));
@@ -396,8 +396,8 @@ impl<'a> Parser<'a> {
 
     fn insert(&mut self) -> Result<LStatement, E> {
         self.expect_ident(b"into")?;
-        let (table, table_dt) = self.table()?;
-        let cols = self.name_list(&table_dt)?;
+        let (table, tdt) = self.table()?;
+        let cols = self.name_list(&tdt)?;
 
         self.expect_ident(b"values")?;
 
@@ -414,7 +414,7 @@ impl<'a> Parser<'a> {
                     // Resolve variables and check expression has correct type.
                     let lctx = RContext::Local(&self.locs);
                     let vt = self.resolve(&mut val, &lctx, 0)?;
-                    let et = table_dt.dt_struct(cols[i]);
+                    let et = tdt.dt_struct(cols[i]);
                     self.check_types(vt, et)?;
                 }
                 vals.push(val);
@@ -478,7 +478,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Select(result))
     }
 
-    fn order_by(&mut self, table_dt: &STable) -> Result<LOrderBy, E> {
+    fn order_by(&mut self, table_dt: &Arc<DataType>) -> Result<LOrderBy, E> {
         if self.test_ident(b"order")? {
             self.expect_ident(b"by")?;
             let mut exps = LVec::new();
@@ -539,8 +539,8 @@ impl<'a> Parser<'a> {
             Exp::Int(_) => &DataType::Int,
             Exp::Str(_) => &DataType::String(0),
             Exp::Name(name) => match ctx {
-                RContext::Table(t, nxt) => {
-                    if let Some((col, typ)) = t.name_to_col(tos(self.str(name))) {
+                RContext::Table(tdt, nxt) => {
+                    if let Some((col, typ)) = tdt.name_to_col(tos(self.str(name))) {
                         *e = Exp::col(col, typ);
                         typ
                     } else {
@@ -664,7 +664,7 @@ impl<'a> Parser<'a> {
         Ok(exp)
     }
 
-    fn bool_exp_table(&mut self, table_dt: &STable) -> Result<LExp, E> {
+    fn bool_exp_table(&mut self, table_dt: &Arc<DataType>) -> Result<LExp, E> {
         let mut exp = self.exp(0)?;
         if self.pass == 2 {
             let lctx = RContext::Local(&self.locs);
@@ -815,11 +815,11 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn name_list(&mut self, table_dt: &STable) -> Result<LVec<usize>, E> {
+    fn name_list(&mut self, tdt: &Arc<DataType>) -> Result<LVec<usize>, E> {
         self.expect_token(Token::LBra)?;
         let mut result = LVec::new();
         while let Some(ident) = self.check_ident()? {
-            if let Some(col_id) = table_dt.lookup_col(ident) {
+            if let Some(col_id) = tdt.lookup_col(ident) {
                 result.push(col_id);
             } else {
                 return Err(E::new("Col name not found"));
@@ -832,13 +832,13 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    fn table(&mut self) -> Result<(usize, STable), E> {
+    fn table(&mut self) -> Result<(usize, Arc<DataType>), E> {
         let schema = self.read_ident()?;
         let sid = self.check_schema(&schema)?;
         self.expect_token(Token::Dot)?;
         let tname = self.read_ident()?;
-        let (table_ix, table_dt) = self.check_table(sid, &tname)?;
-        Ok((table_ix, table_dt.clone()))
+        let (table_ix, dt) = self.check_table(sid, &tname)?;
+        Ok((table_ix, dt.clone()))
     }
 
     fn function(&mut self) -> Result<usize, E> {
@@ -918,13 +918,13 @@ impl<'a> Parser<'a> {
             b"index" => {
                 let col_name = self.read_ident()?;
 
-                let (table_id, dt) = self.check_table(schema_id, &tname)?;
+                let (table_ix, dt) = self.check_table(schema_id, &tname)?;
                 let col_num = if let Some(col) = dt.lookup_col(tos(self.str(&col_name))) {
                     col
                 } else {
                     return Err(E::new("Column name not found"));
                 };
-                let result = AddIndex { table_id, col_num };
+                let result = AddIndex { table_ix, col_num };
                 Ok(Statement::AddIndex(result))
             }
             b"add" => {
@@ -936,13 +936,13 @@ impl<'a> Parser<'a> {
                     return Ok(Statement::Null);
                 }
 
-                let (table_id, dt) = self.check_table(schema_id, &tname)?;
+                let (table_ix, dt) = self.check_table(schema_id, &tname)?;
                 if dt.lookup_col(tos(self.str(&col_name))).is_some() {
                     return Err(E::new("Duplicate column name"));
                 }
 
                 let result = AddColumn {
-                    table_id,
+                    table_ix,
                     col_name,
                     col_dt,
                 };
@@ -957,7 +957,7 @@ impl<'a> Parser<'a> {
                     return Ok(Statement::Null);
                 }
 
-                let (table_id, dt) = self.check_table(schema_id, &tname)?;
+                let (table_ix, dt) = self.check_table(schema_id, &tname)?;
                 let col_num = if let Some(col) = dt.lookup_col(tos(self.str(&col_name))) {
                     col
                 } else {
@@ -969,7 +969,7 @@ impl<'a> Parser<'a> {
                 }
 
                 let result = RenameColumn {
-                    table_id,
+                    table_ix,
                     col_num,
                     new_name,
                 };
@@ -978,7 +978,7 @@ impl<'a> Parser<'a> {
             b"drop" => {
                 self.expect_ident(b"column")?;
                 let col_name = self.read_ident()?;
-                let (table_id, dt) = self.check_table(schema_id, &tname)?;
+                let (table_ix, dt) = self.check_table(schema_id, &tname)?;
                 if self.pass == 2 {
                     return Ok(Statement::Null);
                 }
@@ -991,7 +991,7 @@ impl<'a> Parser<'a> {
                 if col_num == 0 {
                     return Err(E::new("Id column cannot be dropped"));
                 }
-                let result = DropColumn { table_id, col_num };
+                let result = DropColumn { table_ix, col_num };
                 Ok(Statement::DropColumn(result))
             }
             _ => Err(E::new("Expected add, rename or drop column")),
@@ -1210,10 +1210,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, &STable), E> {
+    fn check_table(&self, schema: i64, tname: &SrcPos) -> Result<(usize, &Arc<DataType>), E> {
         let tname = tos(self.str(tname));
-        if let Some((table_ix, table_dt)) = self.dict.table(schema, tname) {
-            Ok((table_ix, table_dt))
+        if let Some((table_ix, t)) = self.dict.table(schema, tname) {
+            Ok((table_ix, &t.dt))
         } else {
             Err(E::new("Table not found"))
         }

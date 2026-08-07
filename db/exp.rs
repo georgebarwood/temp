@@ -181,6 +181,38 @@ impl<A: Allocator + Debug + Default> Exp<A> {
         }
     }
 
+    /// Walk the expression tree, noting any function calls.
+    pub fn walk(&mut self, r: &mut URun)
+    {
+        use Exp::*;
+        match self {
+            // Note: BoolExp, IntExp, StrExp cannot (currently) call functions, so do not need to be visited.
+            Binary(_, x, y) => {
+               x.walk(r);
+               y.walk(r);
+            }
+            FnCall(fid, args) => {
+                for e in args {
+                    e.walk(r);
+                }
+                r.fncall(fid);
+            }
+            BuiltinCall(_bi, args) => {
+                for e in args {
+                    e.walk(r);
+                }
+            }
+            If(list, els) => {
+                for (ce, e) in list {
+                    ce.walk(r);
+                    e.walk(r);
+                }
+                els.walk(r);
+            }
+            _ => {}
+        }
+    }   
+
     /// Encode for execution.
     /// Replace most Exp::Binary expressions, changing them to type specific Bool, Int or Str expressions.
     pub fn encode(&mut self) {
@@ -491,7 +523,7 @@ impl<A: Allocator + Debug + Default> BoolExp<A> {
             BoolExp::Col(x) => BoolExp::Col(*x),
             _ => panic!(),
         }
-    }
+    } 
 }
 
 /// Integer Expression.

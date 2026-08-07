@@ -63,8 +63,8 @@ impl<'a> Run<'a> {
 
     /// Load table specified by table_ix.
     pub fn load_table(&mut self, table_ix: usize) -> RTable {
-        let table_dt = self.dict.table_datatype(table_ix);
-        self.ps.load_table(table_ix as i64, table_dt)
+        let st = self.dict.stable(table_ix);
+        self.ps.load_table(st.table_id, &st.dt)
     }
 
     /// Check transaction is not read_only.
@@ -161,33 +161,38 @@ fn execute_schema_updates(
                 }
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
-                    let (id, dt) = dict.create_table(x.schema_id, tname, &x.col_defs);
-                    let _ = ps.load_table(id as i64, &dt); // Trigger creation of table or reading it will produce an error later.
+                    let ix = dict.create_table(x.schema_id, tname, &x.col_defs);
+                    let st = dict.stable(ix);
+                    let _ = ps.load_table(st.table_id, &st.dt); // Trigger creation of table or reading it will produce an error later.
                 }
                 Statement::AddColumn(x) => {
-                    let tid = x.table_id;
-                    let table_dt = dict.table_datatype(tid);
-                    let t = ps.load_table(tid as i64, table_dt);
+                    let tix = x.table_ix;
+                    let st = dict.stable(tix);
+                    let t = ps.load_table(st.table_id, &st.dt);
                     let recs = t.borrow().record_count();
                     if recs > 0 {
                         return Err(E::new("Add Col, record count > 0"));
                     }
                     let col_name = x.col_name.sstr(src);
-                    let dt = dict.add_column(tid, col_name, &x.col_dt);
+                    let dt = dict.add_column(tix, col_name, &x.col_dt);
                     t.borrow_mut().set_datatype(dt);
                 }
                 Statement::RenameColumn(x) => {
                     let new_name = x.new_name.sstr(src);
-                    let dt = dict.rename_column(x.table_id, x.col_num, new_name);
-                    let t = ps.load_table(x.table_id as i64, &dt);
+                    let tix = x.table_ix;
+                    let dt = dict.rename_column(tix, x.col_num, new_name);
+                    let st = dict.stable(tix);
+                    let t = ps.load_table(st.table_id, &dt);
                     t.borrow_mut().set_datatype(dt);
                 }
                 Statement::DropColumn(x) => {
-                    if dict.col_is_referenced(x.table_id, x.col_num) {
+                    let tix = x.table_ix;
+                    if dict.col_is_referenced(tix, x.col_num) {
                         return Err(E::new("Cannot drop referenced column"));
                     }
-                    let dt = dict.drop_column(x.table_id, x.col_num);
-                    let t = ps.load_table(x.table_id as i64, &dt);
+                    let dt = dict.drop_column(tix, x.col_num);
+                    let st = dict.stable(tix);
+                    let t = ps.load_table(st.table_id, &dt);
                     t.borrow_mut().set_datatype(dt);
                 }
                 Statement::RenameTable(x) => dict.rename_table(x, src),
@@ -215,11 +220,11 @@ fn execute_schema_updates(
                     if dict.table_is_referenced(x.table) {
                         return Err(E::new("Cannot drop referenced table"));
                     }
-                    let t = x.table;
-                    let dt = dict.table_datatype(t).clone();
-                    dict.drop_table(x.table);
-                    // Remove record from sys_schema using x.table_id and ps.
-                    Table::drop(t as i64, dt, ps);
+                    let tix = x.table;
+                    let st = dict.stable(tix).clone();
+                    dict.drop_table(tix);
+                    // Remove record from sys_schema.
+                    Table::drop(st.table_id, st.dt.clone(), ps);
                 }
                 Statement::AddIndex(_x) => {
                     println!("Add Index not yet implementd");

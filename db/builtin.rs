@@ -117,10 +117,10 @@ impl Builtin {
                 let schema = schema.string();
 
                 let sid = run.dict.schema_id(schema).unwrap();
-                let (_, dt) = run.dict.table(*sid, tname).unwrap();
+                let (_, t) = run.dict.table(*sid, tname).unwrap();
                 let mut result = LString::new();
                 use std::fmt::Write;
-                write!(&mut result, "{}", dt).unwrap();
+                write!(&mut result, "{}", t.dt).unwrap();
                 Value::String(LRc::new(result))
             }
             table_col_names => {
@@ -130,9 +130,9 @@ impl Builtin {
                 let schema = schema.string();
 
                 let sid = run.dict.schema_id(schema).unwrap();
-                let (_, dt) = run.dict.table(*sid, tname).unwrap();
+                let (_, t) = run.dict.table(*sid, tname).unwrap();
                 let mut result = LString::new();
-                let dt = dt.struc();
+                let dt = t.dt.struc();
                 for (i, (name, _)) in dt.iter().enumerate() {
                     if i != 0 {
                         result.push_str(", ");
@@ -151,8 +151,8 @@ impl Builtin {
                 let schema = schema.string();
 
                 let sid = run.dict.schema_id(schema).unwrap();
-                let (tid, dt) = run.dict.table(*sid, tname).unwrap();
-                let cid = dt.lookup_col(cname).unwrap();
+                let (tid, t) = run.dict.table(*sid, tname).unwrap();
+                let cid = t.dt.lookup_col(cname).unwrap();
                 let result = run.dict.col_is_referenced(tid, cid);
                 Value::Bool(result)
             }
@@ -166,9 +166,9 @@ impl Builtin {
                 let schema = schema.string();
 
                 let sid = run.dict.schema_id(schema).unwrap();
-                let (_, dt) = run.dict.table(*sid, tname).unwrap();
-                let cid = dt.lookup_col(cname).unwrap();
-                let cdt = dt.dt_struct(cid);
+                let (_, t) = run.dict.table(*sid, tname).unwrap();
+                let cid = t.dt.lookup_col(cname).unwrap();
+                let cdt = t.dt.dt_struct(cid);
                 let mut result = LString::new();
                 use std::fmt::Write;
                 write!(result, "{}", cdt).unwrap();
@@ -182,9 +182,9 @@ impl Builtin {
                 let schema = schema.string();
 
                 let sid = run.dict.schema_id(schema).unwrap();
-                let (_, dt) = run.dict.table(*sid, tname).unwrap();
+                let (_, t) = run.dict.table(*sid, tname).unwrap();
                 let mut result = LString::new();
-                let dt = dt.struc();
+                let dt = t.dt.struc();
                 use std::fmt::Write;
                 for (i, (name, typ)) in dt.iter().enumerate() {
                     if i != 0 {

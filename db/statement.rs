@@ -67,15 +67,122 @@ pub enum Statement<A: Allocator + Debug + Default, S: XString> {
     AddIndex(AddIndex),
 }
 
-use std::fmt::Write;
-
 impl<A, S> Statement<A, S>
 where
     A: Allocator + Debug + Default,
     S: XString,
 {
+    /// Walk the expression tree, noting any function calls.
+    pub fn walk(&mut self, r: &mut URun)
+    {
+        use Statement::*;
+        match self {
+            Let(x) => {
+                x.exp.walk(r);
+            }
+            Set(x) => {
+                x.exp.walk(r);
+            }
+            Append(x) => {
+                x.exp.walk(r);
+            }
+            While(x) => {
+                x.exp.walk(r);
+                walk_block(r, &mut x.block);
+            }
+            If(x) => {
+                x.exp.walk(r);
+                walk_block(r, &mut x.block);
+                if let Some(b) = &mut x.els {
+                    walk_block(r, b);
+                }
+            }
+            Insert(x) => {
+                r.table(&mut x.table);
+                for e in x.vals.iter_mut() {
+                    e.walk(r);
+                }
+            }
+            Update(x) => {
+                r.table(&mut x.table);
+                for (_, e) in &mut x.assigns {
+                    e.walk(r);
+                }
+                x.wher.walk(r);
+            }
+            UpdateIdEq(x) => {
+                r.table(&mut x.table);
+                for (_, e) in &mut x.assigns {
+                    e.walk(r);
+                }
+                // x.exp.walk(r); IntExp currently cannot have function calls.
+            }
+            Delete(x) => {
+                r.table(&mut x.table);
+                x.wher.walk(r);
+            }
+            DeleteIdEq(x) => {
+                r.table(&mut x.table);
+                // x.exp.walk(r); IntExp currently cannot have function calls.
+            }
+            Select(x) => {
+                if let Some(from) = &mut x.from {
+                    r.table(from);
+                }
+                for e in &mut x.vals {
+                    e.walk(r);
+                }
+                if let Some(w) = &mut x.wher {
+                    w.walk(r);
+                }
+                Self::walk_order_by(&mut x.order_by, r);
+            }
+            SelectIdEq(x) => {
+                if let Some(from) = &mut x.from {
+                    r.table(from);
+                }
+                for e in &mut x.vals {
+                    e.walk(r);
+                }
+                // x.exp.walk(r); IntExp currently cannot have function calls.
+            }
+            For(x) => {
+                r.table(&mut x.from);
+                for (_, val) in x.assigns.iter_mut() {
+                    val.walk(r);
+                }
+                if let Some(w) = &mut x.wher {
+                    w.walk(r);
+                }
+                Self::walk_order_by(&mut x.order_by, r);
+                walk_block(r, &mut x.block);
+            }
+            ForIdEq(x) => {
+                r.table(&mut x.from);
+                for (_, val) in x.assigns.iter_mut() {
+                    val.walk(r);
+                }
+                // x.exp.walk(r); IntExp currently cannot have function calls.
+                walk_block(r, &mut x.block);
+            }
+            _ => {
+               println!("self={:?}", self);
+               panic!();
+            }
+        }
+    }
+
+    fn walk_order_by(ob: &mut OrderBy<A>, r: &mut URun)  {
+        if let Some((list, _)) = ob {
+            for e in list {
+                e.walk(r);
+            }
+        }
+    }
+
     pub fn show<'a>(&'a self, sr: &mut SRun<'a>) -> Result<(), std::fmt::Error> {
         use Statement::*;
+        use std::fmt::Write;
         match self {
             Let(x) => {
                 write!(&mut sr.output, "let {} = ", x.varname.str())?;
@@ -85,14 +192,12 @@ where
             Set(x) => {
                 sr.show("set ");
                 sr.write_local_name(x.i);
-
                 sr.show(" = ");
                 x.exp.show(sr)?;
             }
             Append(x) => {
                 sr.show("set ");
                 sr.write_local_name(x.i);
-
                 sr.show(" |= ");
                 x.exp.show(sr)?;
             }
@@ -198,10 +303,9 @@ where
                     w.show(sr)?;
                 }
                 Self::show_order_by(&x.order_by, sr)?;
-
                 show_block(sr, &x.block)?;
             }
-            _ => todo!(),
+            _ => panic!(),
         }
         Ok(())
     }
@@ -747,7 +851,7 @@ pub struct RenameFn {
 /// alter table add column statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddColumn {
-    pub table_id: usize,
+    pub table_ix: usize,
     pub col_name: SrcPos,
     pub col_dt: DataType,
 }
@@ -755,21 +859,21 @@ pub struct AddColumn {
 /// alter table add index statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddIndex {
-    pub table_id: usize,
+    pub table_ix: usize,
     pub col_num: usize,
 }
 
 /// drop column statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DropColumn {
-    pub table_id: usize,
+    pub table_ix: usize,
     pub col_num: usize,
 }
 
 /// rename column statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenameColumn {
-    pub table_id: usize,
+    pub table_ix: usize,
     pub col_num: usize,
     pub new_name: SrcPos,
 }
