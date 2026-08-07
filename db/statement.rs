@@ -72,6 +72,13 @@ where
     A: Allocator + Debug + Default,
     S: XString,
 {
+    pub fn is_create(&self) -> bool {
+        match self {
+            Statement::CreateSchema(_) | Statement::CreateFn(_) | Statement::CreateTable(_) => true,
+            _ => false,
+        }
+    }
+
     /// Walk the expression tree, noting any function calls.
     pub fn walk(&mut self, r: &mut URun)
     {

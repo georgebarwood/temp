@@ -153,6 +153,10 @@ fn execute_schema_updates(
                 Statement::Null => {}
                 Statement::CreateSchema(x) => {
                     let sname = x.sname.sstr(src);
+                    if dict.schema_id(sname).is_some()
+                    {
+                       return Err(E::new("Duplicate schema name"));
+                    }
                     dict.create_schema(sname);
                 }
                 Statement::RenameSchema(x) => {
@@ -161,6 +165,10 @@ fn execute_schema_updates(
                 }
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
+                    if dict.table(x.schema_id, tname).is_some()
+                    {
+                       return Err(E::new("Duplicate table name"));
+                    }
                     let ix = dict.create_table(x.schema_id, tname, &x.col_defs);
                     let st = dict.stable(ix);
                     let _ = ps.load_table(st.table_id, &st.dt); // Trigger creation of table or reading it will produce an error later.
@@ -198,6 +206,11 @@ fn execute_schema_updates(
                 Statement::RenameTable(x) => dict.rename_table(x, src),
                 Statement::CreateFn(x) => {
                     if pass == 1 && !x.alter {
+                        let fname = x.fname.sstr(src);
+                        if dict.func_index(x.schema_id, fname).is_some()
+                        {
+                            return Err(E::new("Duplicate function name"));
+                        }
                         dict.create_fn(x, src);
                     } else if pass == 2 {
                         dict.set_fn_block(x, src);

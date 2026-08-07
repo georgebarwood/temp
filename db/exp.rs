@@ -186,10 +186,15 @@ impl<A: Allocator + Debug + Default> Exp<A> {
     {
         use Exp::*;
         match self {
-            // Note: BoolExp, IntExp, StrExp cannot (currently) call functions, so do not need to be visited.
+            Bool(BoolExp::Col(x)) => r.col(x),
+            Int(IntExp::Col(x)) => r.col(x),
+            Str(StrExp::Col(x)) => r.col(x),
             Binary(_, x, y) => {
                x.walk(r);
                y.walk(r);
+            }
+            Col(x) => {
+               r.col(x)
             }
             FnCall(fid, args) => {
                 for e in args {
@@ -438,7 +443,7 @@ impl<'a> RowContext for ValsRowContext<'a> {
     }
 }
 
-pub trait Eval<T> {
+pub trait Eval<T> { // Not a good name
     /// Evaluate the expression with specified row context.
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<T, E>;
 

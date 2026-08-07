@@ -21,6 +21,8 @@ pub struct Parser<'a> {
     pass: u8,            // 1 or 2, pass 1 doesn't resolve names or do type checking.
 
     pub schema_updates: bool,
+    create_batch: bool,
+    
     not_schema: bool,
     level: usize,
     pub statement_pos: usize,
@@ -36,6 +38,7 @@ impl<'a> Parser<'a> {
             locs: LVec::new(),
             pass: 1,
             schema_updates: false,
+            create_batch: false,
             not_schema: false,
             level: 0,
             statement_pos: 0,
@@ -68,12 +71,18 @@ impl<'a> Parser<'a> {
                         return Err(E::new("Cannot mix schema and non-schema statements"));
                     }
                     self.schema_updates = true;
-                    return self.schema_statement(ident);
+                    let s = self.schema_statement(ident)?;
+                    self.create_batch = s.is_create();
+                    Ok(s)
                 }
             }?;
             Ok(result)
         } else {
-            self.schema_statement(ident)
+            let s = self.schema_statement(ident)?;
+            if !self.create_batch || !s.is_create() {
+                return Err(E::new("Multiple schema statements only allowed for (create) schema, table and fn"));
+            }
+            Ok(s)
         }
     }
 

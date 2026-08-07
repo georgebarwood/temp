@@ -9,6 +9,14 @@
 //!
 //!   Indexes - for where conditions "where col  = exp". or maybe "where somefunc(cols) = exp".
 
+/* Need to be careful with mixing drop statements with other statements.
+   Categories:
+      create schema, table, fn : allow any number of these in a batch.
+      [ But need check for duplicate names ]
+
+      All other schema statements: only allow a single statement in batch. 
+*/
+
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
