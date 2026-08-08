@@ -14,7 +14,7 @@
       create schema, table, fn : allow any number of these in a batch.
       [ But need check for duplicate names ]
 
-      All other schema statements: only allow a single statement in batch. 
+      All other schema statements: only allow a single statement in batch.
 */
 
 #![forbid(unsafe_code)]
@@ -163,6 +163,7 @@ use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Mutex;
 use tablestg::*;
+use serde::{Serialize, Deserialize};
 
 pub use tablestg;
 pub use tablestg::{

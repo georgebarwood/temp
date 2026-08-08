@@ -60,7 +60,13 @@ select dbo.test(1,'')
         "schema test go table test.users (name string, age int) go
          let i = 8192
          while i > 0 { insert into test.users(name,age) values ('Alice', 1000) set i = i - 1 }",
-        "let total=0 for total = total + age from test.users {} select total",
+        "let n = 1 
+         let total = 0
+         while n > 0 {
+           set total=0 for total = total + age from test.users {}
+           set n = n - 1
+         }
+         select total",
     ];
 
     let _sql4: [&str; 9] = [
@@ -94,8 +100,8 @@ select dbo.test(1,'')
         db.run(s, &mut tr);
 
         println!(
-            "elapsed micros={} output=\n{}",
-            start.elapsed().as_micros(),
+            "elapsed time={:?} output=\n{}",
+            start.elapsed(),
             tos(&tr.rp.output)
         );
     }

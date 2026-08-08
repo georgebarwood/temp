@@ -1,5 +1,4 @@
 use crate::*;
-use serde::*;
 
 /// Arithmetic and other binary operators.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]

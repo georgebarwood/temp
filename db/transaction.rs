@@ -61,8 +61,6 @@ impl Transaction for DummyTransaction {
     }
 }
 
-use serde::{Deserialize, Serialize};
-
 /// General Query.
 #[derive(Serialize, Deserialize)]
 #[non_exhaustive]

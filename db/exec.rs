@@ -153,9 +153,8 @@ fn execute_schema_updates(
                 Statement::Null => {}
                 Statement::CreateSchema(x) => {
                     let sname = x.sname.sstr(src);
-                    if dict.schema_id(sname).is_some()
-                    {
-                       return Err(E::new("Duplicate schema name"));
+                    if dict.schema_id(sname).is_some() {
+                        return Err(E::new("Duplicate schema name"));
                     }
                     dict.create_schema(sname);
                 }
@@ -165,9 +164,8 @@ fn execute_schema_updates(
                 }
                 Statement::CreateTable(x) => {
                     let tname = x.tname.sstr(src);
-                    if dict.table(x.schema_id, tname).is_some()
-                    {
-                       return Err(E::new("Duplicate table name"));
+                    if dict.table(x.schema_id, tname).is_some() {
+                        return Err(E::new("Duplicate table name"));
                     }
                     let ix = dict.create_table(x.schema_id, tname, &x.col_defs);
                     let st = dict.stable(ix);
@@ -207,8 +205,7 @@ fn execute_schema_updates(
                 Statement::CreateFn(x) => {
                     if pass == 1 && !x.alter {
                         let fname = x.fname.sstr(src);
-                        if dict.func_index(x.schema_id, fname).is_some()
-                        {
+                        if dict.func_index(x.schema_id, fname).is_some() {
                             return Err(E::new("Duplicate function name"));
                         }
                         dict.create_fn(x, src);
@@ -341,25 +338,20 @@ where
     }
 }
 
-/// Encode where expression, returns IntExp for case Id = `<exp>` where exp has no column references.
-fn encode_wher<A>(wher: &mut Exp<A>) -> Option<IntExp<A>>
+/// Encode where expression, returns Exp for case Id = `<exp>` where exp has no column references.
+fn encode_wher<A>(wher: &mut Exp<A>) -> Option<Exp<A>>
 where
     A: Allocator + Debug + Default,
 {
-    let mut hc = false;
-    // Check that rhs does not have any column references.
-    if let Exp::Binary(Operator::Equal, _, rhs) = wher {
-        hc = rhs.has_col();
-    }
-    wher.encode();
-    // Check all conditions for Id = exp optimisation to apply.
-    if !hc
-        && let Exp::Bool(BoolExp::IntEq(lhs, rhs)) = wher
-        && let IntExp::Col(0) = &**lhs
-    // lhs is Id
+    // Check conditions for Id = exp optimisation to apply.
+    if let Exp::Binary(Operator::Equal,lhs,rhs) = wher
+         && let Exp::Col(0) = &**lhs
+         && !rhs.has_col()
     {
+        rhs.encode();
         Some(std::mem::take(rhs))
     } else {
+        wher.encode();
         None
     }
 }

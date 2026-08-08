@@ -17,14 +17,6 @@ impl Database {
         }
     }
 
-    fn get_ps_and_dict(&self, readonly: bool) -> (PageSet, Arc<Dict>) {
-        self.inner.lock().unwrap().get_ps_and_dict(readonly)
-    }
-
-    fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
-        self.inner.lock().unwrap().commit(ps, dict, new_dict)
-    }
-
     /// Run a transaction. Returns number of changed pages.
     pub fn run(&self, source: &str, tr: &mut dyn Transaction) -> usize {
         let (mut ps, mut dict) = self.get_ps_and_dict(tr.read_only());
@@ -91,6 +83,14 @@ impl Database {
     /// Called before process terminates to ensure all commits are flushed to permanent storage.
     pub fn shutdown(&self) {
         self.inner.lock().unwrap().shutdown();
+    }
+
+    fn get_ps_and_dict(&self, readonly: bool) -> (PageSet, Arc<Dict>) {
+        self.inner.lock().unwrap().get_ps_and_dict(readonly)
+    }
+
+    fn commit(&self, ps: &mut PageSet, dict: Arc<Dict>, new_dict: bool) -> usize {
+        self.inner.lock().unwrap().commit(ps, dict, new_dict)
     }
 }
 

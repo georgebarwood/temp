@@ -1,5 +1,4 @@
 use crate::*;
-use serde::*;
 
 /// Builtin functions
 #[allow(non_camel_case_types)]

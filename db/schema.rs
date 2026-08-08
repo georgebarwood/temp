@@ -1,7 +1,6 @@
 use crate::*;
 use datatype::DataType;
 
-use serde::*;
 use std::fmt::Write;
 
 /// Id of record in sys_store that stores Dict.main.
@@ -73,14 +72,16 @@ impl DictInfo {
 
 impl DictMain {
     fn new() -> Self {
-        Self{ last_table_id: RESVD_TID, ..Default::default() }
+        Self {
+            last_table_id: RESVD_TID,
+            ..Default::default()
+        }
     }
     fn new_schema_id(&mut self) -> i64 {
-    
         self.last_schema_id += 1;
         self.last_schema_id
     }
-    
+
     fn new_table_id(&mut self) -> i64 {
         self.last_table_id += 1;
         self.last_table_id
@@ -116,16 +117,13 @@ impl Dict {
 
     /// Get schema name from id.
     pub fn schema_name(&self, id: i64) -> Option<&str> {
-        self.schema_names.get(&id).map(|v| &**v)
+        Some( self.schema_names.get(&id)? )
     }
 
     /// Get table id and STable from schema id and name id.
     pub fn table(&self, x: i64, s: &str) -> Option<(usize, &STable)> {
-        if let Some(table_ix) = self.main.table_lookup.get(&PairKey::new(x, s)) {
-            Some((*table_ix, &self.main.tables[*table_ix]))
-        } else {
-            None
-        }
+        let tix = self.main.table_lookup.get(&PairKey::new(x, s))?;
+        Some((*tix, &self.main.tables[*tix]))
     }
 
     /// Get table schema and name from table ix.
@@ -186,11 +184,11 @@ impl Dict {
     pub fn create_table(&mut self, schema_id: i64, tname: &str, dt: &DataType) -> usize {
         let dt = Arc::new(dt.clone());
         let table_id = self.main.new_table_id();
-        let st = STable{ table_id, dt };
- 
+        let st = STable { table_id, dt };
+
         let tix = self.main.tables.len();
         self.main.tables.push(st);
-        
+
         let k = (schema_id, GString::from(tname));
         self.main.table_lookup.insert(k.clone(), tix);
         self.table_names.insert(tix, k);
@@ -198,7 +196,12 @@ impl Dict {
     }
 
     /// Add Column.
-    pub fn add_column(&mut self, table_ix: usize, col_name: &str, col_dt: &DataType) -> Arc<DataType> {
+    pub fn add_column(
+        &mut self,
+        table_ix: usize,
+        col_name: &str,
+        col_dt: &DataType,
+    ) -> Arc<DataType> {
         let dt = &mut self.main.tables[table_ix].dt;
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
@@ -207,7 +210,12 @@ impl Dict {
     }
 
     /// Rename Column.
-    pub fn rename_column(&mut self, table_ix: usize, col_num: usize, new_name: &str) -> Arc<DataType> {
+    pub fn rename_column(
+        &mut self,
+        table_ix: usize,
+        col_num: usize,
+        new_name: &str,
+    ) -> Arc<DataType> {
         let dt = &mut self.main.tables[table_ix].dt;
         let dtm = Arc::make_mut(dt);
         let dtm = dtm.struc_mut();
@@ -222,21 +230,22 @@ impl Dict {
         let dtm = dtm.struc_mut();
         dtm.remove(col_num);
         let dt = dt.clone();
-        
-        // Increment column references this table > col_num.
-        let mut r = URun::RenCol(table_ix,col_num,0);
-        self.walk_funcs(&mut r);
-             
+
+        // Decrement column references > col_num.
+        Renumber::Col(table_ix, col_num, 0).go(self);
+
         dt
     }
 
     /// Rename Table.
     pub fn rename_table(&mut self, x: &RenameTable, src: &[u8]) {
         let t = x.table_id;
-        
+
         let (old_schema_id, old_name) = self.table_names.get(&t).unwrap();
-        self.main.table_lookup.remove(&PairKey::new(*old_schema_id, old_name));
-            
+        self.main
+            .table_lookup
+            .remove(&PairKey::new(*old_schema_id, old_name));
+
         let new_tname = x.new_tname.sstr(src);
         let k = (x.new_schema_id, GString::from(new_tname));
         self.main.table_lookup.insert(k.clone(), t);
@@ -246,41 +255,27 @@ impl Dict {
     /// Drop Table.
     pub fn drop_table(&mut self, tix: usize) {
         let (old_schema_id, old_name) = self.table_names.get(&tix).unwrap();
-        self.main.table_lookup.remove(&PairKey::new(*old_schema_id, old_name));
+        self.main
+            .table_lookup
+            .remove(&PairKey::new(*old_schema_id, old_name));
 
         let pop = self.main.tables.pop().unwrap();
-        let last = self.main.tables.len(); 
-        if tix != last
-        {
-             // Renumber last table to "fill the hole".
-             self.main.tables[tix] = pop;
-             let mut r = URun::SubTable(last, tix);
-             self.walk_funcs(&mut r);
-             // update mappings for renumbered table.
-             let (sid,tname) = self.table_names.remove(&last).unwrap();
-             let (k,_v) = self.main.table_lookup.remove_entry( &PairKey::new(sid,&tname) ).unwrap();
-             self.table_names.insert( tix, (sid, tname) );
-             self.main.table_lookup.insert( k, tix );
-        }
-        
-    }
+        let last = self.main.tables.len();
+        if tix != last {
+            // Renumber last table to "fill the hole".
+            self.main.tables[tix] = pop;
+            Renumber::Table(last, tix).go(self);
 
-    fn walk_funcs(&mut self, r: &mut URun)
-    {
-        for f in self.main.funcs.iter_mut()
-        {
-            let fm = Arc::make_mut(f);
-            walk_block(r, &mut fm.block);
-        }
-        for f in self.info.funcs.iter_mut()
-        {
-            let fm = Arc::make_mut(f);
-            walk_block(r, &mut fm.block);
+            // update mappings for renumbered table.
+            let (sid, tname) = self.table_names.remove(&last).unwrap();
+            let pk = &PairKey::new(sid, &tname);
+            *self.main.table_lookup.get_mut(pk).unwrap() = tix;
+            self.table_names.insert(tix, (sid, tname));
         }
     }
 
-    fn get_func<S: XString>(x: &CreateFn<Local>, src: &[u8]) -> Arc<SFunc<S>>
-    {
+    /// Create SFunc for function.
+    fn get_func<S: XString>(x: &CreateFn<Local>, src: &[u8]) -> Arc<SFunc<S>> {
         let mut parms = GVec::new();
         for (name, typ) in &x.parms {
             let name = name.sstr(src);
@@ -297,12 +292,12 @@ impl Dict {
     pub fn create_fn(&mut self, x: &CreateFn<Local>, src: &[u8]) {
         let fname = x.fname.sstr(src);
         let fix = self.main.funcs.len();
- 
-        self.main.funcs.push( Self::get_func(x, src) );
-        self.info.funcs.push( Self::get_func(x, src) );
+
+        self.main.funcs.push(Self::get_func(x, src));
+        self.info.funcs.push(Self::get_func(x, src));
 
         let k = (x.schema_id, GString::from(fname));
-        self.main.func_lookup.insert(k.clone(), fix); 
+        self.main.func_lookup.insert(k.clone(), fix);
         self.func_names.insert(fix, k);
     }
 
@@ -325,7 +320,8 @@ impl Dict {
     pub fn rename_fn(&mut self, x: &RenameFn, src: &[u8]) {
         let fid = x.function_id;
         let (old_schema_id, old_fname) = self.func_names.get(&fid).unwrap();
-        self.main.func_lookup
+        self.main
+            .func_lookup
             .remove(&PairKey::new(*old_schema_id, old_fname))
             .unwrap();
         let new_fname = x.new_fname.sstr(src);
@@ -334,32 +330,24 @@ impl Dict {
         self.func_names.insert(fid, k);
     }
 
-        /// Drop Function.
+    /// Drop Function.
     pub fn drop_fn(&mut self, fix: usize) {
-        let (sid,fname) = self.func_names.remove(&fix).unwrap();
+        let (sid, fname) = self.func_names.remove(&fix).unwrap();
         self.main.func_lookup.remove(&PairKey::new(sid, &fname));
-
-        let f = &mut self.main.funcs[fix];
-        *f = Arc::new(SFunc::default());
-        
-        let f = &mut self.info.funcs[fix];
-        *f = Arc::new(SFunc::default());
 
         let pop1 = self.main.funcs.pop().unwrap();
         let pop2 = self.info.funcs.pop().unwrap();
-        let last = self.main.funcs.len(); 
-        if fix != last
-        {
-             // Renumber last function as fix to "fill the hole".
-             self.main.funcs[fix] = pop1;
-             self.info.funcs[fix] = pop2;
-             let mut r = URun::SubFunc(last, fix);
-             self.walk_funcs(&mut r);
-             // update mappings for renumbered function.
-             let (sid,fname) = self.func_names.remove(&last).unwrap();
-             let (k,_v) = self.main.func_lookup.remove_entry( &PairKey::new(sid,&fname) ).unwrap();
-             self.func_names.insert( fix, (sid, fname) );
-             self.main.func_lookup.insert( k, fix );
+        let last = self.main.funcs.len();
+        if fix != last {
+            // Renumber last function as fix to "fill the hole".
+            self.main.funcs[fix] = pop1;
+            self.info.funcs[fix] = pop2;
+            Renumber::Func(last, fix).go(self);
+            // update mappings for renumbered function.
+            let (sid, fname) = self.func_names.remove(&last).unwrap();
+            let pk = &PairKey::new(sid, &fname);
+            *self.main.func_lookup.get_mut( pk ).unwrap() = fix;
+            self.func_names.insert(fix, (sid, fname));
         }
     }
 
@@ -370,7 +358,7 @@ impl Dict {
                 return true;
             }
         }
-        for (sid,_) in self.main.func_lookup.keys() {
+        for (sid, _) in self.main.func_lookup.keys() {
             if *sid == schema_id {
                 return true;
             }
@@ -380,7 +368,7 @@ impl Dict {
 
     /// Check if table is referenced.
     pub fn table_is_referenced(&self, table_id: usize) -> bool {
-        // Use self.info as non-encoded representation is simpler to check. 
+        // Use self.info as non-encoded representation is simpler to check.
         for f in &self.info.funcs {
             if f.references_table(table_id, self) {
                 return true;
@@ -414,7 +402,7 @@ impl Dict {
         let id = DICT_ID;
         let bytes1 = self.main.to_bytes_id(id);
         Self::save(id, &bytes1, ps);
-        
+
         let id = INFO_ID;
         let bytes2 = self.info.to_bytes_id(id);
         Self::save(id, &bytes2, ps);
@@ -470,12 +458,12 @@ impl Dict {
 /// Schema stored table.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct STable {
-   pub table_id: i64,
-   pub dt: Arc<DataType>
+    pub table_id: i64,
+    pub dt: Arc<DataType>,
 }
 
 /// Schema Stored Function - result DataType, Param types and Statements.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SFunc<S: XString> {
     pub ret: DataType,
     pub parms: GVec<(S, DataType)>,
@@ -493,9 +481,6 @@ impl<S: XString> SFunc<S> {
     }
 
     pub fn references_table(&self, table_id: usize, dict: &Dict) -> bool {
-        if self.ret == DataType::Invalid {
-            return false;
-        }
         let mut sr = SRun::new(dict);
         sr.target_table = table_id;
         self.show(&mut sr).unwrap();
@@ -503,9 +488,6 @@ impl<S: XString> SFunc<S> {
     }
 
     pub fn references_col(&self, table_id: usize, col_id: usize, dict: &Dict) -> bool {
-        if self.ret == DataType::Invalid {
-            return false;
-        }
         let mut sr = SRun::new(dict);
         sr.target_table = table_id;
         sr.target_col = col_id;
@@ -514,9 +496,6 @@ impl<S: XString> SFunc<S> {
     }
 
     pub fn references_function(&self, func_id: usize, dict: &Dict) -> bool {
-        if self.ret == DataType::Invalid {
-            return false;
-        }
         let mut sr = SRun::new(dict);
         sr.target_function = func_id;
         self.show(&mut sr).unwrap();
@@ -575,7 +554,7 @@ pub fn show_block<'a, A: Allocator + Debug + Default, S: XString>(
 }
 
 /// Trait for string that can be a dummy ([NoString]) or not ([YesString]), or source position ([SrcPos]).
-pub trait XString : Debug {
+pub trait XString: Debug {
     fn str(&self) -> &str {
         panic!()
     }
@@ -687,7 +666,7 @@ impl<'a> SRun<'a> {
         if ix == self.target_function {
             self.function_referenced = true;
         }
-        let (schema_id,fname) = self.dict.func_names.get(&ix).unwrap();
+        let (schema_id, fname) = self.dict.func_names.get(&ix).unwrap();
         self.write_schema(*schema_id);
         self.show(".");
         self.show(fname);
@@ -733,47 +712,62 @@ impl<'a> Equivalent<(i64, GString)> for PairKey<'a> {
     }
 }
 
-/// For table and function re-numbering.
-pub enum URun
-{
-   SubTable (usize,usize), // Substitution required.
-   SubFunc(usize,usize),
-   RenCol(usize,usize,usize), // Column table and colnum being dropped, and current table.
+/// For table, function and column re-numbering.
+pub enum Renumber {
+    /// Substitute t1 -> t2
+    Table(usize, usize),
+    /// Substitute f1 -> f2
+    Func(usize, usize),
+    /// Column table and colnum being dropped, and current table.
+    Col(usize, usize, usize),
 }
 
-impl URun
-{
-   pub fn fncall(&self, fix: &mut usize)
-   {
-       if let URun::SubFunc(f1,f2) = self && f1 == fix {
-          *fix = *f2
-       }
-   }
-   pub fn table(&mut self, tix: &mut usize)
-   {
-       match self {
-           URun::SubTable(t1,t2) => if t1 == tix {
-               *tix = *t2
-           }
-           URun::SubFunc(_,_) => {},
-           URun::RenCol(_, _, ct) => *ct = *tix,
-       }
-   }
-   pub fn col(&self, cn: &mut usize)
-   {
-       // Decrement column number if it is greater than col being deleted.
-       if let URun::RenCol(t, c, ct) = self && t == ct && *cn > *c
-       {
-           *cn -= 1;
-       }
-   }
-}
-
-/// Walk block, for table and function re-numbering.
-pub fn walk_block<A,S>( r: &mut URun, block: &mut [Statement<A, S>])
-where A: Allocator + Debug + Default, S: XString
-{
-   for s in block {
-        s.walk(r);
+impl Renumber {
+    pub fn fncall(&self, fix: &mut usize) {
+        if let Renumber::Func(f1, f2) = self
+            && f1 == fix
+        {
+            *fix = *f2
+        }
+    }
+    pub fn table(&mut self, tix: &mut usize) {
+        match self {
+            Renumber::Table(t1, t2) => {
+                if t1 == tix {
+                    *tix = *t2
+                }
+            }
+            Renumber::Func(_, _) => {}
+            Renumber::Col(_, _, ct) => *ct = *tix,
+        }
+    }
+    pub fn col(&self, cn: &mut usize) {
+        // Decrement column number if it is greater than col being deleted.
+        if let Renumber::Col(t, c, ct) = self
+            && t == ct
+            && *cn > *c
+        {
+            *cn -= 1;
+        }
+    }
+    fn go(&mut self, dict: &mut Dict) {
+        for f in &mut dict.main.funcs {
+            let fm = Arc::make_mut(f);
+            self.block(&mut fm.block);
+        }
+        for f in &mut dict.info.funcs {
+            let fm = Arc::make_mut(f);
+            self.block(&mut fm.block);
+        }
+    }
+    /// Walk statements in block.
+    pub fn block<A, S>(&mut self, block: &mut [Statement<A, S>])
+    where
+        A: Allocator + Debug + Default,
+        S: XString,
+    {
+        for s in block {
+            s.walk(self);
+        }
     }
 }

@@ -1,5 +1,4 @@
 use crate::*;
-use serde::*;
 
 /* Experiment...
    Idea is that stronger typed expression eval more efficiently as fewer internal Values to evaluate.
@@ -24,13 +23,13 @@ pub enum Exp<A: Allocator + Debug + Default> {
     #[default]
     None,
 
-    /// Boolean constant.
+    /// Boolean.
     Bool(BoolExp<A>),
 
-    /// Integer constant.
+    /// Integer.
     Int(IntExp<A>),
 
-    /// String constant.
+    /// String.
     Str(StrExp<A>),
 
     /// Unresolved Name, changes to Local or Col.
@@ -182,20 +181,17 @@ impl<A: Allocator + Debug + Default> Exp<A> {
     }
 
     /// Walk the expression tree, noting any function calls.
-    pub fn walk(&mut self, r: &mut URun)
-    {
+    pub fn walk(&mut self, r: &mut Renumber) {
         use Exp::*;
         match self {
             Bool(BoolExp::Col(x)) => r.col(x),
             Int(IntExp::Col(x)) => r.col(x),
             Str(StrExp::Col(x)) => r.col(x),
             Binary(_, x, y) => {
-               x.walk(r);
-               y.walk(r);
+                x.walk(r);
+                y.walk(r);
             }
-            Col(x) => {
-               r.col(x)
-            }
+            Col(x) => r.col(x),
             FnCall(fid, args) => {
                 for e in args {
                     e.walk(r);
@@ -216,7 +212,7 @@ impl<A: Allocator + Debug + Default> Exp<A> {
             }
             _ => {}
         }
-    }   
+    }
 
     /// Encode for execution.
     /// Replace most Exp::Binary expressions, changing them to type specific Bool, Int or Str expressions.
@@ -443,7 +439,7 @@ impl<'a> RowContext for ValsRowContext<'a> {
     }
 }
 
-pub trait Eval<T> { // Not a good name
+pub trait Eval<T> {
     /// Evaluate the expression with specified row context.
     fn ev<C: RowContext>(&self, run: &mut Run, rc: &mut C) -> Result<T, E>;
 
@@ -528,7 +524,7 @@ impl<A: Allocator + Debug + Default> BoolExp<A> {
             BoolExp::Col(x) => BoolExp::Col(*x),
             _ => panic!(),
         }
-    } 
+    }
 }
 
 /// Integer Expression.

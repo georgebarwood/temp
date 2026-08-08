@@ -1,5 +1,4 @@
 use crate::*;
-use serde::*;
 
 /// Statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,16 +71,16 @@ where
     A: Allocator + Debug + Default,
     S: XString,
 {
+    /// CHeck if statement is create schema, table or fn.
     pub fn is_create(&self) -> bool {
-        match self {
-            Statement::CreateSchema(_) | Statement::CreateFn(_) | Statement::CreateTable(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Statement::CreateSchema(_) | Statement::CreateTable(_) | Statement::CreateFn(_)
+        )
     }
 
-    /// Walk the expression tree, noting any function calls.
-    pub fn walk(&mut self, r: &mut URun)
-    {
+    /// Walk Statement, updating table, col or func references.
+    pub fn walk(&mut self, r: &mut Renumber) {
         use Statement::*;
         match self {
             Let(x) => {
@@ -95,13 +94,13 @@ where
             }
             While(x) => {
                 x.exp.walk(r);
-                walk_block(r, &mut x.block);
+                r.block(&mut x.block);
             }
             If(x) => {
                 x.exp.walk(r);
-                walk_block(r, &mut x.block);
+                r.block(&mut x.block);
                 if let Some(b) = &mut x.els {
-                    walk_block(r, b);
+                    r.block(b);
                 }
             }
             Insert(x) => {
@@ -162,7 +161,7 @@ where
                     w.walk(r);
                 }
                 Self::walk_order_by(&mut x.order_by, r);
-                walk_block(r, &mut x.block);
+                r.block(&mut x.block);
             }
             ForIdEq(x) => {
                 r.table(&mut x.from);
@@ -170,16 +169,16 @@ where
                     val.walk(r);
                 }
                 // x.exp.walk(r); IntExp currently cannot have function calls.
-                walk_block(r, &mut x.block);
+                r.block(&mut x.block);
             }
             _ => {
-               println!("self={:?}", self);
-               panic!();
+                println!("self={:?}", self);
+                panic!();
             }
         }
     }
 
-    fn walk_order_by(ob: &mut OrderBy<A>, r: &mut URun)  {
+    fn walk_order_by(ob: &mut OrderBy<A>, r: &mut Renumber) {
         if let Some((list, _)) = ob {
             for e in list {
                 e.walk(r);
@@ -579,13 +578,13 @@ impl<A: Allocator + Debug + Default> Update<A> {
 pub struct UpdateIdEq<A: Allocator + Debug + Default> {
     pub table: usize,
     pub assigns: VecA<(usize, Exp<A>), A>, // col num, Exp
-    pub exp: IntExp<A>,
+    pub exp: Exp<A>,
 }
 
 impl<A: Allocator + Debug + Default> UpdateIdEq<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
         run.check_write()?;
-        let id = self.exp.eval(run)?;
+        let id = self.exp.eval(run)?.int();
         let t = run.load_table(self.table);
         let mut table = t.try_borrow_mut()?;
 
@@ -630,13 +629,13 @@ impl<A: Allocator + Debug + Default> Delete<A> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteIdEq<A: Allocator + Debug + Default> {
     pub table: usize,
-    pub exp: IntExp<A>,
+    pub exp: Exp<A>,
 }
 
 impl<A: Allocator + Debug + Default> DeleteIdEq<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
         run.check_write()?;
-        let id = self.exp.eval(run)?;
+        let id = self.exp.eval(run)?.int();
         let t = run.load_table(self.table);
         let mut table = t.try_borrow_mut()?;
         table.remove(id, run.ps);
@@ -708,14 +707,14 @@ impl<A: Allocator + Debug + Default> Select<A> {
 pub struct SelectIdEq<A: Allocator + Debug + Default> {
     pub vals: VecA<Exp<A>, A>,
     pub from: Option<usize>,
-    pub exp: IntExp<A>,
+    pub exp: Exp<A>,
 }
 
 impl<A: Allocator + Debug + Default> SelectIdEq<A> {
     fn exec(&self, run: &mut Run) -> Result<(), E> {
         let t = run.load_table(self.from.unwrap());
         let table = t.try_borrow()?;
-        let id = self.exp.eval(run)?;
+        let id = self.exp.eval(run)?.int();
         if let Some(mut lr) = table.lazy_fetch(id, run.ps) {
             for e in &self.vals {
                 let v = e.ev(run, &mut lr)?;
@@ -786,7 +785,7 @@ impl<A: Allocator + Debug + Default, S: XString> For<A, S> {
 pub struct ForIdEq<A: Allocator + Debug + Default, S: XString> {
     pub assigns: VecA<(usize, Exp<A>), A>,
     pub from: usize,
-    pub exp: IntExp<A>,
+    pub exp: Exp<A>,
     pub block: VecA<Statement<A, S>, A>,
 }
 
@@ -795,7 +794,7 @@ impl<A: Allocator + Debug + Default, S: XString> ForIdEq<A, S> {
         // println!("ForIdEq::exec!!");
         let t = run.load_table(self.from);
         let table = t.try_borrow()?;
-        let id = self.exp.eval(run)?;
+        let id = self.exp.eval(run)?.int();
         if let Some(mut lr) = table.lazy_fetch(id, run.ps) {
             for (i, e) in &self.assigns {
                 let v = e.ev(run, &mut lr)?;
@@ -1019,7 +1018,7 @@ fn gorder_by<A: Allocator + Debug + Default>(list: &LOrderBy, src: &[u8]) -> Ord
 /// Get filtered, sorted temporary table.
 fn get_for_temp<A: Allocator + Debug + Default, S>(
     table_id: usize,
-    lets: &[(S, Exp<A>)],
+    assigns: &[(S, Exp<A>)],
     wher: &Option<Exp<A>>,
     order_by: &OrderBy<A>,
     run: &mut Run,
@@ -1039,12 +1038,12 @@ fn get_for_temp<A: Allocator + Debug + Default, S>(
             true
         };
         if ok {
-            let mut row = LVec::with_capacity(ob.len() + lets.len());
+            let mut row = LVec::with_capacity(ob.len() + assigns.len());
             for e in ob {
                 let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }
-            for (_, e) in lets {
+            for (_, e) in assigns {
                 let v = e.ev(run, &mut lr)?;
                 row.push(v);
             }

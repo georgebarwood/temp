@@ -22,7 +22,7 @@ pub struct Parser<'a> {
 
     pub schema_updates: bool,
     create_batch: bool,
-    
+
     not_schema: bool,
     level: usize,
     pub statement_pos: usize,
@@ -80,7 +80,9 @@ impl<'a> Parser<'a> {
         } else {
             let s = self.schema_statement(ident)?;
             if !self.create_batch || !s.is_create() {
-                return Err(E::new("Multiple schema statements only allowed for (create) schema, table and fn"));
+                return Err(E::new(
+                    "Multiple schema statements only allowed for (create) schema, table and fn",
+                ));
             }
             Ok(s)
         }
