@@ -15,8 +15,8 @@ use crate::*;
     serde::Deserialize,
 )]
 pub enum DataType {
-    #[default]
     ///  Empty datatype - values use no storage.
+    #[default]
     Empty,
 
     /// Boolean datatype - values are true/false.
@@ -394,6 +394,35 @@ impl DataType {
             _ => panic!(),
         }
         result
+    }
+
+    /// Get number of cols.
+    pub fn cols(&self) -> usize {
+        match self {
+            DataType::Tuple(types) => types.len(),
+            DataType::Struct(fields) => fields.len(),
+            _ => panic!(),
+        }
+    }
+
+    /// Get column offsets.
+    pub fn lazy_offsets(&self, buf: &[u8], result: &mut [LazyItem]) {
+        let mut ix = 0;
+        match self {
+            DataType::Tuple(types) => {
+                for (i,t) in types.iter().enumerate() {
+                    result[i] = LazyItem::Offset(ix);
+                    t.skip_value(buf, &mut ix);
+                }
+            }
+            DataType::Struct(fields) => {
+                for (i,f) in fields.iter().enumerate() {
+                    result[i] = LazyItem::Offset(ix);
+                    f.1.skip_value(buf, &mut ix);
+                }
+            }
+            _ => panic!(),
+        }
     }
 
     /// Decode only the specified item from buf.
@@ -831,7 +860,7 @@ impl DataType {
 }
 
 /// Initially offset of serialised data, changes to value when accessed.
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum LazyItem {
     /// Offset of serialised data.
     Offset(usize),
@@ -948,6 +977,7 @@ impl Display for DataType {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use DataType::*;
         match self {
+            Bool => f.write_str("bool")?,
             Int => f.write_str("int")?,
             String(_x) => {
                 f.write_str("string")?;

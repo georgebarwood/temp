@@ -173,16 +173,23 @@ impl Table {
         self.datatype.select_value(item, buf, &mut spx)
     }
 
-    /// Computes offsets of columns from ref returned by [TableIter::next_ref].
-    /// [LazyRow::item] is then used to get values.
-    pub fn lazy_row<'a>(&'a self, buf: &'a [u8]) -> LazyRow<'a> {
-        let mut ix = 0;
-        let items = self.datatype.lazy_row_items(buf, &mut ix);
-        LazyRow {
-            table: self,
-            buf,
-            items,
-        }
+    /// Pre-allocate Lazy Items. This is to avoid allocating each time around calling loop.
+    pub fn lazy_row_alloc<'a>(&'a self) -> LVec<LazyItem>
+    {
+       let mut items = LVec::new();
+       let n = self.datatype.cols();
+       items.resize( n,  LazyItem::Offset(0) );
+       items
+    }
+
+    /// Get LazyRow from data buf and items pre-allocated by [Table::lazy_row_alloc].
+    pub fn lazy_row<'a>(&'a self, buf: &'a [u8], items:&'a mut [LazyItem]) -> LazyRow<'a> {
+       self.datatype.lazy_offsets(buf, items);
+       LazyRow {
+           table: self,
+           buf,
+           items
+       }
     }
 
     /// Has table changed.
@@ -274,7 +281,7 @@ pub trait RowContext {
 pub struct LazyRow<'a> {
     table: &'a Table,
     buf: &'a [u8],
-    items: LVec<LazyItem>,
+    items: &'a mut [LazyItem],
 }
 
 impl<'a> RowContext for LazyRow<'a> {
